@@ -1,0 +1,47 @@
+//@version=5
+indicator("UT Supertrend Overlay Fix", "UT Supertrend Overlay Fix", overlay=true, scale=scale.right, max_bars_back=5000)
+
+// === Input configuration ===
+atrLength = input.int(10, "ATR Length", minval=1)
+factor = input.float(3.0, "ATR Multiplier", minval=0.1, step=0.1)
+sourceChoice = input.source(close, "Source", tooltip="Price source used for the trend calculation")
+useChartPrice = input.bool(true, "Use chart price", tooltip="Force the script to read data from the current chart symbol/timeframe to avoid desync")
+tfInput = input.timeframe("", "Higher timeframe (optional)", tooltip="Leave empty to use the chart timeframe")
+showSignals = input.bool(true, "Show direction labels")
+
+// === Helpers ===
+getTf() => tfInput == "" ? timeframe.period : tfInput
+seriesFromTf(expr) => request.security(syminfo.tickerid, getTf(), expr, lookahead=barmerge.lookahead_off)
+
+float src = useChartPrice or tfInput != "" ? seriesFromTf(sourceChoice) : sourceChoice
+float atrSeries = useChartPrice or tfInput != "" ? seriesFromTf(ta.atr(atrLength)) : ta.atr(atrLength)
+
+// === Core Supertrend calculation ===
+basicUpper = src + factor * atrSeries
+basicLower = src - factor * atrSeries
+
+var float upperBand = na
+var float lowerBand = na
+
+upperBand := basicUpper < nz(upperBand[1]) or src[1] > nz(upperBand[1]) ? basicUpper : nz(upperBand[1])
+lowerBand := basicLower > nz(lowerBand[1]) or src[1] < nz(lowerBand[1]) ? basicLower : nz(lowerBand[1])
+
+var int direction = 1
+direction := nz(direction[1], 1)
+direction := direction == -1 and src > nz(upperBand[1]) ? 1 : direction == 1 and src < nz(lowerBand[1]) ? -1 : direction
+
+supertrend = direction == 1 ? lowerBand : upperBand
+
+plot(supertrend, title="Supertrend", color=direction == 1 ? color.new(color.green, 0) : color.new(color.red, 0), linewidth=2)
+
+bgcolor(direction == 1 ? color.new(color.green, 90) : color.new(color.red, 90), title="Background")
+
+if showSignals
+    changeDir = ta.change(direction)
+    longSignal = changeDir == 2
+    shortSignal = changeDir == -2
+    plotshape(longSignal, title="Long", location=location.belowbar, color=color.new(color.green, 0), style=shape.labelup, text="LONG", textcolor=color.white, size=size.tiny)
+    plotshape(shortSignal, title="Short", location=location.abovebar, color=color.new(color.red, 0), style=shape.labeldown, text="SHORT", textcolor=color.white, size=size.tiny)
+
+// Debug plot to help identify desync issues
+plotchar(useChartPrice ? na : src, title="Debug source", location=location.top, char="·", color=color.new(color.orange, 60), size=size.tiny, display=display.none)

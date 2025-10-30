@@ -41,3 +41,12 @@ ENV VLESS_WSPATH /vless
 Hello everyone! Doprax pays great attention to user experience. Mr. Hemen and his team have created a Discord service for the Doprax community. If you encounter any problems or have any suggestions related to the Doprax platform during use, please contact the official using the link below.
 
 https://discord.gg/pFnGwTuXjk</p>
+
+## TradingView Supertrend Overlay Fix
+
+If you are using the UT Supertrend indicator on TradingView and notice that the trend line
+is frozen far above the candles, import the helper script located at
+`tradingview/ut_supertrend_overlay_fix.pine`. The script forces the indicator to request
+data from the active chart symbol/timeframe so that the calculated levels share the same
+scale as the price candles. Once added to your chart, keep the **Use chart price** option
+enabled to eliminate the desync.
