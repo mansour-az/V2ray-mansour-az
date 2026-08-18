@@ -1,0 +1,666 @@
+diff --git a/app/android/app/build.gradle.kts b/app/android/app/build.gradle.kts
+index 60f6246..b476dbc 100644
+--- a/app/android/app/build.gradle.kts
++++ b/app/android/app/build.gradle.kts
+@@ -49,7 +49,7 @@ android {
+     }
+ 
+     defaultConfig {
+-        applicationId = "com.leadaxe.lxbox"
++        applicationId = "com.venzo.vpn"
+         // Android 7.0 (API 24) minimum — §233. Это абсолютный пол: Flutter
+         // 3.41.x поддерживает минимум API 24, libbox.aar требует 23.
+         // Приоритет тестирования и поддержки — 11+ (primary target window).
+diff --git a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/vpn/ConfigManager.kt b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/vpn/ConfigManager.kt
+index b7089b5..8e6d2c2 100644
+--- a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/vpn/ConfigManager.kt
++++ b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/vpn/ConfigManager.kt
+@@ -11,7 +11,7 @@ object ConfigManager {
+     private const val TAG = "ConfigManager"
+     private const val CONFIG_FILE = "singbox_config.json"
+ 
+-    var notificationTitle: String = "L×Box"
++    var notificationTitle: String = "Venzo VPN"
+         private set
+ 
+     // §123 — подтекст уведомления (тег активной ноды / route.final). Пустая
+@@ -81,4 +81,3 @@ object ConfigManager {
+         notificationText = text
+     }
+ }
+-
+diff --git a/app/android/app/src/main/res/drawable/ic_lxbox_tile.xml b/app/android/app/src/main/res/drawable/ic_lxbox_tile.xml
+index afc73f1..1769da4 100644
+--- a/app/android/app/src/main/res/drawable/ic_lxbox_tile.xml
++++ b/app/android/app/src/main/res/drawable/ic_lxbox_tile.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <!--
+-  Quick Settings tile icon — монохромный знак L×Box.
++  Quick Settings tile icon — монохромный знак Venzo VPN.
+   Буква «L» (вертикаль + низ) + «×» в центре + закрашенный наконечник ↗
+   в правом верхнем углу (outbound). Читается как «L×» + box-стрелка.
+ 
+diff --git a/app/android/app/src/main/res/values-ru/strings.xml b/app/android/app/src/main/res/values-ru/strings.xml
+index 6943922..9680461 100644
+--- a/app/android/app/src/main/res/values-ru/strings.xml
++++ b/app/android/app/src/main/res/values-ru/strings.xml
+@@ -4,8 +4,8 @@
+      «узел»/«группа»). Payload-аргументы (%1$s) не переводятся. -->
+ <resources>
+     <!-- Quick Connect (tile / shortcuts consent flow) -->
+-    <string name="qc_first_open">Открываем L×Box для разрешения VPN (однократно)</string>
+-    <string name="qc_consent_denied">В разрешении VPN отказано. Откройте L×Box, чтобы повторить.</string>
++    <string name="qc_first_open">Открываем Venzo VPN для разрешения VPN (однократно)</string>
++    <string name="qc_consent_denied">В разрешении VPN отказано. Откройте Venzo VPN, чтобы повторить.</string>
+     <string name="qc_connect_label">Подключить</string>
+     <string name="qc_disconnect_label">Отключить</string>
+ 
+@@ -32,15 +32,15 @@
+     <string name="tile_status_disconnected">Отключено</string>
+ 
+     <!-- §047 Locale/Tasker plugin surfaces -->
+-    <string name="label_plugin_custom">L×Box: Своя команда…</string>
+-    <string name="label_plugin_start">L×Box: Запустить VPN</string>
+-    <string name="label_plugin_stop">L×Box: Остановить VPN</string>
+-    <string name="label_plugin_toggle">L×Box: Переключить VPN</string>
++    <string name="label_plugin_custom">Venzo VPN: Своя команда…</string>
++    <string name="label_plugin_start">Venzo VPN: Запустить VPN</string>
++    <string name="label_plugin_stop">Venzo VPN: Остановить VPN</string>
++    <string name="label_plugin_toggle">Venzo VPN: Переключить VPN</string>
+     <string name="automation_blurb_start">Запустить VPN</string>
+     <string name="automation_blurb_stop">Остановить VPN</string>
+     <string name="automation_blurb_toggle">Переключить VPN</string>
+-    <string name="automation_command_prompt">Команда L×Box:</string>
+-    <string name="automation_condition_prompt">Условие L×Box:</string>
++    <string name="automation_command_prompt">Команда Venzo VPN:</string>
++    <string name="automation_condition_prompt">Условие Venzo VPN:</string>
+     <string name="automation_cmd_switch_node">Переключить узел</string>
+     <string name="automation_cmd_set_group">Задать группу</string>
+     <string name="automation_cmd_urltest_group">URL-тест группы</string>
+diff --git a/app/android/app/src/main/res/values/strings.xml b/app/android/app/src/main/res/values/strings.xml
+index b179a0a..48fd1b6 100644
+--- a/app/android/app/src/main/res/values/strings.xml
++++ b/app/android/app/src/main/res/values/strings.xml
+@@ -3,11 +3,11 @@
+      literals). Wire values (broadcast actions, extras, channel IDs, pref
+      names, FGS subtype) intentionally stay in Kotlin/manifest. -->
+ <resources>
+-    <string name="app_name" translatable="false">L×Box</string>
++    <string name="app_name" translatable="false">Venzo VPN</string>
+ 
+     <!-- Quick Connect (tile / shortcuts consent flow) -->
+-    <string name="qc_first_open">Opening L×Box for VPN permission (one-time)</string>
+-    <string name="qc_consent_denied">VPN permission denied. Open L×Box to retry.</string>
++    <string name="qc_first_open">Opening Venzo VPN for VPN permission (one-time)</string>
++    <string name="qc_consent_denied">VPN permission denied. Open Venzo VPN to retry.</string>
+     <string name="qc_connect_label">Connect</string>
+     <string name="qc_disconnect_label">Disconnect</string>
+ 
+@@ -35,15 +35,15 @@
+     <string name="tile_status_disconnected">Disconnected</string>
+ 
+     <!-- §047 Locale/Tasker plugin surfaces -->
+-    <string name="label_plugin_custom">L×Box: Custom…</string>
+-    <string name="label_plugin_start">L×Box: Start VPN</string>
+-    <string name="label_plugin_stop">L×Box: Stop VPN</string>
+-    <string name="label_plugin_toggle">L×Box: Toggle VPN</string>
++    <string name="label_plugin_custom">Venzo VPN: Custom…</string>
++    <string name="label_plugin_start">Venzo VPN: Start VPN</string>
++    <string name="label_plugin_stop">Venzo VPN: Stop VPN</string>
++    <string name="label_plugin_toggle">Venzo VPN: Toggle VPN</string>
+     <string name="automation_blurb_start">Start VPN</string>
+     <string name="automation_blurb_stop">Stop VPN</string>
+     <string name="automation_blurb_toggle">Toggle VPN</string>
+-    <string name="automation_command_prompt">L×Box command:</string>
+-    <string name="automation_condition_prompt">L×Box condition:</string>
++    <string name="automation_command_prompt">Venzo VPN command:</string>
++    <string name="automation_condition_prompt">Venzo VPN condition:</string>
+     <string name="automation_cmd_switch_node">Switch node</string>
+     <string name="automation_cmd_set_group">Set group</string>
+     <string name="automation_cmd_urltest_group">URL-test group</string>
+diff --git a/app/assets/l10n/ru/ui.json b/app/assets/l10n/ru/ui.json
+index 293ca75..db2df62 100644
+--- a/app/assets/l10n/ru/ui.json
++++ b/app/assets/l10n/ru/ui.json
+@@ -516,8 +516,8 @@
+   "2. Paste it into the field above, or tap ⋮ → «Paste from clipboard», «Scan QR code».": {
+     "value": "2. Вставьте её в поле выше или нажмите ⋮ → «Вставить из буфера обмена», «Сканировать QR-код»."
+   },
+-  "3. Hit «+». L×Box will fetch, parse and configure — and you can connect from the Home tab.": {
+-    "value": "3. Нажмите «+». L×Box загрузит, разберёт и настроит всё сам — подключайтесь с главного экрана."
++  "3. Hit «+». Venzo VPN will fetch, parse and configure — and you can connect from the Home tab.": {
++    "value": "3. Нажмите «+». Venzo VPN загрузит, разберёт и настроит всё сам — подключайтесь с главного экрана."
+   },
+   "A routing loop was found between groups. Review the loop below and break it, then start again.": {
+     "value": "Обнаружена петля маршрутизации между группами. Просмотрите петлю ниже, разорвите её и запустите снова."
+@@ -717,11 +717,11 @@
+   "Android 13+ requires this for SSID. Tap to grant.": {
+     "value": "Android 13+ требует это разрешение для SSID. Нажмите, чтобы выдать."
+   },
+-  "Android restricts background activity to save battery. Without an exception, the VPN tunnel may be killed when the screen turns off — your connection drops until you reopen L×Box.\n\nOpen system settings and choose \"Unrestricted\" / \"Not optimized\".": {
+-    "value": "Android ограничивает фоновую активность ради экономии батареи. Без исключения туннель VPN может быть закрыт при выключении экрана — связь пропадёт, пока вы снова не откроете L×Box.\n\nОткройте системные настройки и выберите «Без ограничений» / «Не оптимизировать»."
++  "Android restricts background activity to save battery. Without an exception, the VPN tunnel may be killed when the screen turns off — your connection drops until you reopen Venzo VPN.\n\nOpen system settings and choose \"Unrestricted\" / \"Not optimized\".": {
++    "value": "Android ограничивает фоновую активность ради экономии батареи. Без исключения туннель VPN может быть закрыт при выключении экрана — связь пропадёт, пока вы снова не откроете Venzo VPN.\n\nОткройте системные настройки и выберите «Без ограничений» / «Не оптимизировать»."
+   },
+-  "Another VPN app is currently running. Switch to L×Box?\n\nTo see which app it is, open VPN settings — the active VPN is marked as connected.": {
+-    "value": "Сейчас работает VPN другого приложения. Переключиться на L×Box?\n\nЧтобы узнать, какое именно, откройте настройки VPN — активный VPN отмечен как подключённый."
++  "Another VPN app is currently running. Switch to Venzo VPN?\n\nTo see which app it is, open VPN settings — the active VPN is marked as connected.": {
++    "value": "Сейчас работает VPN другого приложения. Переключиться на Venzo VPN?\n\nЧтобы узнать, какое именно, откройте настройки VPN — активный VPN отмечен как подключённый."
+   },
+   "Another VPN app took the system VPN slot (e.g. an always-on VPN). Start again to reconnect.": {
+     "value": "Другое VPN-приложение заняло системный VPN-слот (например, постоянный VPN). Запустите снова, чтобы переподключиться."
+@@ -1148,8 +1148,8 @@
+   "Continue": {
+     "value": "Продолжить"
+   },
+-  "Control L×Box from Tasker / Macrodroid / Llama and other automation apps via Android broadcast intents.": {
+-    "value": "Управляйте L×Box из Tasker / MacroDroid / Llama и других приложений автоматизации через broadcast-интенты Android."
++  "Control Venzo VPN from Tasker / Macrodroid / Llama and other automation apps via Android broadcast intents.": {
++    "value": "Управляйте Venzo VPN из Tasker / MacroDroid / Llama и других приложений автоматизации через broadcast-интенты Android."
+   },
+   "Copied": {
+     "value": "Скопировано"
+@@ -1619,8 +1619,8 @@
+   "Enabled channels appear in the selector on the home screen. Tap a channel to edit its nodes, filter and auto twin.": {
+     "value": "Включённые каналы появляются в селекторе на главном экране. Нажмите на канал, чтобы настроить его узлы, фильтр и auto-двойник."
+   },
+-  "Enabling this category lets other apps receive L×Box events.\n\nEvents do NOT contain subscription / config secrets — only labels (node tags, group names, status).": {
+-    "value": "Если включить эту категорию, другие приложения смогут получать события L×Box.\n\nСобытия НЕ содержат секретов подписок и конфига — только метки (теги узлов, имена групп, статус)."
++  "Enabling this category lets other apps receive Venzo VPN events.\n\nEvents do NOT contain subscription / config secrets — only labels (node tags, group names, status).": {
++    "value": "Если включить эту категорию, другие приложения смогут получать события Venzo VPN.\n\nСобытия НЕ содержат секретов подписок и конфига — только метки (теги узлов, имена групп, статус)."
+   },
+   "Endpoint IP": {
+     "value": "Endpoint IP"
+@@ -2073,8 +2073,8 @@
+   "In Rules": {
+     "value": "В правилах"
+   },
+-  "In the next screen (system App info) look for:\n\n• Autostart / Startup manager — allow\n• Background activity / Allow in background — allow\n• Battery / Power usage → \"Don't optimize\" or \"No restrictions\"\n• Battery saver exceptions — add L×Box\n\nLocation of these toggles varies by OEM (Xiaomi/MIUI, Samsung/One UI, Oppo/ColorOS, Huawei, Google Pixel). Some are under Battery, others under App permissions.": {
+-    "value": "На следующем экране (системный «О приложении») найдите:\n\n• Автозапуск / Startup manager — разрешить\n• Фоновая активность / Разрешить в фоне — разрешить\n• Батарея / Энергопотребление → «Не оптимизировать» или «Без ограничений»\n• Исключения энергосбережения — добавьте L×Box\n\nРасположение зависит от производителя (Xiaomi/MIUI, Samsung/One UI, Oppo/ColorOS, Huawei, Google Pixel): что-то в разделе «Батарея», что-то в «Разрешениях приложений»."
++  "In the next screen (system App info) look for:\n\n• Autostart / Startup manager — allow\n• Background activity / Allow in background — allow\n• Battery / Power usage → \"Don't optimize\" or \"No restrictions\"\n• Battery saver exceptions — add Venzo VPN\n\nLocation of these toggles varies by OEM (Xiaomi/MIUI, Samsung/One UI, Oppo/ColorOS, Huawei, Google Pixel). Some are under Battery, others under App permissions.": {
++    "value": "На следующем экране (системный «О приложении») найдите:\n\n• Автозапуск / Startup manager — разрешить\n• Фоновая активность / Разрешить в фоне — разрешить\n• Батарея / Энергопотребление → «Не оптимизировать» или «Без ограничений»\n• Исключения энергосбережения — добавьте Venzo VPN\n\nРасположение зависит от производителя (Xiaomi/MIUI, Samsung/One UI, Oppo/ColorOS, Huawei, Google Pixel): что-то в разделе «Батарея», что-то в «Разрешениях приложений»."
+   },
+   "Include (regex)": {
+     "value": "Включить (regex)"
+@@ -2290,14 +2290,14 @@
+   "Log": {
+     "value": "Лог"
+   },
+-  "Long-press the L×Box icon on your home screen → choose \"Toggle VPN\".": {
+-    "value": "Долгое нажатие на иконку L×Box на главном экране → выберите «Toggle VPN»."
++  "Long-press the Venzo VPN icon on your home screen → choose \"Toggle VPN\".": {
++    "value": "Долгое нажатие на иконку Venzo VPN на главном экране → выберите «Toggle VPN»."
+   },
+-  "L×Box %1$s available (you have v%2$s)": {
+-    "value": "Доступна L×Box %1$s (у вас v%2$s)"
++  "Venzo VPN %1$s available (you have v%2$s)": {
++    "value": "Доступна Venzo VPN %1$s (у вас v%2$s)"
+   },
+-  "L×Box runs as a foreground service while VPN is active. A persistent notification is required by Android — it lets you see at a glance that VPN is on, and prevents the system from killing the tunnel in the background.\n\nNo promotional or alert notifications will be sent.": {
+-    "value": "Пока VPN активен, L×Box работает как foreground-сервис. Android требует для него постоянное уведомление — по нему видно, что VPN включён, и система не закрывает туннель в фоне.\n\nРекламных и прочих оповещений не будет."
++  "Venzo VPN runs as a foreground service while VPN is active. A persistent notification is required by Android — it lets you see at a glance that VPN is on, and prevents the system from killing the tunnel in the background.\n\nNo promotional or alert notifications will be sent.": {
++    "value": "Пока VPN активен, Venzo VPN работает как foreground-сервис. Android требует для него постоянное уведомление — по нему видно, что VPN включён, и система не закрывает туннель в фоне.\n\nРекламных и прочих оповещений не будет."
+   },
+   "MASQUE registration failed": {
+     "value": "Не удалось зарегистрировать MASQUE"
+@@ -3658,8 +3658,8 @@
+   "Support": {
+     "value": "Поддержка"
+   },
+-  "Support L×Box": {
+-    "value": "Поддержать L×Box"
++  "Support Venzo VPN": {
++    "value": "Поддержать Venzo VPN"
+   },
+   "Support the project": {
+     "value": "Поддержать проект"
+@@ -3865,8 +3865,8 @@
+   "Title": {
+     "value": "Название"
+   },
+-  "To keep the VPN running in background, also disable battery restrictions for L×Box. The settings screen will open — find and toggle:\n\n• \"Battery usage\" → \"Don't optimize\" or \"Allow background activity\"\n\n• On OnePlus / OPPO / Realme also:\n  \"Stop activity when idle\" → OFF": {
+-    "value": "Чтобы VPN работал в фоне, отключите для L×Box и ограничения батареи. Откроется экран настроек — найдите и переключите:\n\n• «Использование батареи» → «Не оптимизировать» или «Разрешить фоновую активность»\n\n• На OnePlus / OPPO / Realme также:\n  «Останавливать при бездействии» → выкл."
++  "To keep the VPN running in background, also disable battery restrictions for Venzo VPN. The settings screen will open — find and toggle:\n\n• \"Battery usage\" → \"Don't optimize\" or \"Allow background activity\"\n\n• On OnePlus / OPPO / Realme also:\n  \"Stop activity when idle\" → OFF": {
++    "value": "Чтобы VPN работал в фоне, отключите для Venzo VPN и ограничения батареи. Откроется экран настроек — найдите и переключите:\n\n• «Использование батареи» → «Не оптимизировать» или «Разрешить фоновую активность»\n\n• На OnePlus / OPPO / Realme также:\n  «Останавливать при бездействии» → выкл."
+   },
+   "Token": {
+     "value": "Токен"
+@@ -4426,8 +4426,8 @@
+   "Check for updates?": {
+     "value": "Проверять обновления?"
+   },
+-  "L×Box can ping github.com once a day to see whether a new version is out. Nothing installs by itself — you get a link to the release page.\n\nIf you installed from an app store, its client already handles updates and you can skip this.": {
+-    "value": "L×Box может раз в сутки обращаться к github.com и смотреть, не вышла ли новая версия. Само ничего не устанавливается — вы получите ссылку на страницу релиза.\n\nЕсли приложение установлено из магазина, его клиент уже следит за обновлениями, и этот пункт можно пропустить."
++  "Venzo VPN can ping github.com once a day to see whether a new version is out. Nothing installs by itself — you get a link to the release page.\n\nIf you installed from an app store, its client already handles updates and you can skip this.": {
++    "value": "Venzo VPN может раз в сутки обращаться к github.com и смотреть, не вышла ли новая версия. Само ничего не устанавливается — вы получите ссылку на страницу релиза.\n\nЕсли приложение установлено из магазина, его клиент уже следит за обновлениями, и этот пункт можно пропустить."
+   },
+   "Rules menu": {
+     "value": "Меню правил"
+diff --git a/app/lib/controllers/home_controller.dart b/app/lib/controllers/home_controller.dart
+index cfad4ab..ab957f0 100644
+--- a/app/lib/controllers/home_controller.dart
++++ b/app/lib/controllers/home_controller.dart
+@@ -622,7 +622,7 @@ class HomeController extends ChangeNotifier
+   }
+ 
+   /// §123 — собрать и отправить строки foreground-уведомления.
+-  ///   title = `L×Box [final = <route.final>]` (сырое route.final)
++  ///   title = `Venzo VPN [final = <route.final>]` (сырое route.final)
+   ///   text  = `<селектор>: <выбранная нода>`, напр. `vpn-1: L: 🇫🇮⚡Финляндия-2`.
+   ///           Селектор = selectedGroup, нода = его `now` (= activeInGroup,
+   ///           которое applyGroup заполняет из entry['now'] группы).
+@@ -634,8 +634,8 @@ class HomeController extends ChangeNotifier
+     // (activeConfigRaw; фоллбэк на файл, если снапшот ещё не подтянут).
+     final routeFinal = RouteConfig.finalTag(_state.activeConfigRaw);
+     final title = (routeFinal == null || routeFinal.isEmpty)
+-        ? 'L×Box'
+-        : 'L×Box [final = $routeFinal]';
++        ? 'Venzo VPN'
++        : 'Venzo VPN [final = $routeFinal]';
+ 
+     // selectedGroup = активный селектор (vpn-1), activeInGroup = его выбранная
+     // нода (`now`). Формат подтекста: «<селектор>: <нода>».
+diff --git a/app/lib/controllers/subscription_controller.dart b/app/lib/controllers/subscription_controller.dart
+index 2200acc..ad42d92 100644
+--- a/app/lib/controllers/subscription_controller.dart
++++ b/app/lib/controllers/subscription_controller.dart
+@@ -29,6 +29,7 @@ import '../services/parser/uri_parsers.dart';
+ import '../services/parser/uri_utils.dart';
+ import '../services/haptic_service.dart';
+ import '../services/settings_storage.dart';
++import '../services/venzo_managed_subscriptions.dart';
+ import '../services/subscription/auto_updater.dart';
+ import '../services/subscription/http_cache.dart';
+ import '../services/subscription/import_rules.dart';
+@@ -139,7 +140,16 @@ class SubscriptionController extends ChangeNotifier {
+   }
+ 
+   Future<void> _initBody() async {
+-    final lists = await SettingsStorage.getServerLists();
++    var lists = await SettingsStorage.getServerLists();
++    final defaultsSeeded =
++        await SettingsStorage.getVar('venzo_defaults_seeded_v1', 'false') ==
++            'true';
++    if (lists.isEmpty && !defaultsSeeded) {
++      lists = VenzoManagedSubscriptions.defaults();
++      await SettingsStorage.saveServerLists(lists);
++      await SettingsStorage.setVar('venzo_defaults_seeded_v1', 'true');
++      AppLog.I.info('Seeded ${lists.length} Venzo managed subscriptions');
++    }
+     _entries = lists.map((l) => SubscriptionEntry(list: l)).toList();
+     // §076: bootstrap mtime compare — restore in-memory configDirty после
+     // possible kill mid-session. Если settings новее чем saved config →
+diff --git a/app/lib/main.dart b/app/lib/main.dart
+index ccf911b..467aa17 100644
+--- a/app/lib/main.dart
++++ b/app/lib/main.dart
+@@ -256,7 +256,7 @@ class LxBoxApp extends StatelessWidget {
+         // LocaleController._applyLocale (dict-reload на каждую смену); отдельного
+         // per-build присваивания активного локализатора не требуется.
+         return MaterialApp(
+-          title: 'L×Box',
++          title: 'Venzo VPN',
+           theme: ThemeData(
+             colorScheme: ColorScheme.fromSeed(seedColor: _seed),
+             useMaterial3: true,
+diff --git a/app/lib/screens/about_screen.dart b/app/lib/screens/about_screen.dart
+index cf97558..7b9c404 100644
+--- a/app/lib/screens/about_screen.dart
++++ b/app/lib/screens/about_screen.dart
+@@ -76,7 +76,7 @@ class AboutScreen extends StatelessWidget {
+                 const SizedBox(height: 8),
+                 Text(
+                   // l10n-exempt: app name
+-                  'L×Box',
++                  'Venzo VPN',
+                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                         fontWeight: FontWeight.w700,
+                       ),
+@@ -108,6 +108,22 @@ class AboutScreen extends StatelessWidget {
+           Card(
+             child: Column(
+               children: [
++                ListTile(
++                  leading: const Icon(Icons.support_agent),
++                  title: const Text('Venzo VPN Support'),
++                  subtitle: const Text('@Venzzo_vpn'),
++                  trailing: const Icon(Icons.open_in_new, size: 18),
++                  onTap: () => ul.UrlLauncher.open(ProjectLinks.support),
++                ),
++                const Divider(height: 1),
++                ListTile(
++                  leading: const Icon(Icons.telegram),
++                  title: const Text('Official Telegram Channel'),
++                  subtitle: const Text('t.me/venzo_vpn'),
++                  trailing: const Icon(Icons.open_in_new, size: 18),
++                  onTap: () => ul.UrlLauncher.open(ProjectLinks.telegram),
++                ),
++                const Divider(height: 1),
+                 ListTile(
+                   leading: const Icon(Icons.menu_book_outlined),
+                   title: Text(getLocalText.s("User guide")),
+@@ -175,9 +191,9 @@ class AboutScreen extends StatelessWidget {
+           ),
+           const SizedBox(height: 16),
+           FilledButton.icon(
+-            onPressed: () => _showDonateDialog(context),
+-            icon: const Icon(Icons.favorite),
+-            label: Text(getLocalText.s("Support the project")),
++            onPressed: () => ul.UrlLauncher.open(ProjectLinks.support),
++            icon: const Icon(Icons.support_agent),
++            label: const Text('Contact Venzo VPN Support'),
+           ),
+           const SizedBox(height: 16),
+           Text(
+@@ -218,7 +234,7 @@ class AboutScreen extends StatelessWidget {
+     showDialog<void>(
+       context: context,
+       builder: (ctx) => AlertDialog(
+-        title: Text(getLocalText.s("Support L×Box")),
++        title: const Text('Venzo VPN Support'),
+         contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+         content: SizedBox(
+           width: double.maxFinite,
+diff --git a/app/lib/screens/app_settings_screen.dart b/app/lib/screens/app_settings_screen.dart
+index c16040a..f933083 100644
+--- a/app/lib/screens/app_settings_screen.dart
++++ b/app/lib/screens/app_settings_screen.dart
+@@ -337,10 +337,10 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> with WidgetsBindi
+       'dismissed' => 'Add tile dismissed.',
+       'unsupported' =>
+         'Your Android version doesn\'t support an in-app prompt. '
+-            'Pull down the status bar → edit tiles → drag L×Box to active tiles.',
++            'Pull down the status bar → edit tiles → drag Venzo VPN to active tiles.',
+       'no_activity' => 'Cannot show prompt right now — try again.',
+       _ => 'Could not request tile add ($result). '
+-            'Pull down the status bar → edit tiles → drag L×Box manually.',
++            'Pull down the status bar → edit tiles → drag Venzo VPN manually.',
+     };
+     final duration = (result == 'unsupported' ||
+             result.startsWith('error') ||
+diff --git a/app/lib/screens/app_settings_screen/app_settings_dialogs.dart b/app/lib/screens/app_settings_screen/app_settings_dialogs.dart
+index b035ed5..61a0ee0 100644
+--- a/app/lib/screens/app_settings_screen/app_settings_dialogs.dart
++++ b/app/lib/screens/app_settings_screen/app_settings_dialogs.dart
+@@ -42,7 +42,7 @@ class AppSettingsDialogs {
+         title: Text(getLocalText.s("Find these toggles")),
+         content: SingleChildScrollView(
+           child: Text(
+-            getLocalText.s("In the next screen (system App info) look for:\n\n• Autostart / Startup manager — allow\n• Background activity / Allow in background — allow\n• Battery / Power usage → \"Don't optimize\" or \"No restrictions\"\n• Battery saver exceptions — add L×Box\n\nLocation of these toggles varies by OEM (Xiaomi/MIUI, Samsung/One UI, Oppo/ColorOS, Huawei, Google Pixel). Some are under Battery, others under App permissions."),
++            getLocalText.s("In the next screen (system App info) look for:\n\n• Autostart / Startup manager — allow\n• Background activity / Allow in background — allow\n• Battery / Power usage → \"Don't optimize\" or \"No restrictions\"\n• Battery saver exceptions — add Venzo VPN\n\nLocation of these toggles varies by OEM (Xiaomi/MIUI, Samsung/One UI, Oppo/ColorOS, Huawei, Google Pixel). Some are under Battery, others under App permissions."),
+             style: const TextStyle(fontSize: 13, height: 1.4),
+           ),
+         ),
+diff --git a/app/lib/screens/app_settings_screen/widgets/automation_tab.dart b/app/lib/screens/app_settings_screen/widgets/automation_tab.dart
+index 199a770..b7d061b 100644
+--- a/app/lib/screens/app_settings_screen/widgets/automation_tab.dart
++++ b/app/lib/screens/app_settings_screen/widgets/automation_tab.dart
+@@ -130,7 +130,7 @@ class _AutomationTabState extends State<AutomationTab> {
+       context: context,
+       builder: (ctx) => AlertDialog(
+         title: Text(getLocalText.s("Emitting events outward")),
+-        content: Text(getLocalText.s("Enabling this category lets other apps receive L×Box events.\n\nEvents do NOT contain subscription / config secrets — only labels (node tags, group names, status).")),
++        content: Text(getLocalText.s("Enabling this category lets other apps receive Venzo VPN events.\n\nEvents do NOT contain subscription / config secrets — only labels (node tags, group names, status).")),
+         actions: [
+           TextButton(
+             onPressed: () => Navigator.of(ctx).pop(false),
+@@ -174,7 +174,7 @@ class _AutomationTabState extends State<AutomationTab> {
+             style: theme.textTheme.titleMedium),
+         const SizedBox(height: 4),
+         Text(
+-          getLocalText.s("Control L×Box from Tasker / Macrodroid / Llama and other automation apps via Android broadcast intents."),
++          getLocalText.s("Control Venzo VPN from Tasker / Macrodroid / Llama and other automation apps via Android broadcast intents."),
+           style: muted,
+         ),
+         const Divider(height: 28),
+diff --git a/app/lib/screens/app_settings_screen/widgets/general_tab.dart b/app/lib/screens/app_settings_screen/widgets/general_tab.dart
+index 07ae26e..03c777f 100644
+--- a/app/lib/screens/app_settings_screen/widgets/general_tab.dart
++++ b/app/lib/screens/app_settings_screen/widgets/general_tab.dart
+@@ -167,7 +167,7 @@ class GeneralTab extends StatelessWidget {
+         ListTile(
+           leading: const Icon(Icons.touch_app_outlined),
+           title: Text(getLocalText.s("Home-screen shortcut")),
+-          subtitle: Text(getLocalText.s("Long-press the L×Box icon on your home screen → choose \"Toggle VPN\".")),
++          subtitle: Text(getLocalText.s("Long-press the Venzo VPN icon on your home screen → choose \"Toggle VPN\".")),
+         ),
+         const Divider(height: 32),
+         Text(getLocalText.s("Updates"),
+diff --git a/app/lib/screens/debug/profiling_tab.dart b/app/lib/screens/debug/profiling_tab.dart
+index 5022ae6..e161b76 100644
+--- a/app/lib/screens/debug/profiling_tab.dart
++++ b/app/lib/screens/debug/profiling_tab.dart
+@@ -61,8 +61,8 @@ class _ProfilingTabState extends State<ProfilingTab>
+               mimeType: p.isText ? 'text/plain' : 'application/octet-stream')
+         ],
+         text: p.isText
+-            ? 'L×Box ${p.label}'
+-            : 'L×Box ${p.label} — analyze with: go tool pprof $name',
++            ? 'Venzo VPN ${p.label}'
++            : 'Venzo VPN ${p.label} — analyze with: go tool pprof $name',
+         subject: name,
+       );
+     } catch (e) {
+diff --git a/app/lib/screens/home/home_dialogs.dart b/app/lib/screens/home/home_dialogs.dart
+index 8dfb695..ff0d092 100644
+--- a/app/lib/screens/home/home_dialogs.dart
++++ b/app/lib/screens/home/home_dialogs.dart
+@@ -61,7 +61,7 @@ Future<bool?> showForeignVpnDialog(BuildContext context) {
+     context: context,
+     builder: (ctx) => AlertDialog.adaptive(
+       title: Text(getLocalText.s("Another VPN is active")),
+-      content: Text(getLocalText.s("Another VPN app is currently running. Switch to L×Box?\n\nTo see which app it is, open VPN settings — the active VPN is marked as connected.")),
++      content: Text(getLocalText.s("Another VPN app is currently running. Switch to Venzo VPN?\n\nTo see which app it is, open VPN settings — the active VPN is marked as connected.")),
+       actions: [
+         TextButton(
+           onPressed: () => Navigator.of(ctx).pop(false),
+@@ -202,7 +202,7 @@ class _UpdateSnackContent extends StatelessWidget {
+         // кликабельна была бы только строка глифов, а не вся область.
+         width: double.infinity,
+         child: Text(
+-          getLocalText.s("L×Box %1\$s available (you have v%2\$s)", info.tag,
++          getLocalText.s("Venzo VPN %1\$s available (you have v%2\$s)", info.tag,
+               VersionInfo.I.version),
+         ),
+       ),
+@@ -244,7 +244,7 @@ Future<void> maybeShowNotificationPermissionDialog(BuildContext context) async {
+     barrierDismissible: false,
+     builder: (ctx) => AlertDialog.adaptive(
+       title: Text(getLocalText.s("Allow notifications")),
+-      content: Text(getLocalText.s("L×Box runs as a foreground service while VPN is active. A persistent notification is required by Android — it lets you see at a glance that VPN is on, and prevents the system from killing the tunnel in the background.\n\nNo promotional or alert notifications will be sent.")),
++      content: Text(getLocalText.s("Venzo VPN runs as a foreground service while VPN is active. A persistent notification is required by Android — it lets you see at a glance that VPN is on, and prevents the system from killing the tunnel in the background.\n\nNo promotional or alert notifications will be sent.")),
+       actions: [
+         TextButton(
+           onPressed: () => Navigator.of(ctx).pop(false),
+@@ -289,7 +289,7 @@ Future<void> maybeShowBatteryOptimizationDialog(
+     context: context,
+     builder: (ctx) => AlertDialog.adaptive(
+       title: Text(getLocalText.s("Allow background activity")),
+-      content: Text(getLocalText.s("Android restricts background activity to save battery. Without an exception, the VPN tunnel may be killed when the screen turns off — your connection drops until you reopen L×Box.\n\nOpen system settings and choose \"Unrestricted\" / \"Not optimized\".")),
++      content: Text(getLocalText.s("Android restricts background activity to save battery. Without an exception, the VPN tunnel may be killed when the screen turns off — your connection drops until you reopen Venzo VPN.\n\nOpen system settings and choose \"Unrestricted\" / \"Not optimized\".")),
+       actions: [
+         TextButton(
+           onPressed: () => Navigator.of(ctx).pop(),
+@@ -331,7 +331,7 @@ Future<void> showOemBatteryFollowupDialog(
+     context: context,
+     builder: (ctx) => AlertDialog.adaptive(
+       title: Text(getLocalText.s("Disable battery restrictions")),
+-      content: Text(getLocalText.s("To keep the VPN running in background, also disable battery restrictions for L×Box. The settings screen will open — find and toggle:\n\n• \"Battery usage\" → \"Don't optimize\" or \"Allow background activity\"\n\n• On OnePlus / OPPO / Realme also:\n  \"Stop activity when idle\" → OFF")),
++      content: Text(getLocalText.s("To keep the VPN running in background, also disable battery restrictions for Venzo VPN. The settings screen will open — find and toggle:\n\n• \"Battery usage\" → \"Don't optimize\" or \"Allow background activity\"\n\n• On OnePlus / OPPO / Realme also:\n  \"Stop activity when idle\" → OFF")),
+       actions: [
+         TextButton(
+           onPressed: () => Navigator.of(ctx).pop(),
+@@ -393,7 +393,7 @@ Future<void> maybeShowUpdateCheckPrompt(BuildContext context) async {
+     barrierDismissible: false,
+     builder: (ctx) => AlertDialog.adaptive(
+       title: Text(getLocalText.s("Check for updates?")),
+-      content: Text(getLocalText.s("L×Box can ping github.com once a day to see whether a new version is out. Nothing installs by itself — you get a link to the release page.\n\nIf you installed from an app store, its client already handles updates and you can skip this.")),
++      content: Text(getLocalText.s("Venzo VPN can ping github.com once a day to see whether a new version is out. Nothing installs by itself — you get a link to the release page.\n\nIf you installed from an app store, its client already handles updates and you can skip this.")),
+       actions: [
+         TextButton(
+           onPressed: () => Navigator.of(ctx).pop(false),
+diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
+index a4a2656..ffa6b59 100644
+--- a/app/lib/screens/home_screen.dart
++++ b/app/lib/screens/home_screen.dart
+@@ -734,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+         );
+         return Scaffold(
+           // l10n-exempt: brand name, идентичен во всех локалях
+-          appBar: AppBar(title: const Text('L×Box')),
++          appBar: AppBar(title: const Text('Venzo VPN')),
+           drawer: HomeDrawer(
+             controller: _controller,
+             subController: _subController,
+diff --git a/app/lib/screens/subscriptions_screen/widgets/subscriptions_empty_state.dart b/app/lib/screens/subscriptions_screen/widgets/subscriptions_empty_state.dart
+index b27b119..59e6396 100644
+--- a/app/lib/screens/subscriptions_screen/widgets/subscriptions_empty_state.dart
++++ b/app/lib/screens/subscriptions_screen/widgets/subscriptions_empty_state.dart
+@@ -44,7 +44,7 @@ class SubscriptionsEmptyState extends StatelessWidget {
+                 const SizedBox(height: 8),
+                 Text(getLocalText.s("2. Paste it into the field above, or tap ⋮ → «Paste from clipboard», «Scan QR code».")),
+                 const SizedBox(height: 8),
+-                Text(getLocalText.s("3. Hit «+». L×Box will fetch, parse and configure — and you can connect from the Home tab.")),
++                Text(getLocalText.s("3. Hit «+». Venzo VPN will fetch, parse and configure — and you can connect from the Home tab.")),
+                 const SizedBox(height: 18),
+                 Text(
+                   getLocalText.s("No provider yet?"),
+diff --git a/app/lib/services/crash_share.dart b/app/lib/services/crash_share.dart
+index d000b13..7862f6c 100644
+--- a/app/lib/services/crash_share.dart
++++ b/app/lib/services/crash_share.dart
+@@ -34,7 +34,7 @@ Future<bool> shareCrashReport(CrashReportFile report) async {
+     // ignore: deprecated_member_use
+     await Share.shareXFiles(
+       files,
+-      subject: 'L×Box core crash — ${report.mtime.toIso8601String()}',
++      subject: 'Venzo VPN core crash — ${report.mtime.toIso8601String()}',
+     );
+     return true;
+   } catch (_) {
+diff --git a/app/lib/services/debug/handlers/help.dart b/app/lib/services/debug/handlers/help.dart
+index 082b8cb..d471700 100644
+--- a/app/lib/services/debug/handlers/help.dart
++++ b/app/lib/services/debug/handlers/help.dart
+@@ -42,7 +42,7 @@ Future<DebugResponse> helpHandler(DebugRequest req, DebugContext ctx) async {
+ // для LLM-агентов, шпаргалок, и потенциальных wrapper'ов (MCP etc.).
+ 
+ const _capabilityText = '''
+-=== L×Box Debug API ===
++=== Venzo VPN Debug API ===
+ 
+ Localhost HTTP server for dev introspection and control. Runs inside the
+ Flutter app when "Debug API toggle" is enabled in App Settings → Developer.
+diff --git a/app/lib/services/oom_share.dart b/app/lib/services/oom_share.dart
+index bc2b628..b7a99a1 100644
+--- a/app/lib/services/oom_share.dart
++++ b/app/lib/services/oom_share.dart
+@@ -31,7 +31,7 @@ Future<bool> shareOomReport(OomReportFile report) async {
+     // ignore: deprecated_member_use
+     await Share.shareXFiles(
+       files,
+-      subject: 'L×Box core OOM report — ${report.mtime.toIso8601String()}',
++      subject: 'Venzo VPN core OOM report — ${report.mtime.toIso8601String()}',
+     );
+     return true;
+   } catch (_) {
+diff --git a/app/lib/services/project_links.dart b/app/lib/services/project_links.dart
+index d4b8025..99fed86 100644
+--- a/app/lib/services/project_links.dart
++++ b/app/lib/services/project_links.dart
+@@ -12,15 +12,16 @@ import 'version_info.dart';
+ class ProjectLinks {
+   ProjectLinks._();
+ 
+-  static const repo = 'https://github.com/Leadaxe/LxBox';
++  static const repo = 'https://github.com/mansour-az/V2ray-mansour-az';
+   static const latestRelease =
+-      'https://github.com/Leadaxe/LxBox/releases/latest';
++      'https://github.com/mansour-az/V2ray-mansour-az/releases/latest';
+   static const core = 'https://github.com/Leadaxe/sing-box-lx';
+   static const launcher = 'https://github.com/Leadaxe/singbox-launcher';
+   static const singboxUpstream = 'https://github.com/SagerNet/sing-box';
+-  static const telegram = 'https://t.me/singbox_launcher/4317';
++  static const telegram = 'https://t.me/venzo_vpn';
++  static const support = 'https://t.me/Venzzo_vpn';
+   static const donate = 'https://t.me/singbox_launcher/340/3621';
+-  static const issues = 'https://github.com/Leadaxe/LxBox/issues';
++  static const issues = 'https://t.me/Venzzo_vpn';
+   static const boosty = 'https://boosty.to/lxbox/donate';
+   static const donatePage =
+       'https://github.com/Leadaxe/LxBox/blob/main/docs/DONATE.md';
+@@ -68,6 +69,7 @@ class ProjectLinks {
+         '@coreLink': core,
+         '@launcherLink': launcher,
+         '@tgLink': telegram,
++        '@supportLink': support,
+         '@donateLink': donate,
+         '@issuesLink': issues,
+         '@boostyLink': boosty,
+diff --git a/app/lib/services/venzo_managed_subscriptions.dart b/app/lib/services/venzo_managed_subscriptions.dart
+new file mode 100644
+index 0000000..007b775
+--- /dev/null
++++ b/app/lib/services/venzo_managed_subscriptions.dart
+@@ -0,0 +1,39 @@
++import '../models/server_list.dart';
++
++/// Curated, independent subscription sources seeded only on a fresh install.
++///
++/// Each source remains a normal editable subscription: users can disable,
++/// remove, replace, or add their own providers. Subscription bodies are cached
++/// by the existing HttpCache layer, so a temporary upstream outage does not
++/// remove the last working nodes from the device.
++class VenzoManagedSubscriptions {
++  VenzoManagedSubscriptions._();
++
++  static const _primaryUrl =
++      'https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt';
++  static const _backupUrl =
++      'https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/main/configs/vless_sub.txt';
++
++  static List<SubscriptionServers> defaults() => [
++        SubscriptionServers(
++          id: 'venzo-managed-primary-v1',
++          name: 'Venzo Fast Servers',
++          enabled: true,
++          tagPrefix: 'VZ1-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _primaryUrl,
++          updateIntervalHours: 1,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
++        SubscriptionServers(
++          id: 'venzo-managed-backup-v1',
++          name: 'Venzo Backup Servers',
++          enabled: true,
++          tagPrefix: 'VZ2-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _backupUrl,
++          updateIntervalHours: 2,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
++      ];
++}
+diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
+new file mode 100644
+index 0000000..080571a
+--- /dev/null
++++ b/app/test/services/venzo_managed_subscriptions_test.dart
+@@ -0,0 +1,15 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/services/venzo_managed_subscriptions.dart';
++
++void main() {
++  test('managed subscriptions are independent, enabled and bounded', () {
++    final subscriptions = VenzoManagedSubscriptions.defaults();
++
++    expect(subscriptions, hasLength(2));
++    expect(subscriptions.every((s) => s.enabled), isTrue);
++    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(), hasLength(2));
++    expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
++    expect(subscriptions.map((s) => s.id).toSet(), hasLength(2));
++    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(2));
++  });
++}
