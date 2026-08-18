@@ -1,0 +1,89 @@
+name: Build RASA Connect APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/rasa-connect-build.yml"
+      - "rasa-connect/rasa-connect.patch"
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout build files
+        uses: actions/checkout@v7
+
+      - name: Checkout pinned v2rayNG source
+        uses: actions/checkout@v7
+        with:
+          repository: 2dust/v2rayNG
+          ref: 7a07565f72427b2c8e445934e1499eedecd1e221
+          path: source
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply RASA Connect customization
+        run: git -C source apply "$GITHUB_WORKSPACE/rasa-connect/rasa-connect.patch"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: "14742923"
+          packages: "platforms;android-37.0 build-tools;37.0.0 platform-tools"
+
+      - name: Install Android NDK
+        run: |
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             --channel=0 --install "ndk;29.0.14206865"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+          sed -i '10i\
+          \
+              ndkVersion = "29.0.14206865"' source/V2rayNG/app/build.gradle.kts
+
+      - name: Build native tunnel library
+        working-directory: source
+        run: bash compile-hevtun.sh
+
+      - name: Copy native tunnel library
+        run: cp -r source/libs source/V2rayNG/app
+
+      - name: Resolve Xray Android library version
+        working-directory: source/AndroidLibXrayLite
+        run: echo "XRAY_ANDROID_TAG=$(git describe --tags --abbrev=0)" >> "$GITHUB_ENV"
+
+      - name: Download Xray Android library
+        uses: robinraju/release-downloader@v1.13
+        with:
+          repository: 2dust/AndroidLibXrayLite
+          tag: ${{ env.XRAY_ANDROID_TAG }}
+          fileName: libv2ray.aar
+          out-file-path: source/V2rayNG/app/libs/
+
+      - name: Set up Java
+        uses: actions/setup-java@v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Run tests and build universal debug APK
+        working-directory: source/V2rayNG
+        run: |
+          chmod 755 gradlew
+          ./gradlew testPlaystoreDebugUnitTest assemblePlaystoreDebug
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: RASA-Connect-Android
+          path: source/V2rayNG/app/build/outputs/apk/playstore/debug/*universal*.apk
+          if-no-files-found: error
+          retention-days: 7
