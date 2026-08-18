@@ -1,0 +1,83 @@
+name: Build Venzo VPN 2.0
+
+on:
+  push:
+    branches: [venzo-2.0]
+    paths:
+      - "venzo2/**"
+      - ".github/workflows/venzo-vpn-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Venzo build inputs
+        uses: actions/checkout@v4
+
+      - name: Clone audited LxBox base
+        run: git clone --branch v2.20.12 --depth 1 https://github.com/Leadaxe/LxBox.git venzo-src
+
+      - name: Apply Venzo VPN customization
+        run: |
+          cd venzo-src
+          git apply ../venzo2/venzo-lxbox.patch
+          base64 --decode ../venzo2/icon.jpg.b64 > app/assets/icons/app_icon.png
+
+      - name: Read Flutter version
+        id: flutter
+        run: echo "version=$(tr -d '[:space:]' < venzo-src/app/android/flutter.version)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ steps.flutter.outputs.version }}
+          cache: true
+
+      - name: Install dependencies and generate icons
+        working-directory: venzo-src/app
+        run: |
+          flutter pub get
+          dart run flutter_launcher_icons
+
+      - name: Analyze and test Venzo additions
+        working-directory: venzo-src/app
+        run: |
+          flutter analyze
+          flutter test test/services/venzo_managed_subscriptions_test.dart
+
+      - name: Fetch verified sing-box-lx core
+        working-directory: venzo-src
+        run: ./scripts/fetch-libbox.sh
+
+      - name: Build arm64 APK
+        working-directory: venzo-src/app
+        env:
+          LXBOX_ABI_FILTER: arm64-v8a
+        run: >-
+          flutter build apk --release
+          --target-platform android-arm64
+          --build-name 2.0.0
+          --build-number 20000500
+
+      - name: Name APK
+        run: cp venzo-src/app/build/app/outputs/flutter-apk/app-release.apk Venzo-VPN-2.0.0-arm64.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Venzo-VPN-2.0.0-arm64
+          path: Venzo-VPN-2.0.0-arm64.apk
+          if-no-files-found: error
+          retention-days: 30
