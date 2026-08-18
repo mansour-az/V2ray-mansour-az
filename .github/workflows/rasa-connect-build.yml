@@ -78,7 +78,8 @@ jobs:
         working-directory: source/V2rayNG
         run: |
           chmod 755 gradlew
-          ./gradlew testPlaystoreDebugUnitTest --tests com.v2ray.ang.ManagedSubscriptionContractTest\n          ./gradlew assemblePlaystoreDebug
+          ./gradlew testPlaystoreDebugUnitTest --tests com.v2ray.ang.ManagedSubscriptionContractTest
+          ./gradlew assemblePlaystoreDebug
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v7
