@@ -1,15 +1,18 @@
 diff --git a/NOTICE-RASA.md b/NOTICE-RASA.md
 new file mode 100644
-index 0000000..185d924
+index 0000000..38794ed
 --- /dev/null
 +++ b/NOTICE-RASA.md
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,24 @@
 +# RASA Connect
 +
 +RASA Connect is an Android VPN client customized from the GPL-3.0-licensed v2rayNG project.
 +It includes a managed public subscription that is downloaded from:
 +
-+`https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/all/configs_base64.txt`
++`https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt`
++
++The app uses the repository's tested Top 100 subset by default. This keeps initial loading and
++bulk latency tests reliable on mobile devices while retaining the same upstream config source.
 +
 +The server list is operated by its upstream publisher, not by RASA. Public endpoints can be
 +unavailable, slow, untrusted, or changed without notice. Do not transmit sensitive information
@@ -26,7 +29,7 @@ index 0000000..185d924
 +On first launch, approve Android's VPN permission. The managed subscription is scheduled for an
 +immediate initial download and then refreshed every 60 minutes while network access is available.
 diff --git a/V2rayNG/app/build.gradle.kts b/V2rayNG/app/build.gradle.kts
-index 5835000..bada587 100644
+index 5835000..830aaf4 100644
 --- a/V2rayNG/app/build.gradle.kts
 +++ b/V2rayNG/app/build.gradle.kts
 @@ -10,11 +10,11 @@ android {
@@ -39,8 +42,8 @@ index 5835000..bada587 100644
          targetSdk = 37
 -        versionCode = 744
 -        versionName = "2.3.4"
-+        versionCode = 10000
-+        versionName = "1.0.0"
++        versionCode = 10100
++        versionName = "1.1.0"
  
          val abiFilterList = (properties["ABI_FILTERS"] as? String)?.split(';')
          splits {
@@ -95,18 +98,20 @@ index 0ded4d8..576f321 100644
          ThemeManager.refresh()
      }
 diff --git a/V2rayNG/app/src/main/java/com/v2ray/ang/AppConfig.kt b/V2rayNG/app/src/main/java/com/v2ray/ang/AppConfig.kt
-index 01d4250..72fd6a1 100644
+index 01d4250..900d275 100644
 --- a/V2rayNG/app/src/main/java/com/v2ray/ang/AppConfig.kt
 +++ b/V2rayNG/app/src/main/java/com/v2ray/ang/AppConfig.kt
-@@ -3,6 +3,13 @@ package com.v2ray.ang
+@@ -3,6 +3,15 @@ package com.v2ray.ang
  
  object AppConfig {
  
 +    /** RASA Connect managed subscription. */
 +    const val RASA_SUBSCRIPTION_ID = "rasa_managed_subscription"
-+    const val RASA_SUBSCRIPTION_NAME = "سرورهای RASA Connect"
-+    const val RASA_SUBSCRIPTION_URL =
++    const val RASA_SUBSCRIPTION_NAME = "۱۰۰ سرور برتر RASA Connect"
++    const val RASA_LEGACY_SUBSCRIPTION_URL =
 +        "https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/all/configs_base64.txt"
++    const val RASA_SUBSCRIPTION_URL =
++        "https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt"
 +    const val RASA_SUBSCRIPTION_UPDATE_MINUTES = 60L
 +
      /** The application's package name. */
@@ -114,10 +119,10 @@ index 01d4250..72fd6a1 100644
      const val TAG = BuildConfig.APPLICATION_ID
 diff --git a/V2rayNG/app/src/main/java/com/v2ray/ang/handler/ManagedSubscriptionBootstrap.kt b/V2rayNG/app/src/main/java/com/v2ray/ang/handler/ManagedSubscriptionBootstrap.kt
 new file mode 100644
-index 0000000..05b4370
+index 0000000..5eb37e6
 --- /dev/null
 +++ b/V2rayNG/app/src/main/java/com/v2ray/ang/handler/ManagedSubscriptionBootstrap.kt
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,46 @@
 +package com.v2ray.ang.handler
 +
 +import com.v2ray.ang.AppConfig
@@ -126,17 +131,24 @@ index 0000000..05b4370
 +/**
 + * Installs the curated RASA Connect subscription on first launch.
 + *
-+ * Existing user state is preserved. If the managed entry already exists, only an empty URL is
-+ * repaired; user choices such as enabled/disabled are not overwritten.
++ * Existing user choices such as enabled/disabled are preserved. Version 1.0's oversized full
++ * feed is migrated to the tested Top 100 feed so bulk latency tests remain practical on phones.
 + */
 +object ManagedSubscriptionBootstrap {
 +
 +    fun ensureInstalled(): Boolean {
 +        val existing = MmkvManager.decodeSubscription(AppConfig.RASA_SUBSCRIPTION_ID)
 +        if (existing != null) {
-+            if (existing.url.isBlank()) {
++            val isLegacyFullFeed = existing.url == AppConfig.RASA_LEGACY_SUBSCRIPTION_URL
++            if (shouldReplaceUrl(existing.url)) {
 +                existing.url = AppConfig.RASA_SUBSCRIPTION_URL
++                existing.remarks = AppConfig.RASA_SUBSCRIPTION_NAME
 +                MmkvManager.encodeSubscription(AppConfig.RASA_SUBSCRIPTION_ID, existing)
++                if (isLegacyFullFeed) {
++                    // Force MainViewModel's immediate bootstrap fetch instead of retaining the
++                    // thousands of profiles imported by version 1.0.
++                    MmkvManager.removeServerViaSubid(AppConfig.RASA_SUBSCRIPTION_ID)
++                }
 +            }
 +            return false
 +        }
@@ -153,7 +165,45 @@ index 0000000..05b4370
 +        )
 +        return true
 +    }
++
++    internal fun shouldReplaceUrl(url: String): Boolean =
++        url.isBlank() || url == AppConfig.RASA_LEGACY_SUBSCRIPTION_URL
 +}
+diff --git a/V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainViewModel.kt b/V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainViewModel.kt
+index 89b0cf0..e6d0c59 100644
+--- a/V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainViewModel.kt
++++ b/V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainViewModel.kt
+@@ -224,6 +224,7 @@ class MainViewModel(
+                 initialPageReady.await()
+                 delay(32)
+                 dataSource.initAssets()
++                fetchManagedSubscriptionOnEmptyInstall()
+                 dataSource.syncSubscriptions()
+             } catch (cancelled: CancellationException) {
+                 throw cancelled
+@@ -233,6 +234,22 @@ class MainViewModel(
+         }
+     }
+ 
++    /**
++     * WorkManager may not execute a zero-delay periodic task immediately on every Android build.
++     * Fetch the managed feed directly when it has no imported profiles, then refresh the UI.
++     */
++    private fun fetchManagedSubscriptionOnEmptyInstall() {
++        if (dataSource.getServerGuidList(AppConfig.RASA_SUBSCRIPTION_ID).isNotEmpty()) return
++        val item = dataSource.getSubscriptionItem(AppConfig.RASA_SUBSCRIPTION_ID) ?: return
++        val result = dataSource.updateConfigViaSub(
++            SubscriptionCache(AppConfig.RASA_SUBSCRIPTION_ID, item)
++        )
++        if (result.configCount > 0) {
++            setupGroupTab(forceRefresh = true)
++            refreshSelectedGuid()
++        }
++    }
++
+     fun refreshUiSettings() {
+         _uiState.update {
+             it.copy(
 diff --git a/V2rayNG/app/src/main/res/values-ar/strings.xml b/V2rayNG/app/src/main/res/values-ar/strings.xml
 index 23eb1b3..4fab23d 100644
 --- a/V2rayNG/app/src/main/res/values-ar/strings.xml
@@ -275,15 +325,17 @@ index 8f64d7b..1ece6a9 100644
 \ No newline at end of file
 diff --git a/V2rayNG/app/src/test/java/com/v2ray/ang/ManagedSubscriptionContractTest.kt b/V2rayNG/app/src/test/java/com/v2ray/ang/ManagedSubscriptionContractTest.kt
 new file mode 100644
-index 0000000..7d2ead6
+index 0000000..3673751
 --- /dev/null
 +++ b/V2rayNG/app/src/test/java/com/v2ray/ang/ManagedSubscriptionContractTest.kt
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,40 @@
 +package com.v2ray.ang
 +
 +import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
 +import org.junit.Assert.assertTrue
 +import org.junit.Test
++import com.v2ray.ang.handler.ManagedSubscriptionBootstrap
 +
 +class ManagedSubscriptionContractTest {
 +
@@ -291,8 +343,21 @@ index 0000000..7d2ead6
 +    fun `managed subscription is HTTPS and points to expected feed`() {
 +        assertTrue(AppConfig.RASA_SUBSCRIPTION_URL.startsWith("https://"))
 +        assertEquals(
-+            "https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/all/configs_base64.txt",
++            "https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt",
 +            AppConfig.RASA_SUBSCRIPTION_URL,
++        )
++    }
++
++    @Test
++    fun `version 1 full feed is migrated but a custom feed is preserved`() {
++        assertTrue(ManagedSubscriptionBootstrap.shouldReplaceUrl(""))
++        assertTrue(
++            ManagedSubscriptionBootstrap.shouldReplaceUrl(
++                AppConfig.RASA_LEGACY_SUBSCRIPTION_URL
++            )
++        )
++        assertFalse(
++            ManagedSubscriptionBootstrap.shouldReplaceUrl("https://example.com/custom")
 +        )
 +    }
 +
@@ -304,9 +369,3 @@ index 0000000..7d2ead6
 +        )
 +    }
 +}
-diff --git a/hev-socks5-tunnel b/hev-socks5-tunnel
---- a/hev-socks5-tunnel
-+++ b/hev-socks5-tunnel
-@@ -1 +1 @@
--Subproject commit 64cc609f945253b0e9ebc56317d544268f3c68c1
-+Subproject commit 64cc609f945253b0e9ebc56317d544268f3c68c1-dirty
