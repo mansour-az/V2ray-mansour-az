@@ -45,6 +45,19 @@ jobs:
           flutter-version: ${{ steps.flutter.outputs.version }}
           cache: true
 
+      - name: Install dependencies and generate icons
+        working-directory: venzo-src/app
+        run: |
+          flutter pub get
+          dart run flutter_launcher_icons
+
+      - name: Analyze and test Venzo additions
+        working-directory: venzo-src/app
+        run: |
+          flutter analyze
+          flutter test test/services/venzo_managed_subscriptions_test.dart
+          flutter test test/services/l10n/persian_locale_test.dart
+
       - name: Configure permanent release signing
         working-directory: venzo-src/app/android
         env:
@@ -69,19 +82,6 @@ jobs:
             echo "keyPassword=$VENZO_KEY_PASSWORD"
           } > key.properties
           chmod 600 key.properties
-
-      - name: Install dependencies and generate icons
-        working-directory: venzo-src/app
-        run: |
-          flutter pub get
-          dart run flutter_launcher_icons
-
-      - name: Analyze and test Venzo additions
-        working-directory: venzo-src/app
-        run: |
-          flutter analyze
-          flutter test test/services/venzo_managed_subscriptions_test.dart
-          flutter test test/services/l10n/persian_locale_test.dart
 
       - name: Fetch verified sing-box-lx core
         working-directory: venzo-src
