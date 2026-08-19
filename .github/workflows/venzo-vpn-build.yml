@@ -1,4 +1,4 @@
-name: Build Venzo VPN 2.1
+name: Build Venzo VPN 2.2
 
 on:
   push:
@@ -56,6 +56,8 @@ jobs:
         run: |
           flutter analyze
           flutter test test/services/venzo_managed_subscriptions_test.dart
+          flutter test test/services/venzo_premium_test.dart
+          flutter test test/controllers/venzo_smart_connect_test.dart
           flutter test test/services/l10n/persian_locale_test.dart
 
       - name: Configure permanent release signing
@@ -94,21 +96,32 @@ jobs:
         run: >-
           flutter build apk --release
           --target-platform android-arm64
-          --build-name 2.1.0
-          --build-number 20100500
+          --build-name 2.2.0
+          --build-number 20200500
 
-      - name: Name APK
-        run: cp venzo-src/app/build/app/outputs/flutter-apk/app-release.apk Venzo-VPN-2.1.0-arm64.apk
+      - name: Build Play Store app bundle
+        working-directory: venzo-src/app
+        run: >-
+          flutter build appbundle --release
+          --build-name 2.2.0
+          --build-number 20200500
+
+      - name: Name release files
+        run: |
+          cp venzo-src/app/build/app/outputs/flutter-apk/app-release.apk Venzo-VPN-2.2.0-arm64.apk
+          cp venzo-src/app/build/app/outputs/bundle/release/app-release.aab Venzo-VPN-2.2.0.aab
 
       - name: Verify release signature
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
-            verify --verbose --print-certs Venzo-VPN-2.1.0-arm64.apk
+            verify --verbose --print-certs Venzo-VPN-2.2.0-arm64.apk
 
-      - name: Upload APK
+      - name: Upload APK and Play Store bundle
         uses: actions/upload-artifact@v4
         with:
-          name: Venzo-VPN-2.1.0-arm64
-          path: Venzo-VPN-2.1.0-arm64.apk
+          name: Venzo-VPN-2.2.0-release
+          path: |
+            Venzo-VPN-2.2.0-arm64.apk
+            Venzo-VPN-2.2.0.aab
           if-no-files-found: error
           retention-days: 30
