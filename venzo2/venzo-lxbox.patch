@@ -1,5 +1,5 @@
 diff --git a/app/android/app/build.gradle.kts b/app/android/app/build.gradle.kts
-index 60f6246..b476dbc 100644
+index 60f6246c2a15a62fc674d85a3d1e1d66d6da5972..b476dbc1008898ff4a60bc3e1598a47cf642c55e 100644
 --- a/app/android/app/build.gradle.kts
 +++ b/app/android/app/build.gradle.kts
 @@ -49,7 +49,7 @@ android {
@@ -12,7 +12,7 @@ index 60f6246..b476dbc 100644
          // 3.41.x поддерживает минимум API 24, libbox.aar требует 23.
          // Приоритет тестирования и поддержки — 11+ (primary target window).
 diff --git a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/vpn/ConfigManager.kt b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/vpn/ConfigManager.kt
-index b7089b5..8e6d2c2 100644
+index b7089b539207409acc39eb587e1206ac6a62f181..8e6d2c2a1d0eabfb426d504b90ddb3d27c61368e 100644
 --- a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/vpn/ConfigManager.kt
 +++ b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/vpn/ConfigManager.kt
 @@ -11,7 +11,7 @@ object ConfigManager {
@@ -30,7 +30,7 @@ index b7089b5..8e6d2c2 100644
  }
 -
 diff --git a/app/android/app/src/main/res/drawable/ic_lxbox_tile.xml b/app/android/app/src/main/res/drawable/ic_lxbox_tile.xml
-index afc73f1..1769da4 100644
+index afc73f10978e01c2bbaa4fd30a5954601c24d511..1769da459d4f9352fea03acfcf12a315bf4be0cd 100644
 --- a/app/android/app/src/main/res/drawable/ic_lxbox_tile.xml
 +++ b/app/android/app/src/main/res/drawable/ic_lxbox_tile.xml
 @@ -1,6 +1,6 @@
@@ -41,8 +41,58 @@ index afc73f1..1769da4 100644
    Буква «L» (вертикаль + низ) + «×» в центре + закрашенный наконечник ↗
    в правом верхнем углу (outbound). Читается как «L×» + box-стрелка.
  
+diff --git a/app/android/app/src/main/res/values-fa/strings.xml b/app/android/app/src/main/res/values-fa/strings.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b29cf7fe30219c7fedcfd8c1a3ab65c32b408ad
+--- /dev/null
++++ b/app/android/app/src/main/res/values-fa/strings.xml
+@@ -0,0 +1,44 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="qc_first_open">برای دریافت مجوز VPN، Venzo VPN باز می‌شود (فقط یک‌بار)</string>
++    <string name="qc_consent_denied">مجوز VPN داده نشد. برای تلاش دوباره Venzo VPN را باز کنید.</string>
++    <string name="qc_connect_label">اتصال</string>
++    <string name="qc_disconnect_label">قطع اتصال</string>
++    <string name="notification_channel_name">سرویس VPN</string>
++    <string name="notification_channel_description">هنگام فعال بودن VPN نمایش داده می‌شود</string>
++    <string name="notification_status_starting">در حال اتصال…</string>
++    <string name="status_connected">متصل</string>
++    <string name="notification_action_stop">توقف</string>
++    <string name="notification_action_reconnect">اتصال دوباره</string>
++    <string name="notification_error_title">خطا</string>
++    <string name="core_channel_fallback_name">اعلان‌های هسته</string>
++    <string name="stop_alert_unknown_error">خطای ناشناخته</string>
++    <string name="stop_alert_libbox_init_failed">راه‌اندازی libbox ناموفق بود: %1$s</string>
++    <string name="stop_alert_empty_config">کانفیگ خالی است</string>
++    <string name="stop_alert_no_command_server">CommandServer راه‌اندازی نشده است</string>
++    <string name="stop_alert_start_failed">اجرای سرویس ناموفق بود: %1$s</string>
++    <string name="tile_status_connecting">در حال اتصال…</string>
++    <string name="tile_status_stopping">در حال قطع…</string>
++    <string name="tile_status_disconnected">قطع</string>
++    <string name="label_plugin_custom">Venzo VPN: سفارشی…</string>
++    <string name="label_plugin_start">Venzo VPN: اتصال</string>
++    <string name="label_plugin_stop">Venzo VPN: توقف</string>
++    <string name="label_plugin_toggle">Venzo VPN: تغییر وضعیت</string>
++    <string name="automation_blurb_start">اتصال VPN</string>
++    <string name="automation_blurb_stop">توقف VPN</string>
++    <string name="automation_blurb_toggle">تغییر وضعیت VPN</string>
++    <string name="automation_command_prompt">فرمان Venzo VPN:</string>
++    <string name="automation_condition_prompt">شرط Venzo VPN:</string>
++    <string name="automation_cmd_switch_node">تغییر سرور</string>
++    <string name="automation_cmd_set_group">تنظیم گروه</string>
++    <string name="automation_cmd_urltest_group">تست گروه</string>
++    <string name="automation_cmd_refresh_subs">به‌روزرسانی اشتراک‌ها</string>
++    <string name="automation_cmd_rebuild_config">بازسازی کانفیگ</string>
++    <string name="automation_cmd_reset_network">بازنشانی شبکه</string>
++    <string name="automation_check_vpn_up">VPN فعال است</string>
++    <string name="automation_check_active_node">سرور فعال =</string>
++    <string name="automation_check_active_group">گروه فعال =</string>
++    <string name="automation_value_label">مقدار (%1$s):</string>
++    <string name="automation_value_plain">مقدار:</string>
++    <string name="automation_save">ذخیره</string>
++</resources>
 diff --git a/app/android/app/src/main/res/values-ru/strings.xml b/app/android/app/src/main/res/values-ru/strings.xml
-index 6943922..9680461 100644
+index 6943922d4f3469c664bbb7df6943d4f999ebb442..9680461735b5299e138367a495ea9fb558275c78 100644
 --- a/app/android/app/src/main/res/values-ru/strings.xml
 +++ b/app/android/app/src/main/res/values-ru/strings.xml
 @@ -4,8 +4,8 @@
@@ -79,7 +129,7 @@ index 6943922..9680461 100644
      <string name="automation_cmd_set_group">Задать группу</string>
      <string name="automation_cmd_urltest_group">URL-тест группы</string>
 diff --git a/app/android/app/src/main/res/values/strings.xml b/app/android/app/src/main/res/values/strings.xml
-index b179a0a..48fd1b6 100644
+index b179a0af139a5b812b3e5e66891e9dc206076b1e..48fd1b64ca5abfa1700ccfe7958c745759b9d7cd 100644
 --- a/app/android/app/src/main/res/values/strings.xml
 +++ b/app/android/app/src/main/res/values/strings.xml
 @@ -3,11 +3,11 @@
@@ -120,7 +170,7 @@ index b179a0a..48fd1b6 100644
      <string name="automation_cmd_set_group">Set group</string>
      <string name="automation_cmd_urltest_group">URL-test group</string>
 diff --git a/app/android/app/src/main/res/xml/locales_config.xml b/app/android/app/src/main/res/xml/locales_config.xml
-index a777ed9..3b430d1 100644
+index a777ed9e356e450033192c2ad9fdf5adc2adc372..3b430d1626e4ce8e942846f4d7ce72a81a3046c0 100644
 --- a/app/android/app/src/main/res/xml/locales_config.xml
 +++ b/app/android/app/src/main/res/xml/locales_config.xml
 @@ -5,4 +5,5 @@
@@ -129,8 +179,141 @@ index a777ed9..3b430d1 100644
      <locale android:name="ru" />
 +    <locale android:name="fa" />
  </locale-config>
+diff --git a/app/assets/l10n/fa/template.json b/app/assets/l10n/fa/template.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..ca8c671abca5e8cafbff7daa3b549a5cb1d9dd65
+--- /dev/null
++++ b/app/assets/l10n/fa/template.json
+@@ -0,0 +1,17 @@
++{
++  "Automatic": {"value": "خودکار"},
++  "Direct": {"value": "مستقیم"},
++  "Block": {"value": "مسدود"},
++  "Auto": {"value": "خودکار"},
++  "Primary": {"value": "اصلی"},
++  "Secondary": {"value": "پشتیبان"},
++  "Enabled": {"value": "فعال"},
++  "Disabled": {"value": "غیرفعال"},
++  "VPN": {"value": "VPN"},
++  "Routing": {"value": "مسیریابی"},
++  "DNS": {"value": "DNS"},
++  "Connections": {"value": "اتصال‌ها"},
++  "Servers": {"value": "سرورها"},
++  "Advanced": {"value": "پیشرفته"},
++  "Default": {"value": "پیش‌فرض"}
++}
+diff --git a/app/assets/l10n/fa/ui.json b/app/assets/l10n/fa/ui.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..63144700c9e4699563ed8162a7a14d334ba13ee4
+--- /dev/null
++++ b/app/assets/l10n/fa/ui.json
+@@ -0,0 +1,104 @@
++{
++  "About": {"value": "درباره برنامه"},
++  "Add a server": {"value": "افزودن سرور"},
++  "Allow": {"value": "اجازه دادن"},
++  "Allow background activity": {"value": "اجازه فعالیت در پس‌زمینه"},
++  "Allow notifications": {"value": "اجازه اعلان‌ها"},
++  "Another VPN is active": {"value": "یک VPN دیگر فعال است"},
++  "App Settings": {"value": "تنظیمات برنامه"},
++  "App connections": {"value": "اتصال‌های برنامه"},
++  "Apply": {"value": "اعمال"},
++  "Apply to %s": {"value": "اعمال برای %s"},
++  "Auto-start on boot": {"value": "اجرای خودکار پس از روشن شدن دستگاه"},
++  "Back": {"value": "بازگشت"},
++  "Behavior": {"value": "رفتار"},
++  "Cancel": {"value": "انصراف"},
++  "Channel": {"value": "کانال"},
++  "Channels and routing rules": {"value": "کانال‌ها و قوانین مسیریابی"},
++  "Check for updates?": {"value": "بررسی به‌روزرسانی‌ها؟"},
++  "Close": {"value": "بستن"},
++  "Close filters": {"value": "بستن فیلترها"},
++  "Config Editor": {"value": "ویرایشگر کانفیگ"},
++  "Config loading error": {"value": "خطا در بارگذاری کانفیگ"},
++  "Config variables": {"value": "متغیرهای کانفیگ"},
++  "Connect": {"value": "اتصال"},
++  "Connect a subscription or add a node manually to get started.": {"value": "برای شروع، یک اشتراک اضافه کنید یا سرور را دستی وارد کنید."},
++  "Connected": {"value": "متصل"},
++  "Connecting…": {"value": "در حال اتصال…"},
++  "Continue": {"value": "ادامه"},
++  "Copy": {"value": "کپی"},
++  "Dark": {"value": "تیره"},
++  "Default": {"value": "پیش‌فرض"},
++  "Delete": {"value": "حذف"},
++  "Disable battery restrictions": {"value": "غیرفعال کردن محدودیت باتری"},
++  "Disconnect": {"value": "قطع اتصال"},
++  "Disconnected": {"value": "قطع"},
++  "Dismiss": {"value": "نادیده گرفتن"},
++  "DNS Settings": {"value": "تنظیمات DNS"},
++  "DNS servers and rules": {"value": "سرورها و قوانین DNS"},
++  "Done": {"value": "انجام شد"},
++  "Edit": {"value": "ویرایش"},
++  "Enable": {"value": "فعال کردن"},
++  "Error": {"value": "خطا"},
++  "Export": {"value": "خروجی گرفتن"},
++  "Filter": {"value": "فیلتر"},
++  "General": {"value": "عمومی"},
++  "Got it": {"value": "متوجه شدم"},
++  "Hide filters": {"value": "پنهان کردن فیلترها"},
++  "Import": {"value": "وارد کردن"},
++  "Language": {"value": "زبان"},
++  "Last 100 events": {"value": "۱۰۰ رویداد اخیر"},
++  "Later": {"value": "بعداً"},
++  "Light": {"value": "روشن"},
++  "Name": {"value": "نام"},
++  "No nodes in this channel.\nTry another one.": {"value": "در این کانال سروری وجود ندارد.\nکانال دیگری را امتحان کنید."},
++  "Nodes": {"value": "سرورها"},
++  "OK": {"value": "تأیید"},
++  "Open Settings": {"value": "باز کردن تنظیمات"},
++  "Outbound connections to servers": {"value": "اتصال‌های خروجی به سرورها"},
++  "Paste": {"value": "چسباندن"},
++  "Ping Settings": {"value": "تنظیمات پینگ"},
++  "Rebuild config only": {"value": "فقط بازسازی کانفیگ"},
++  "Reload": {"value": "بارگذاری دوباره"},
++  "Restart VPN to apply changes": {"value": "برای اعمال تغییرات VPN را دوباره راه‌اندازی کنید"},
++  "Restore from backup": {"value": "بازیابی نسخه پشتیبان"},
++  "Routing": {"value": "مسیریابی"},
++  "Save": {"value": "ذخیره"},
++  "Select channel": {"value": "انتخاب کانال"},
++  "Servers": {"value": "سرورها"},
++  "Settings changed — tap to rebuild config": {"value": "تنظیمات تغییر کرده؛ برای بازسازی کانفیگ لمس کنید"},
++  "Show filters": {"value": "نمایش فیلترها"},
++  "Skip": {"value": "رد کردن"},
++  "Smart Connect": {"value": "اتصال هوشمند"},
++  "Sort options": {"value": "مرتب‌سازی"},
++  "Speed Test": {"value": "تست سرعت"},
++  "Start": {"value": "اتصال"},
++  "Start VPN when device turns on": {"value": "با روشن شدن دستگاه، VPN را اجرا کن"},
++  "Statistics": {"value": "آمار"},
++  "Stop": {"value": "توقف"},
++  "Stop VPN?": {"value": "اتصال VPN قطع شود؟"},
++  "Stopping…": {"value": "در حال قطع…"},
++  "Subscriptions & proxy": {"value": "اشتراک‌ها و پروکسی"},
++  "Switch": {"value": "تغییر"},
++  "System": {"value": "سیستم"},
++  "System default": {"value": "پیش‌فرض دستگاه"},
++  "Taken by another VPN": {"value": "اتصال توسط VPN دیگری گرفته شد"},
++  "Tap to connect": {"value": "برای اتصال لمس کنید"},
++  "Test download/upload speed": {"value": "آزمایش سرعت دانلود و آپلود"},
++  "The best server is selected automatically": {"value": "بهترین سرور به‌صورت خودکار انتخاب می‌شود"},
++  "Theme": {"value": "پوسته"},
++  "Theme, appearance": {"value": "پوسته و ظاهر"},
++  "Traffic by outbound": {"value": "ترافیک بر اساس مسیر خروجی"},
++  "Unknown": {"value": "نامشخص"},
++  "Use \"%s\" as…": {"value": "استفاده از «%s» به‌عنوان…"},
++  "View, edit, import JSON": {"value": "مشاهده، ویرایش و وارد کردن JSON"},
++  "VPN Settings": {"value": "تنظیمات VPN"},
++  "VPN settings": {"value": "تنظیمات VPN"},
++  "Your connection is protected": {"value": "اتصال شما محافظت می‌شود"},
++  "Finding a working server…": {"value": "در حال پیدا کردن سرور سالم…"},
++  "Testing configs on your current internet": {"value": "کانفیگ‌ها روی اینترنت شما بررسی می‌شوند"},
++  "Connected to a working server": {"value": "به یک سرور سالم متصل شدید"},
++  "Tap once — Venzo finds and connects automatically": {"value": "فقط یک‌بار لمس کنید؛ ونزو خودش سرور سالم را پیدا می‌کند"},
++  "Dedicated high-speed servers are coming soon": {"value": "سرورهای اختصاصی و پرسرعت به‌زودی فعال می‌شوند"},
++  "Coming soon": {"value": "به‌زودی"}
++}
 diff --git a/app/assets/l10n/ru/ui.json b/app/assets/l10n/ru/ui.json
-index 293ca75..db2df62 100644
+index 293ca751d46a5a45165ba1d210d75d28945da277..db2df62dea351e8a0e80fdc208fe3d47af5200fe 100644
 --- a/app/assets/l10n/ru/ui.json
 +++ b/app/assets/l10n/ru/ui.json
 @@ -516,8 +516,8 @@
@@ -248,7 +431,7 @@ index 293ca75..db2df62 100644
    "Rules menu": {
      "value": "Меню правил"
 diff --git a/app/lib/controllers/home_controller.dart b/app/lib/controllers/home_controller.dart
-index cfad4ab..ab957f0 100644
+index cfad4abc0f3b24249633e1355f4cab4f6d596746..ab957f01e66dd5e6c66777c00ff8127b8fd3d8e3 100644
 --- a/app/lib/controllers/home_controller.dart
 +++ b/app/lib/controllers/home_controller.dart
 @@ -622,7 +622,7 @@ class HomeController extends ChangeNotifier
@@ -271,8 +454,220 @@ index cfad4ab..ab957f0 100644
  
      // selectedGroup = активный селектор (vpn-1), activeInGroup = его выбранная
      // нода (`now`). Формат подтекста: «<селектор>: <нода>».
+diff --git a/app/lib/controllers/home_controller/ping_orchestration.dart b/app/lib/controllers/home_controller/ping_orchestration.dart
+index 8acde21c0f960e799e6dfe327ec3cd841bd131bb..93a8cd38854606bd1188e43556354c38bf99a8e9 100644
+--- a/app/lib/controllers/home_controller/ping_orchestration.dart
++++ b/app/lib/controllers/home_controller/ping_orchestration.dart
+@@ -1,5 +1,24 @@
+ part of '../home_controller.dart';
+ 
++/// Pure selection rule shared by runtime and tests: prefer the channel's
++/// canonical `<selector>-auto` group, otherwise use a URLTest group that is a
++/// member of the active selector.
++CcGroup? chooseVenzoSmartAutoGroup({
++  required String selectorTag,
++  required CcGroup? selector,
++  required Iterable<CcGroup> urltestGroups,
++}) {
++  final preferredTag = '$selectorTag-auto';
++  CcGroup? fallback;
++  for (final group in urltestGroups) {
++    if (group.tag == preferredTag) return group;
++    final isSelectorMember =
++        selector?.items.any((item) => item.tag == group.tag) ?? false;
++    if (isSelectorMember) fallback ??= group;
++  }
++  return fallback;
++}
++
+ /// Ping / URLTest оркестрация (§040 resolve-chain, §070 cache-gen,
+ /// §078 explicit order). Вынесено `part`'ом из `home_controller.dart` — та же
+ /// библиотека и тот же `HomeController`, поведение (concurrency, epoch-cancel,
+@@ -14,6 +33,8 @@ mixin _PingMixin on ChangeNotifier {
+   void _emit(HomeState next);
+   void _addDebug(DebugSource source, String message);
+   Future<void> reloadProxies();
++  Future<void> pullToRefresh();
++  Future<void> switchNode(String nodeTag);
+ 
+   /// §355 — пересчёт графа detour-зависимостей после свежих замеров.
+   /// Реализация — HomeController; ping-пути дёргают после записи delay.
+@@ -134,6 +155,16 @@ mixin _PingMixin on ChangeNotifier {
+   bool get massPingRunning => _massPingRunning;
+   int _massPingEpoch = 0;
+ 
++  /// Venzo one-tap connection state. The VPN service must be alive before
++  /// sing-box can probe its outbounds, so the UI remains in a dedicated
++  /// "finding a working server" state until the core reports a fresh URLTest
++  /// result. Users never have to pick a node manually.
++  bool _smartConnectRunning = false;
++  bool get smartConnectRunning => _smartConnectRunning;
++  String? _smartConnectNode;
++  String? get smartConnectNode => _smartConnectNode;
++  int _smartConnectEpoch = 0;
++
+   // §040: ping/test settings now persisted в SettingsStorage `ping_options`.
+   // Resolve chain: per-group override → global storage → template default.
+   // _templatePing* кешируются на старте через [reloadPingOptions].
+@@ -211,11 +242,10 @@ mixin _PingMixin on ChangeNotifier {
+   /// но не грузит главный поток бёрстом notifyListeners.
+   static const _massPingFlushMs = 120;
+ 
+-  /// Запланировать автопинг через 5 сек после connect, если включено в
+-  /// App Settings (`auto_ping_on_start`, default true). Пингуем только
+-  /// активную группу (`runMassUrltest` использует `_state.nodes` — ноды
+-  /// выбранного selector'а). Отменяется при disconnect.
+-  static const _autoPingDelay = Duration(seconds: 5);
++  /// Start the Venzo smart selection as soon as CommandClient is ready.
++  /// A short delay lets the native service expose its groups, while
++  /// [runSmartConnect] also performs bounded pulls to close cold-start races.
++  static const _autoPingDelay = Duration(milliseconds: 350);
+   Future<void> _scheduleAutoPing() async {
+     _autoPingTimer?.cancel();
+     final enabled =
+@@ -228,13 +258,121 @@ mixin _PingMixin on ChangeNotifier {
+     // лишний висящий Timer чище не создавать вовсе.
+     if (!_state.tunnelUp) return;
+     _autoPingTimer = Timer(_autoPingDelay, () {
+-      if (!_state.tunnelUp || _state.nodes.isEmpty) return;
+-      unawaited(runMassUrltest());
++      if (!_state.tunnelUp) return;
++      unawaited(runSmartConnect());
+     });
+   }
+ 
+-  /// §367 — «автопинг запланирован»: замер отложен на 5с, ждать их в тестах
+-  /// нечестно (реальное время) и хрупко. Состояния не добавляет — читает сам
++  /// Select the channel's AUTO group, force an immediate core URLTest, and
++  /// wait for a fresh successful selection. URLTest runs inside sing-box, so
++  /// it evaluates every candidate against the user's current network rather
++  /// than trusting stale/public ping numbers.
++  Future<void> runSmartConnect() async {
++    if (!_state.tunnelUp || _smartConnectRunning) return;
++    final epoch = ++_smartConnectEpoch;
++    _smartConnectRunning = true;
++    _smartConnectNode = null;
++    notifyListeners();
++
++    try {
++      // Groups can arrive shortly after the connected event. Pull with a
++      // small bounded retry instead of waiting a fixed five seconds.
++      for (var i = 0; i < 12 && _state.tunnelUp; i++) {
++        await pullToRefresh();
++        if (_state.ccGroups.isNotEmpty && _state.selectedGroup != null) break;
++        await Future<void>.delayed(const Duration(milliseconds: 180));
++      }
++      if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++
++      final selectorTag = _state.selectedGroup;
++      if (selectorTag == null) return;
++      final selector = _state.groupOf(selectorTag);
++      final autoGroup = chooseVenzoSmartAutoGroup(
++        selectorTag: selectorTag,
++        selector: selector,
++        urltestGroups: _state.urltestGroups,
++      );
++
++      if (autoGroup == null) {
++        // Imported/custom configs may not expose a URLTest group. Measure all
++        // candidates and pick the lowest successful latency as a safe fallback.
++        if (_state.nodes.isEmpty) return;
++        await runMassUrltest();
++        if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++        final candidates = _state.nodes
++            .where((tag) => !_state.isControlTag(tag))
++            .map((tag) => MapEntry(tag, _state.delayOf(tag)))
++            .where((entry) => entry.value != null && entry.value! >= 0)
++            .toList()
++          ..sort((a, b) => a.value!.compareTo(b.value!));
++        if (candidates.isNotEmpty) {
++          await switchNode(candidates.first.key);
++          _smartConnectNode = candidates.first.key;
++        }
++        return;
++      }
++
++      // The selector must route through AUTO; otherwise a manually selected
++      // dead node would keep receiving traffic while AUTO is being tested.
++      final autoTag = autoGroup.tag;
++      final selectorContainsAuto =
++          selector?.items.any((item) => item.tag == autoTag) ?? false;
++      if (selectorContainsAuto && _state.activeInGroup != autoTag) {
++        await switchNode(autoTag);
++      }
++      if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++
++      final previousTestStamp = autoGroup.items.fold<int>(
++        0,
++        (maxStamp, item) =>
++            item.urlTestTime > maxStamp ? item.urlTestTime : maxStamp,
++      );
++      await runGroupUrltest(autoTag);
++
++      // The group RPC starts asynchronously. Poll the lightweight group tree
++      // until the core reports a newly tested selected node, capped at 12s.
++      for (var i = 0; i < 30 && _state.tunnelUp; i++) {
++        await Future<void>.delayed(const Duration(milliseconds: 400));
++        if (epoch != _smartConnectEpoch) return;
++        await pullToRefresh();
++        final fresh = _state.groupOf(autoTag);
++        if (fresh == null || fresh.selected.isEmpty) continue;
++        CcOutbound? selected;
++        for (final item in fresh.items) {
++          if (item.tag == fresh.selected) {
++            selected = item;
++            break;
++          }
++        }
++        if (selected == null) continue;
++        final hasFreshResult = selected.urlTestTime > previousTestStamp;
++        final hasUsableCachedResult =
++            i >= 6 && selected.urlTestTime > 0 && selected.urlTestDelay >= 0;
++        if (hasFreshResult || hasUsableCachedResult) {
++          _smartConnectNode = selected.tag;
++          _addDebug(DebugSource.app,
++              'Smart Connect selected ${selected.tag} (${selected.urlTestDelay}ms)');
++          break;
++        }
++      }
++    } finally {
++      if (epoch == _smartConnectEpoch) {
++        _smartConnectRunning = false;
++        notifyListeners();
++      }
++    }
++  }
++
++  void cancelSmartConnect() {
++    _smartConnectEpoch++;
++    if (!_smartConnectRunning) return;
++    _smartConnectRunning = false;
++    _smartConnectNode = null;
++    notifyListeners();
++  }
++
++  /// §367 — «автопинг запланирован»: короткий deferred-запуск не надо ждать
++  /// в тестах реальным временем. Состояния не добавляет — читает сам
+   /// таймер.
+   @visibleForTesting
+   bool get autoPingScheduledForTesting => _autoPingTimer?.isActive ?? false;
+@@ -422,12 +560,13 @@ mixin _PingMixin on ChangeNotifier {
+   /// «сессия мертва» переходов: disconnected/revoked (`_handleStatusEvent`),
+   /// смерть туннеля (`_onTunnelDead`). Гасит три независимых источника:
+   ///  1. mass-ping — epoch-bump + `_cc.cancelPing()` (внутри `cancelMassPing`);
+-  ///  2. auto-ping-таймер (5с после connect) — чтобы не выстрелил в мёртвую сессию;
++  ///  2. auto-ping-таймер после connect — чтобы не выстрелил в мёртвую сессию;
+   ///  3. активные folder-probe sweep'ы (`ProbeRunner`) через `ProbeLifecycle`.
+   /// Идемпотентно: каждый источник сам no-op, если неактивен.
+   ///
+   /// Сворачивание приложения сюда НЕ входит — см. [haltBackgroundProbing].
+   void haltAllProbing() {
++    cancelSmartConnect();
+     cancelMassPing();
+     _autoPingTimer?.cancel();
+     _autoPingTimer = null;
 diff --git a/app/lib/controllers/subscription_controller.dart b/app/lib/controllers/subscription_controller.dart
-index 2200acc..ad42d92 100644
+index 2200acc1625207bfaea127c751db9a1d2c89d0bb..ad42d924c3d957c6eda0339b53ff623356d3946d 100644
 --- a/app/lib/controllers/subscription_controller.dart
 +++ b/app/lib/controllers/subscription_controller.dart
 @@ -29,6 +29,7 @@ import '../services/parser/uri_parsers.dart';
@@ -302,7 +697,7 @@ index 2200acc..ad42d92 100644
      // §076: bootstrap mtime compare — restore in-memory configDirty после
      // possible kill mid-session. Если settings новее чем saved config →
 diff --git a/app/lib/main.dart b/app/lib/main.dart
-index ccf911b..f0be374 100644
+index ccf911b4e8142d35d55cf61e83725ef2f9e3bd30..f0be3740d5edefdee09992dba114428a6aa3a91f 100644
 --- a/app/lib/main.dart
 +++ b/app/lib/main.dart
 @@ -243,7 +243,9 @@ final themeNotifier = ThemeNotifier();
@@ -326,7 +721,7 @@ index ccf911b..f0be374 100644
              colorScheme: ColorScheme.fromSeed(seedColor: _seed),
              useMaterial3: true,
 diff --git a/app/lib/screens/about_screen.dart b/app/lib/screens/about_screen.dart
-index cf97558..7b9c404 100644
+index cf97558c9ca3da4c865129fde56dc3d70443a416..7b9c404f68b2667b6ef59c7b897b93b85e1c3750 100644
 --- a/app/lib/screens/about_screen.dart
 +++ b/app/lib/screens/about_screen.dart
 @@ -76,7 +76,7 @@ class AboutScreen extends StatelessWidget {
@@ -384,7 +779,7 @@ index cf97558..7b9c404 100644
          content: SizedBox(
            width: double.maxFinite,
 diff --git a/app/lib/screens/app_settings_screen.dart b/app/lib/screens/app_settings_screen.dart
-index c16040a..f933083 100644
+index c16040a63cbf0eecc1deee11adb56bf60a92c669..f9330835259f7cdaf5e5f802dcdd276148a75a92 100644
 --- a/app/lib/screens/app_settings_screen.dart
 +++ b/app/lib/screens/app_settings_screen.dart
 @@ -337,10 +337,10 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> with WidgetsBindi
@@ -401,7 +796,7 @@ index c16040a..f933083 100644
      final duration = (result == 'unsupported' ||
              result.startsWith('error') ||
 diff --git a/app/lib/screens/app_settings_screen/app_settings_dialogs.dart b/app/lib/screens/app_settings_screen/app_settings_dialogs.dart
-index b035ed5..61a0ee0 100644
+index b035ed51842111b191558b83b5180c53aa558f5e..61a0ee02213a3bc493028ecf4ddf51e7f8d8f72f 100644
 --- a/app/lib/screens/app_settings_screen/app_settings_dialogs.dart
 +++ b/app/lib/screens/app_settings_screen/app_settings_dialogs.dart
 @@ -42,7 +42,7 @@ class AppSettingsDialogs {
@@ -414,7 +809,7 @@ index b035ed5..61a0ee0 100644
            ),
          ),
 diff --git a/app/lib/screens/app_settings_screen/widgets/automation_tab.dart b/app/lib/screens/app_settings_screen/widgets/automation_tab.dart
-index 199a770..b7d061b 100644
+index 199a77012bb7ce62207b65894e7c62843afc3efe..b7d061bb28190d546783397632474afd20938641 100644
 --- a/app/lib/screens/app_settings_screen/widgets/automation_tab.dart
 +++ b/app/lib/screens/app_settings_screen/widgets/automation_tab.dart
 @@ -130,7 +130,7 @@ class _AutomationTabState extends State<AutomationTab> {
@@ -436,7 +831,7 @@ index 199a770..b7d061b 100644
          ),
          const Divider(height: 28),
 diff --git a/app/lib/screens/app_settings_screen/widgets/general_tab.dart b/app/lib/screens/app_settings_screen/widgets/general_tab.dart
-index 07ae26e..9a11fc6 100644
+index 07ae26e6e779de4234f17fdb0afed80c3d881333..9a11fc66d92f8beb101f552713773bf1f842f647 100644
 --- a/app/lib/screens/app_settings_screen/widgets/general_tab.dart
 +++ b/app/lib/screens/app_settings_screen/widgets/general_tab.dart
 @@ -65,9 +65,9 @@ class GeneralTab extends StatelessWidget {
@@ -473,7 +868,7 @@ index 07ae26e..9a11fc6 100644
          const Divider(height: 32),
          Text(getLocalText.s("Updates"),
 diff --git a/app/lib/screens/debug/profiling_tab.dart b/app/lib/screens/debug/profiling_tab.dart
-index 5022ae6..e161b76 100644
+index 5022ae69e8499dcdb866a60fea062c3502a5564b..e161b768c86e33b156fd01cb1332263dbd6f31fa 100644
 --- a/app/lib/screens/debug/profiling_tab.dart
 +++ b/app/lib/screens/debug/profiling_tab.dart
 @@ -61,8 +61,8 @@ class _ProfilingTabState extends State<ProfilingTab>
@@ -488,7 +883,7 @@ index 5022ae6..e161b76 100644
        );
      } catch (e) {
 diff --git a/app/lib/screens/home/home_dialogs.dart b/app/lib/screens/home/home_dialogs.dart
-index 8dfb695..ff0d092 100644
+index 8dfb69590c5269d61120f7b18e7b6d1ecde0eb98..ff0d092922ddc1571cbcaf13fc8f19d0375bfb42 100644
 --- a/app/lib/screens/home/home_dialogs.dart
 +++ b/app/lib/screens/home/home_dialogs.dart
 @@ -61,7 +61,7 @@ Future<bool?> showForeignVpnDialog(BuildContext context) {
@@ -546,10 +941,22 @@ index 8dfb695..ff0d092 100644
          TextButton(
            onPressed: () => Navigator.of(ctx).pop(false),
 diff --git a/app/lib/screens/home/widgets/home_controls.dart b/app/lib/screens/home/widgets/home_controls.dart
-index 6289bc5..6fba223 100644
+index 6289bc5f5bafbc046c94e844d9cabfbc302ece07..20ea10c3d5024934a2944f1d4f216381b3877d6f 100644
 --- a/app/lib/screens/home/widgets/home_controls.dart
 +++ b/app/lib/screens/home/widgets/home_controls.dart
-@@ -88,38 +88,91 @@ class HomeControls extends StatelessWidget {
+@@ -80,46 +80,106 @@ class HomeControls extends StatelessWidget {
+   Widget build(BuildContext context) {
+     final isConnecting = state.tunnel == TunnelStatus.connecting;
+     final isStopping = state.tunnel == TunnelStatus.stopping;
++    final isSearching = controller.smartConnectRunning;
+     final canToggle = !state.busy && !isConnecting && !isStopping;
+     final toggleEnabled = canToggle && (state.tunnelUp || state.configRaw.isNotEmpty);
++    // Venzo's default home is intentionally one-tap. The advanced channel and
++    // manual ping controls stay implemented for a future expert-mode switch.
++    const showAdvancedControls = false;
+ 
+     return Padding(
+       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
        child: Column(
          crossAxisAlignment: CrossAxisAlignment.stretch,
          children: [
@@ -580,8 +987,8 @@ index 6289bc5..6fba223 100644
 +                      if (state.tunnelUp) {
 +                        confirmStop(context, controller, state);
 +                      } else {
-+                        // Start запускает auto/urltest-группы ядра; через пять
-+                        // секунд штатный auto-ping переселектит лучший узел.
++                        // The controller starts an immediate network-specific
++                        // URLTest and selects a working node automatically.
 +                        onStartWithAutoRefresh();
                        }
 -                    : null,
@@ -596,13 +1003,10 @@ index 6289bc5..6fba223 100644
 +                  children: [
 +                    AnimatedContainer(
 +                      duration: const Duration(milliseconds: 250),
-+                      width: 132,
-+                      height: 132,
++                      width: 144,
++                      height: 144,
 +                      decoration: BoxDecoration(
-+                        shape: BoxShape.circle,
-+                        color: state.tunnelUp
-+                            ? Theme.of(context).colorScheme.primary
-+                            : Theme.of(context).colorScheme.primaryContainer,
++                        borderRadius: BorderRadius.circular(34),
 +                        boxShadow: [
 +                          BoxShadow(
 +                            color: Theme.of(context)
@@ -614,31 +1018,37 @@ index 6289bc5..6fba223 100644
 +                          ),
 +                        ],
 +                      ),
-+                      child: Icon(
-+                        state.tunnelUp
-+                            ? Icons.shield_rounded
-+                            : Icons.shield_outlined,
-+                        size: 62,
-+                        color: state.tunnelUp
-+                            ? Theme.of(context).colorScheme.onPrimary
-+                            : Theme.of(context).colorScheme.primary,
++                      child: ClipRRect(
++                        borderRadius: BorderRadius.circular(34),
++                        child: Image.asset(
++                          'assets/icons/app_icon.png',
++                          fit: BoxFit.cover,
++                          semanticLabel: 'Venzo VPN', // l10n-exempt: brand
++                        ),
 +                      ),
 +                    ),
 +                    const SizedBox(height: 18),
 +                    Text(
-+                      state.tunnelUp
-+                          ? getLocalText.s("Disconnect")
-+                          : getLocalText.s("Smart Connect"),
++                      isSearching
++                          ? getLocalText.s("Finding a working server…")
++                          : state.tunnelUp
++                              ? getLocalText.s("Disconnect")
++                              : getLocalText.s("Smart Connect"),
 +                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
 +                            fontWeight: FontWeight.w800,
 +                          ),
 +                    ),
 +                    const SizedBox(height: 6),
 +                    Text(
-+                      state.tunnelUp
-+                          ? getLocalText.s("Your connection is protected")
-+                          : getLocalText.s(
-+                              "The best server is selected automatically"),
++                      isSearching
++                          ? getLocalText.s(
++                              "Testing configs on your current internet")
++                          : state.tunnelUp
++                              ? controller.smartConnectNode == null
++                                  ? getLocalText.s("Your connection is protected")
++                                  : getLocalText.s("Connected to a working server")
++                              : getLocalText.s(
++                                  "Tap once — Venzo finds and connects automatically"),
 +                      textAlign: TextAlign.center,
 +                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
 +                            color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -670,11 +1080,88 @@ index 6289bc5..6fba223 100644
            ),
            // §116 — единый banner-механизм: проекция состояния → BannerStack.
            // Три исторических плашки (settings_changed / restart / last_error)
+@@ -150,9 +210,10 @@ class HomeControls extends StatelessWidget {
+               ),
+             ),
+           ),
+-          const SizedBox(height: 16),
+-          Row(
+-            children: [
++          if (showAdvancedControls) ...[
++            const SizedBox(height: 16),
++            Row(
++              children: [
+               Text(getLocalText.s("Channel"),
+                   style: const TextStyle(fontWeight: FontWeight.w600)),
+               const SizedBox(width: 12),
+@@ -218,8 +279,9 @@ class HomeControls extends StatelessWidget {
+                     ),
+                   ),
+                 ),
+-            ],
+-          ),
++              ],
++            ),
++          ],
+         ],
+       ),
+     );
+diff --git a/app/lib/screens/home/widgets/home_drawer.dart b/app/lib/screens/home/widgets/home_drawer.dart
+index ff0e2384ea8f2855a3077f265a31c6f2333f6337..9f24a476098de1ac0f667fe1b1ae7577e293ca8d 100644
+--- a/app/lib/screens/home/widgets/home_drawer.dart
++++ b/app/lib/screens/home/widgets/home_drawer.dart
+@@ -42,7 +42,29 @@ class HomeDrawer extends StatelessWidget {
+       child: SafeArea(
+         child: ListView(
+           children: [
+-            const SizedBox(height: 12),
++            DrawerHeader(
++              margin: EdgeInsets.zero,
++              child: Row(
++                children: [
++                  ClipRRect(
++                    borderRadius: BorderRadius.circular(18),
++                    child: Image.asset(
++                      'assets/icons/app_icon.png',
++                      width: 72,
++                      height: 72,
++                      fit: BoxFit.cover,
++                    ),
++                  ),
++                  const SizedBox(width: 16),
++                  const Expanded(
++                    child: Text(
++                      'Venzo VPN', // l10n-exempt: brand
++                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
++                    ),
++                  ),
++                ],
++              ),
++            ),
+             ListTile(
+               leading: const Icon(Icons.dns_outlined),
+               title: Text(getLocalText.s("Servers")),
 diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
-index a4a2656..ffa6b59 100644
+index a4a26561d485790315220cc72ad7c20733fac766..aec1dd50cc06b3659cf9b9d486fed38d401ba90e 100644
 --- a/app/lib/screens/home_screen.dart
 +++ b/app/lib/screens/home_screen.dart
-@@ -734,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+@@ -32,6 +32,7 @@ import 'home/widgets/home_drawer.dart';
+ import 'home/widgets/home_controls.dart';
+ import 'home/widgets/node_list.dart';
+ import 'home/widgets/status_chip.dart';
++import 'home/widgets/venzo_premium_card.dart';
+ import '../widgets/pool_view_dialog.dart';
+ import 'home/home_menus.dart';
+ import 'home/home_dialogs.dart';
+@@ -720,6 +721,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+         final startActive = !state.tunnelUp;
+         final startEnabled = !state.busy && !state.tunnelUp && state.configRaw.isNotEmpty;
+         final stopEnabled = !state.busy && state.tunnelUp;
++        const simpleHome = true;
+         // §328 — «нет серверов» считается по payload-нодам (конфиг + entries),
+         // а не по наличию файла конфига: шаблонная сборка при нуле серверов
+         // оставляет configRaw непустым навсегда. `e.nodeCount` — персистентный
+@@ -734,7 +736,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
          );
          return Scaffold(
            // l10n-exempt: brand name, идентичен во всех локалях
@@ -683,8 +1170,57 @@ index a4a2656..ffa6b59 100644
            drawer: HomeDrawer(
              controller: _controller,
              subController: _subController,
+@@ -787,7 +789,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+                           _subController.progressMessage!.render()),
+                 // §095 — NODES-строка только когда подключено И фильтр закрыт.
+                 // STOP-режим: нод нет → фильтровать нечего → строку прячем.
+-                if (state.tunnelUp && !_filter.panelExpanded) ...[
++                if (!simpleHome && state.tunnelUp && !_filter.panelExpanded) ...[
+                   const SizedBox(height: 12),
+                   NodesHeader(
+                     controller: _controller,
+@@ -799,21 +801,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+                   const SizedBox(height: 4),
+                 ],
+               ],
+-              HomeNodeList(
+-                controller: _controller,
+-                subController: _subController,
+-                autoUpdater: _autoUpdater,
+-                filter: _filter,
+-                presenter: _nodeList,
+-                state: state,
+-                showEmptyGuide: showEmptyGuide,
+-                onRestoreFromBackup: () =>
+-                    restoreFromBackup(context, _subController, _autoUpdater),
+-                onTapToConnect: () => unawaited(_startWithAutoRefresh()),
+-                rowKeyFor: _nodeRowKey, // §203
+-                onSelectServer: _scrollToNode, // §203
+-                onViewPool: _showPool, // §208
+-              ),
++              if (showEmptyGuide || !simpleHome)
++                HomeNodeList(
++                  controller: _controller,
++                  subController: _subController,
++                  autoUpdater: _autoUpdater,
++                  filter: _filter,
++                  presenter: _nodeList,
++                  state: state,
++                  showEmptyGuide: showEmptyGuide,
++                  onRestoreFromBackup: () => restoreFromBackup(
++                      context, _subController, _autoUpdater),
++                  onTapToConnect: () => unawaited(_startWithAutoRefresh()),
++                  rowKeyFor: _nodeRowKey, // §203
++                  onSelectServer: _scrollToNode, // §203
++                  onViewPool: _showPool, // §208
++                ),
++              if (!showEmptyGuide && simpleHome)
++                const Expanded(child: VenzoPremiumCard()),
+             ],
+           ),
+         );
 diff --git a/app/lib/screens/subscriptions_screen/widgets/subscriptions_empty_state.dart b/app/lib/screens/subscriptions_screen/widgets/subscriptions_empty_state.dart
-index b27b119..59e6396 100644
+index b27b1191ec34930634736f96594ab071373f96ce..59e63961f36a26124996d10d9dc8ed0eeb3bd7c7 100644
 --- a/app/lib/screens/subscriptions_screen/widgets/subscriptions_empty_state.dart
 +++ b/app/lib/screens/subscriptions_screen/widgets/subscriptions_empty_state.dart
 @@ -44,7 +44,7 @@ class SubscriptionsEmptyState extends StatelessWidget {
@@ -697,7 +1233,7 @@ index b27b119..59e6396 100644
                  Text(
                    getLocalText.s("No provider yet?"),
 diff --git a/app/lib/services/crash_share.dart b/app/lib/services/crash_share.dart
-index d000b13..7862f6c 100644
+index d000b13f2641c29629b72eb5f4dea09686057d6b..7862f6c2e632c3a6eb9fa4473e220dbe41e44f0e 100644
 --- a/app/lib/services/crash_share.dart
 +++ b/app/lib/services/crash_share.dart
 @@ -34,7 +34,7 @@ Future<bool> shareCrashReport(CrashReportFile report) async {
@@ -710,7 +1246,7 @@ index d000b13..7862f6c 100644
      return true;
    } catch (_) {
 diff --git a/app/lib/services/debug/handlers/help.dart b/app/lib/services/debug/handlers/help.dart
-index 082b8cb..d471700 100644
+index 082b8cb5a4a2cda1eef273f50edac34ccb8476c3..d471700b1d3dfd853ff281b1b0a7688a1462479f 100644
 --- a/app/lib/services/debug/handlers/help.dart
 +++ b/app/lib/services/debug/handlers/help.dart
 @@ -42,7 +42,7 @@ Future<DebugResponse> helpHandler(DebugRequest req, DebugContext ctx) async {
@@ -723,7 +1259,7 @@ index 082b8cb..d471700 100644
  Localhost HTTP server for dev introspection and control. Runs inside the
  Flutter app when "Debug API toggle" is enabled in App Settings → Developer.
 diff --git a/app/lib/services/l10n/locale_controller.dart b/app/lib/services/l10n/locale_controller.dart
-index 2c787f1..ea5000f 100644
+index 2c787f1eae94e8a341c2d1bab74c4116163dbf44..ea5000fec17d2b97c389e8668e5407e0e6e35d47 100644
 --- a/app/lib/services/l10n/locale_controller.dart
 +++ b/app/lib/services/l10n/locale_controller.dart
 @@ -26,10 +26,10 @@ GetLocalText get getLocalText => LocaleController.I.text;
@@ -741,7 +1277,7 @@ index 2c787f1..ea5000f 100644
  
    Locale? _lastApplied;
 diff --git a/app/lib/services/oom_share.dart b/app/lib/services/oom_share.dart
-index bc2b628..b7a99a1 100644
+index bc2b6288fbea7b3b257dc5daf7343f0804ade217..b7a99a160b48fdd04a0f46d166c275a2525a21ea 100644
 --- a/app/lib/services/oom_share.dart
 +++ b/app/lib/services/oom_share.dart
 @@ -31,7 +31,7 @@ Future<bool> shareOomReport(OomReportFile report) async {
@@ -754,7 +1290,7 @@ index bc2b628..b7a99a1 100644
      return true;
    } catch (_) {
 diff --git a/app/lib/services/project_links.dart b/app/lib/services/project_links.dart
-index d4b8025..99fed86 100644
+index d4b802554de3884fcd12005af126c0e92d0e73cd..99fed86819663558a265d69ac6b551e778e12f84 100644
 --- a/app/lib/services/project_links.dart
 +++ b/app/lib/services/project_links.dart
 @@ -12,15 +12,16 @@ import 'version_info.dart';
@@ -787,7 +1323,7 @@ index d4b8025..99fed86 100644
          '@issuesLink': issues,
          '@boostyLink': boosty,
 diff --git a/app/lib/services/settings_storage.dart b/app/lib/services/settings_storage.dart
-index 0e7db07..e081ef9 100644
+index 0e7db07563f8645b6c03f9c49e2a308b6d5f1f01..e081ef9ed34363e3bdb901b9758540a0949e9f03 100644
 --- a/app/lib/services/settings_storage.dart
 +++ b/app/lib/services/settings_storage.dart
 @@ -638,13 +638,15 @@ class SettingsStorage {
@@ -810,7 +1346,7 @@ index 0e7db07..e081ef9 100644
  
 diff --git a/app/lib/services/venzo_managed_subscriptions.dart b/app/lib/services/venzo_managed_subscriptions.dart
 new file mode 100644
-index 0000000..007b775
+index 0000000000000000000000000000000000000000..007b775bd42073804956a1d3dcc8211130d8432d
 --- /dev/null
 +++ b/app/lib/services/venzo_managed_subscriptions.dart
 @@ -0,0 +1,39 @@
@@ -854,7 +1390,7 @@ index 0000000..007b775
 +      ];
 +}
 diff --git a/app/pubspec.yaml b/app/pubspec.yaml
-index 8049177..273d6c8 100644
+index 804917702f451a15b2e38fb50ed58f235c44f64b..273d6c848871c630f8a67cb708ab5c092965ede5 100644
 --- a/app/pubspec.yaml
 +++ b/app/pubspec.yaml
 @@ -59,6 +59,7 @@ flutter:
@@ -865,207 +1401,9 @@ index 8049177..273d6c8 100644
      - assets/donate.json # §362 — способы поддержки (донат-попап в About)
      - assets/warp_endpoints.json # §136 — WARP endpoint/SNI random pools
      - assets/icons/app_icon.png
-diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
-new file mode 100644
-index 0000000..080571a
---- /dev/null
-+++ b/app/test/services/venzo_managed_subscriptions_test.dart
-@@ -0,0 +1,15 @@
-+import 'package:flutter_test/flutter_test.dart';
-+import 'package:lxbox/services/venzo_managed_subscriptions.dart';
-+
-+void main() {
-+  test('managed subscriptions are independent, enabled and bounded', () {
-+    final subscriptions = VenzoManagedSubscriptions.defaults();
-+
-+    expect(subscriptions, hasLength(2));
-+    expect(subscriptions.every((s) => s.enabled), isTrue);
-+    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(), hasLength(2));
-+    expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
-+    expect(subscriptions.map((s) => s.id).toSet(), hasLength(2));
-+    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(2));
-+  });
-+}
-diff --git a/app/assets/l10n/fa/ui.json b/app/assets/l10n/fa/ui.json
-new file mode 100644
-index 0000000..6c3a4ea
---- /dev/null
-+++ b/app/assets/l10n/fa/ui.json
-@@ -0,0 +1,98 @@
-+{
-+  "About": {"value": "درباره برنامه"},
-+  "Add a server": {"value": "افزودن سرور"},
-+  "Allow": {"value": "اجازه دادن"},
-+  "Allow background activity": {"value": "اجازه فعالیت در پس‌زمینه"},
-+  "Allow notifications": {"value": "اجازه اعلان‌ها"},
-+  "Another VPN is active": {"value": "یک VPN دیگر فعال است"},
-+  "App Settings": {"value": "تنظیمات برنامه"},
-+  "App connections": {"value": "اتصال‌های برنامه"},
-+  "Apply": {"value": "اعمال"},
-+  "Apply to %s": {"value": "اعمال برای %s"},
-+  "Auto-start on boot": {"value": "اجرای خودکار پس از روشن شدن دستگاه"},
-+  "Back": {"value": "بازگشت"},
-+  "Behavior": {"value": "رفتار"},
-+  "Cancel": {"value": "انصراف"},
-+  "Channel": {"value": "کانال"},
-+  "Channels and routing rules": {"value": "کانال‌ها و قوانین مسیریابی"},
-+  "Check for updates?": {"value": "بررسی به‌روزرسانی‌ها؟"},
-+  "Close": {"value": "بستن"},
-+  "Close filters": {"value": "بستن فیلترها"},
-+  "Config Editor": {"value": "ویرایشگر کانفیگ"},
-+  "Config loading error": {"value": "خطا در بارگذاری کانفیگ"},
-+  "Config variables": {"value": "متغیرهای کانفیگ"},
-+  "Connect": {"value": "اتصال"},
-+  "Connect a subscription or add a node manually to get started.": {"value": "برای شروع، یک اشتراک اضافه کنید یا سرور را دستی وارد کنید."},
-+  "Connected": {"value": "متصل"},
-+  "Connecting…": {"value": "در حال اتصال…"},
-+  "Continue": {"value": "ادامه"},
-+  "Copy": {"value": "کپی"},
-+  "Dark": {"value": "تیره"},
-+  "Default": {"value": "پیش‌فرض"},
-+  "Delete": {"value": "حذف"},
-+  "Disable battery restrictions": {"value": "غیرفعال کردن محدودیت باتری"},
-+  "Disconnect": {"value": "قطع اتصال"},
-+  "Disconnected": {"value": "قطع"},
-+  "Dismiss": {"value": "نادیده گرفتن"},
-+  "DNS Settings": {"value": "تنظیمات DNS"},
-+  "DNS servers and rules": {"value": "سرورها و قوانین DNS"},
-+  "Done": {"value": "انجام شد"},
-+  "Edit": {"value": "ویرایش"},
-+  "Enable": {"value": "فعال کردن"},
-+  "Error": {"value": "خطا"},
-+  "Export": {"value": "خروجی گرفتن"},
-+  "Filter": {"value": "فیلتر"},
-+  "General": {"value": "عمومی"},
-+  "Got it": {"value": "متوجه شدم"},
-+  "Hide filters": {"value": "پنهان کردن فیلترها"},
-+  "Import": {"value": "وارد کردن"},
-+  "Language": {"value": "زبان"},
-+  "Last 100 events": {"value": "۱۰۰ رویداد اخیر"},
-+  "Later": {"value": "بعداً"},
-+  "Light": {"value": "روشن"},
-+  "Name": {"value": "نام"},
-+  "No nodes in this channel.\nTry another one.": {"value": "در این کانال سروری وجود ندارد.\nکانال دیگری را امتحان کنید."},
-+  "Nodes": {"value": "سرورها"},
-+  "OK": {"value": "تأیید"},
-+  "Open Settings": {"value": "باز کردن تنظیمات"},
-+  "Outbound connections to servers": {"value": "اتصال‌های خروجی به سرورها"},
-+  "Paste": {"value": "چسباندن"},
-+  "Ping Settings": {"value": "تنظیمات پینگ"},
-+  "Rebuild config only": {"value": "فقط بازسازی کانفیگ"},
-+  "Reload": {"value": "بارگذاری دوباره"},
-+  "Restart VPN to apply changes": {"value": "برای اعمال تغییرات VPN را دوباره راه‌اندازی کنید"},
-+  "Restore from backup": {"value": "بازیابی نسخه پشتیبان"},
-+  "Routing": {"value": "مسیریابی"},
-+  "Save": {"value": "ذخیره"},
-+  "Select channel": {"value": "انتخاب کانال"},
-+  "Servers": {"value": "سرورها"},
-+  "Settings changed — tap to rebuild config": {"value": "تنظیمات تغییر کرده؛ برای بازسازی کانفیگ لمس کنید"},
-+  "Show filters": {"value": "نمایش فیلترها"},
-+  "Skip": {"value": "رد کردن"},
-+  "Smart Connect": {"value": "اتصال هوشمند"},
-+  "Sort options": {"value": "مرتب‌سازی"},
-+  "Speed Test": {"value": "تست سرعت"},
-+  "Start": {"value": "اتصال"},
-+  "Start VPN when device turns on": {"value": "با روشن شدن دستگاه، VPN را اجرا کن"},
-+  "Statistics": {"value": "آمار"},
-+  "Stop": {"value": "توقف"},
-+  "Stop VPN?": {"value": "اتصال VPN قطع شود؟"},
-+  "Stopping…": {"value": "در حال قطع…"},
-+  "Subscriptions & proxy": {"value": "اشتراک‌ها و پروکسی"},
-+  "Switch": {"value": "تغییر"},
-+  "System": {"value": "سیستم"},
-+  "System default": {"value": "پیش‌فرض دستگاه"},
-+  "Taken by another VPN": {"value": "اتصال توسط VPN دیگری گرفته شد"},
-+  "Tap to connect": {"value": "برای اتصال لمس کنید"},
-+  "Test download/upload speed": {"value": "آزمایش سرعت دانلود و آپلود"},
-+  "The best server is selected automatically": {"value": "بهترین سرور به‌صورت خودکار انتخاب می‌شود"},
-+  "Theme": {"value": "پوسته"},
-+  "Theme, appearance": {"value": "پوسته و ظاهر"},
-+  "Traffic by outbound": {"value": "ترافیک بر اساس مسیر خروجی"},
-+  "Unknown": {"value": "نامشخص"},
-+  "Use \"%s\" as…": {"value": "استفاده از «%s» به‌عنوان…"},
-+  "View, edit, import JSON": {"value": "مشاهده، ویرایش و وارد کردن JSON"},
-+  "VPN Settings": {"value": "تنظیمات VPN"},
-+  "VPN settings": {"value": "تنظیمات VPN"},
-+  "Your connection is protected": {"value": "اتصال شما محافظت می‌شود"}
-+}
-diff --git a/app/assets/l10n/fa/template.json b/app/assets/l10n/fa/template.json
-new file mode 100644
-index 0000000..ca8c671
---- /dev/null
-+++ b/app/assets/l10n/fa/template.json
-@@ -0,0 +1,17 @@
-+{
-+  "Automatic": {"value": "خودکار"},
-+  "Direct": {"value": "مستقیم"},
-+  "Block": {"value": "مسدود"},
-+  "Auto": {"value": "خودکار"},
-+  "Primary": {"value": "اصلی"},
-+  "Secondary": {"value": "پشتیبان"},
-+  "Enabled": {"value": "فعال"},
-+  "Disabled": {"value": "غیرفعال"},
-+  "VPN": {"value": "VPN"},
-+  "Routing": {"value": "مسیریابی"},
-+  "DNS": {"value": "DNS"},
-+  "Connections": {"value": "اتصال‌ها"},
-+  "Servers": {"value": "سرورها"},
-+  "Advanced": {"value": "پیشرفته"},
-+  "Default": {"value": "پیش‌فرض"}
-+}
-diff --git a/app/android/app/src/main/res/values-fa/strings.xml b/app/android/app/src/main/res/values-fa/strings.xml
-new file mode 100644
-index 0000000..6b29cf7
---- /dev/null
-+++ b/app/android/app/src/main/res/values-fa/strings.xml
-@@ -0,0 +1,44 @@
-+<?xml version="1.0" encoding="utf-8"?>
-+<resources>
-+    <string name="qc_first_open">برای دریافت مجوز VPN، Venzo VPN باز می‌شود (فقط یک‌بار)</string>
-+    <string name="qc_consent_denied">مجوز VPN داده نشد. برای تلاش دوباره Venzo VPN را باز کنید.</string>
-+    <string name="qc_connect_label">اتصال</string>
-+    <string name="qc_disconnect_label">قطع اتصال</string>
-+    <string name="notification_channel_name">سرویس VPN</string>
-+    <string name="notification_channel_description">هنگام فعال بودن VPN نمایش داده می‌شود</string>
-+    <string name="notification_status_starting">در حال اتصال…</string>
-+    <string name="status_connected">متصل</string>
-+    <string name="notification_action_stop">توقف</string>
-+    <string name="notification_action_reconnect">اتصال دوباره</string>
-+    <string name="notification_error_title">خطا</string>
-+    <string name="core_channel_fallback_name">اعلان‌های هسته</string>
-+    <string name="stop_alert_unknown_error">خطای ناشناخته</string>
-+    <string name="stop_alert_libbox_init_failed">راه‌اندازی libbox ناموفق بود: %1$s</string>
-+    <string name="stop_alert_empty_config">کانفیگ خالی است</string>
-+    <string name="stop_alert_no_command_server">CommandServer راه‌اندازی نشده است</string>
-+    <string name="stop_alert_start_failed">اجرای سرویس ناموفق بود: %1$s</string>
-+    <string name="tile_status_connecting">در حال اتصال…</string>
-+    <string name="tile_status_stopping">در حال قطع…</string>
-+    <string name="tile_status_disconnected">قطع</string>
-+    <string name="label_plugin_custom">Venzo VPN: سفارشی…</string>
-+    <string name="label_plugin_start">Venzo VPN: اتصال</string>
-+    <string name="label_plugin_stop">Venzo VPN: توقف</string>
-+    <string name="label_plugin_toggle">Venzo VPN: تغییر وضعیت</string>
-+    <string name="automation_blurb_start">اتصال VPN</string>
-+    <string name="automation_blurb_stop">توقف VPN</string>
-+    <string name="automation_blurb_toggle">تغییر وضعیت VPN</string>
-+    <string name="automation_command_prompt">فرمان Venzo VPN:</string>
-+    <string name="automation_condition_prompt">شرط Venzo VPN:</string>
-+    <string name="automation_cmd_switch_node">تغییر سرور</string>
-+    <string name="automation_cmd_set_group">تنظیم گروه</string>
-+    <string name="automation_cmd_urltest_group">تست گروه</string>
-+    <string name="automation_cmd_refresh_subs">به‌روزرسانی اشتراک‌ها</string>
-+    <string name="automation_cmd_rebuild_config">بازسازی کانفیگ</string>
-+    <string name="automation_cmd_reset_network">بازنشانی شبکه</string>
-+    <string name="automation_check_vpn_up">VPN فعال است</string>
-+    <string name="automation_check_active_node">سرور فعال =</string>
-+    <string name="automation_check_active_group">گروه فعال =</string>
-+    <string name="automation_value_label">مقدار (%1$s):</string>
-+    <string name="automation_value_plain">مقدار:</string>
-+    <string name="automation_save">ذخیره</string>
-+</resources>
 diff --git a/app/test/services/l10n/persian_locale_test.dart b/app/test/services/l10n/persian_locale_test.dart
 new file mode 100644
-index 0000000..dd837e1
+index 0000000000000000000000000000000000000000..dd837e1cae4768b815bbf9000e8f938f922c35b7
 --- /dev/null
 +++ b/app/test/services/l10n/persian_locale_test.dart
 @@ -0,0 +1,33 @@
@@ -1100,5 +1438,278 @@ index 0000000..dd837e1
 +      expect((dict[key] as Map<String, dynamic>)['value'], isNotEmpty,
 +          reason: 'missing Persian translation for $key');
 +    }
++  });
++}
+diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..080571a250ac50a75056ff4519bc9f30dc480d98
+--- /dev/null
++++ b/app/test/services/venzo_managed_subscriptions_test.dart
+@@ -0,0 +1,15 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/services/venzo_managed_subscriptions.dart';
++
++void main() {
++  test('managed subscriptions are independent, enabled and bounded', () {
++    final subscriptions = VenzoManagedSubscriptions.defaults();
++
++    expect(subscriptions, hasLength(2));
++    expect(subscriptions.every((s) => s.enabled), isTrue);
++    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(), hasLength(2));
++    expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
++    expect(subscriptions.map((s) => s.id).toSet(), hasLength(2));
++    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(2));
++  });
++}
+diff --git a/app/lib/screens/home/widgets/venzo_premium_card.dart b/app/lib/screens/home/widgets/venzo_premium_card.dart
+new file mode 100644
+index 0000000..0178538
+--- /dev/null
++++ b/app/lib/screens/home/widgets/venzo_premium_card.dart
+@@ -0,0 +1,52 @@
++import 'package:flutter/material.dart';
++
++import '../../../services/l10n/locale_controller.dart';
++
++class VenzoPremiumCard extends StatelessWidget {
++  const VenzoPremiumCard({super.key});
++
++  @override
++  Widget build(BuildContext context) {
++    final cs = Theme.of(context).colorScheme;
++    return Center(
++      child: Padding(
++        padding: const EdgeInsets.all(16),
++        child: Card(
++          color: cs.surfaceContainerLow,
++          child: Padding(
++            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
++            child: Row(
++              children: [
++                Icon(Icons.workspace_premium_rounded, color: cs.primary),
++                const SizedBox(width: 12),
++                Expanded(
++                  child: Column(
++                    crossAxisAlignment: CrossAxisAlignment.start,
++                    mainAxisSize: MainAxisSize.min,
++                    children: [
++                      Text(
++                        'Venzo Premium', // l10n-exempt: product tier
++                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
++                              fontWeight: FontWeight.w700,
++                            ),
++                      ),
++                      const SizedBox(height: 3),
++                      Text(
++                        getLocalText.s(
++                            'Dedicated high-speed servers are coming soon'),
++                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
++                              color: cs.onSurfaceVariant,
++                            ),
++                      ),
++                    ],
++                  ),
++                ),
++                Chip(label: Text(getLocalText.s('Coming soon'))),
++              ],
++            ),
++          ),
++        ),
++      ),
++    );
++  }
++}
+diff --git a/app/lib/services/venzo_premium.dart b/app/lib/services/venzo_premium.dart
+new file mode 100644
+index 0000000..dc39357
+--- /dev/null
++++ b/app/lib/services/venzo_premium.dart
+@@ -0,0 +1,68 @@
++import '../models/server_list.dart';
++
++/// Access tiers are deliberately separate from subscription transport. The
++/// backend can later issue a per-user HTTPS subscription after Telegram/payment
++/// verification without changing the VPN engine or the free catalog.
++enum VenzoAccessTier { free, premium }
++
++class VenzoPremiumEntitlement {
++  const VenzoPremiumEntitlement({
++    required this.accountId,
++    required this.subscriptionUrl,
++    required this.expiresAt,
++  });
++
++  final String accountId;
++  final Uri subscriptionUrl;
++  final DateTime expiresAt;
++
++  bool get isActive =>
++      subscriptionUrl.scheme == 'https' &&
++      subscriptionUrl.host.isNotEmpty &&
++      expiresAt.isAfter(DateTime.now().toUtc());
++}
++
++class VenzoPremiumProvisioner {
++  VenzoPremiumProvisioner._();
++
++  /// Compile-time hook for the future entitlement API. It is intentionally
++  /// empty in public builds; secrets and customer tokens never enter git.
++  static const apiBase = String.fromEnvironment(
++    'VENZO_PREMIUM_API_BASE',
++    defaultValue: '',
++  );
++
++  static bool get backendConfigured {
++    final uri = Uri.tryParse(apiBase);
++    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty;
++  }
++
++  /// Converts a verified backend entitlement into the same subscription model
++  /// already used by the free tier. Rebuild, cache, failover and Smart Connect
++  /// therefore work identically for paid servers.
++  static SubscriptionServers subscriptionFor(
++    VenzoPremiumEntitlement entitlement,
++  ) {
++    if (!entitlement.isActive) {
++      throw ArgumentError.value(entitlement, 'entitlement', 'inactive');
++    }
++    final safeAccount = entitlement.accountId
++        .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '')
++        .take(24);
++    return SubscriptionServers(
++      id: 'venzo-premium-$safeAccount',
++      name: 'Venzo Premium',
++      enabled: true,
++      tagPrefix: 'VZP-',
++      detourPolicy: DetourPolicy.defaults,
++      url: entitlement.subscriptionUrl.toString(),
++      updateIntervalHours: 1,
++      onUpdateAction: SubscriptionOnUpdateAction.reload,
++    );
++  }
++}
++
++extension on String {
++  String take(int maxLength) =>
++      length <= maxLength ? this : substring(0, maxLength);
++}
+diff --git a/app/test/controllers/venzo_smart_connect_test.dart b/app/test/controllers/venzo_smart_connect_test.dart
+new file mode 100644
+index 0000000..96d20f9
+--- /dev/null
++++ b/app/test/controllers/venzo_smart_connect_test.dart
+@@ -0,0 +1,75 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/controllers/home_controller.dart';
++import 'package:lxbox/vpn/cc_channel.dart';
++
++CcOutbound outbound(String tag) =>
++    CcOutbound(tag: tag, type: 'vless', urlTestDelay: 0, urlTestTime: 0);
++
++CcGroup group({
++  required String tag,
++  required String type,
++  required bool selectable,
++  String selected = '',
++  List<CcOutbound> items = const [],
++}) =>
++    CcGroup(
++      tag: tag,
++      type: type,
++      selectable: selectable,
++      selected: selected,
++      isExpand: false,
++      items: items,
++    );
++
++void main() {
++  test('Smart Connect prefers the channel auto URLTest group', () {
++    final selector = group(
++      tag: 'vpn-1',
++      type: 'Selector',
++      selectable: true,
++      items: [outbound('generic-auto'), outbound('vpn-1-auto')],
++    );
++    final generic = group(
++      tag: 'generic-auto',
++      type: 'URLTest',
++      selectable: false,
++    );
++    final preferred = group(
++      tag: 'vpn-1-auto',
++      type: 'URLTest',
++      selectable: false,
++    );
++
++    expect(
++      chooseVenzoSmartAutoGroup(
++        selectorTag: selector.tag,
++        selector: selector,
++        urltestGroups: [generic, preferred],
++      )?.tag,
++      'vpn-1-auto',
++    );
++  });
++
++  test('Smart Connect does not select an unrelated URLTest group', () {
++    final selector = group(
++      tag: 'vpn-1',
++      type: 'Selector',
++      selectable: true,
++      items: [outbound('manual-node')],
++    );
++    final unrelated = group(
++      tag: 'vpn-2-auto',
++      type: 'URLTest',
++      selectable: false,
++    );
++
++    expect(
++      chooseVenzoSmartAutoGroup(
++        selectorTag: selector.tag,
++        selector: selector,
++        urltestGroups: [unrelated],
++      ),
++      isNull,
++    );
++  });
++}
+diff --git a/app/test/services/venzo_premium_test.dart b/app/test/services/venzo_premium_test.dart
+new file mode 100644
+index 0000000..fbce16f
+--- /dev/null
++++ b/app/test/services/venzo_premium_test.dart
+@@ -0,0 +1,33 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/models/server_list.dart';
++import 'package:lxbox/services/venzo_premium.dart';
++
++void main() {
++  test('premium entitlement provisions an isolated subscription', () {
++    final entitlement = VenzoPremiumEntitlement(
++      accountId: 'user-42',
++      subscriptionUrl: Uri.parse('https://premium.venzo.example/sub/user-42'),
++      expiresAt: DateTime.now().toUtc().add(const Duration(days: 30)),
++    );
++
++    final subscription = VenzoPremiumProvisioner.subscriptionFor(entitlement);
++    expect(subscription.name, 'Venzo Premium');
++    expect(subscription.tagPrefix, 'VZP-');
++    expect(subscription.enabled, isTrue);
++    expect(subscription.onUpdateAction, SubscriptionOnUpdateAction.reload);
++    expect(Uri.parse(subscription.url).scheme, 'https');
++  });
++
++  test('expired or insecure premium entitlement is rejected', () {
++    final expired = VenzoPremiumEntitlement(
++      accountId: 'user-42',
++      subscriptionUrl: Uri.parse('http://premium.venzo.example/sub'),
++      expiresAt: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
++    );
++
++    expect(
++      () => VenzoPremiumProvisioner.subscriptionFor(expired),
++      throwsArgumentError,
++    );
 +  });
 +}
