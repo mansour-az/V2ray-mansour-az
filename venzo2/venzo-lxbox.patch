@@ -119,6 +119,16 @@ index b179a0a..48fd1b6 100644
      <string name="automation_cmd_switch_node">Switch node</string>
      <string name="automation_cmd_set_group">Set group</string>
      <string name="automation_cmd_urltest_group">URL-test group</string>
+diff --git a/app/android/app/src/main/res/xml/locales_config.xml b/app/android/app/src/main/res/xml/locales_config.xml
+index a777ed9..3b430d1 100644
+--- a/app/android/app/src/main/res/xml/locales_config.xml
++++ b/app/android/app/src/main/res/xml/locales_config.xml
+@@ -5,4 +5,5 @@
+ <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+     <locale android:name="en" />
+     <locale android:name="ru" />
++    <locale android:name="fa" />
+ </locale-config>
 diff --git a/app/assets/l10n/ru/ui.json b/app/assets/l10n/ru/ui.json
 index 293ca75..db2df62 100644
 --- a/app/assets/l10n/ru/ui.json
@@ -426,10 +436,34 @@ index 199a770..b7d061b 100644
          ),
          const Divider(height: 28),
 diff --git a/app/lib/screens/app_settings_screen/widgets/general_tab.dart b/app/lib/screens/app_settings_screen/widgets/general_tab.dart
-index 07ae26e..03c777f 100644
+index 07ae26e..9a11fc6 100644
 --- a/app/lib/screens/app_settings_screen/widgets/general_tab.dart
 +++ b/app/lib/screens/app_settings_screen/widgets/general_tab.dart
-@@ -167,7 +167,7 @@ class GeneralTab extends StatelessWidget {
+@@ -65,9 +65,9 @@ class GeneralTab extends StatelessWidget {
+           child: Column(
+             children: ThemeMode.values.map((mode) {
+               final label = switch (mode) {
+-                ThemeMode.system => 'System',
+-                ThemeMode.light => 'Light',
+-                ThemeMode.dark => 'Dark',
++                ThemeMode.system => getLocalText.s('System'),
++                ThemeMode.light => getLocalText.s('Light'),
++                ThemeMode.dark => getLocalText.s('Dark'),
+               };
+               final icon = switch (mode) {
+                 ThemeMode.system => Icons.brightness_auto,
+@@ -108,6 +108,10 @@ class GeneralTab extends StatelessWidget {
+                 value: 'ru',
+                 title: Text('Русский'), // l10n-exempt: endonym
+               ),
++              const RadioListTile<String>(
++                value: 'fa',
++                title: Text('فارسی'), // l10n-exempt: endonym
++              ),
+             ],
+           ),
+         ),
+@@ -167,7 +171,7 @@ class GeneralTab extends StatelessWidget {
          ListTile(
            leading: const Icon(Icons.touch_app_outlined),
            title: Text(getLocalText.s("Home-screen shortcut")),
@@ -511,6 +545,131 @@ index 8dfb695..ff0d092 100644
        actions: [
          TextButton(
            onPressed: () => Navigator.of(ctx).pop(false),
+diff --git a/app/lib/screens/home/widgets/home_controls.dart b/app/lib/screens/home/widgets/home_controls.dart
+index 6289bc5..6fba223 100644
+--- a/app/lib/screens/home/widgets/home_controls.dart
++++ b/app/lib/screens/home/widgets/home_controls.dart
+@@ -88,38 +88,91 @@ class HomeControls extends StatelessWidget {
+       child: Column(
+         crossAxisAlignment: CrossAxisAlignment.stretch,
+         children: [
+-          Row(
+-            children: [
+-              FilledButton.icon(
+-                // §372 — D-pad: на Android TV фокус при открытии экрана должен
+-                // стоять на главном действии, иначе первое нажатие пульта
+-                // уходит в никуда и выглядит как «кнопки не работают».
+-                autofocus: true,
+-                onPressed: toggleEnabled
+-                    ? () {
+-                        HapticService.I.onConnectTap();
+-                        if (state.tunnelUp) {
+-                          confirmStop(context, controller, state);
+-                        } else {
+-                          onStartWithAutoRefresh();
+-                        }
++          Card(
++            margin: EdgeInsets.zero,
++            clipBehavior: Clip.antiAlias,
++            child: InkWell(
++              // §372 — D-pad: фокус при открытии экрана на главном действии.
++              autofocus: true,
++              onTap: toggleEnabled
++                  ? () {
++                      HapticService.I.onConnectTap();
++                      if (state.tunnelUp) {
++                        confirmStop(context, controller, state);
++                      } else {
++                        // Start запускает auto/urltest-группы ядра; через пять
++                        // секунд штатный auto-ping переселектит лучший узел.
++                        onStartWithAutoRefresh();
+                       }
+-                    : null,
+-                icon: Icon(
+-                  state.tunnelUp ? Icons.stop_rounded : Icons.play_arrow_rounded,
+-                  size: 20,
++                    }
++                  : null,
++              child: Padding(
++                padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
++                child: Column(
++                  children: [
++                    AnimatedContainer(
++                      duration: const Duration(milliseconds: 250),
++                      width: 132,
++                      height: 132,
++                      decoration: BoxDecoration(
++                        shape: BoxShape.circle,
++                        color: state.tunnelUp
++                            ? Theme.of(context).colorScheme.primary
++                            : Theme.of(context).colorScheme.primaryContainer,
++                        boxShadow: [
++                          BoxShadow(
++                            color: Theme.of(context)
++                                .colorScheme
++                                .primary
++                                .withValues(alpha: state.tunnelUp ? .35 : .18),
++                            blurRadius: 28,
++                            spreadRadius: 2,
++                          ),
++                        ],
++                      ),
++                      child: Icon(
++                        state.tunnelUp
++                            ? Icons.shield_rounded
++                            : Icons.shield_outlined,
++                        size: 62,
++                        color: state.tunnelUp
++                            ? Theme.of(context).colorScheme.onPrimary
++                            : Theme.of(context).colorScheme.primary,
++                      ),
++                    ),
++                    const SizedBox(height: 18),
++                    Text(
++                      state.tunnelUp
++                          ? getLocalText.s("Disconnect")
++                          : getLocalText.s("Smart Connect"),
++                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
++                            fontWeight: FontWeight.w800,
++                          ),
++                    ),
++                    const SizedBox(height: 6),
++                    Text(
++                      state.tunnelUp
++                          ? getLocalText.s("Your connection is protected")
++                          : getLocalText.s(
++                              "The best server is selected automatically"),
++                      textAlign: TextAlign.center,
++                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
++                            color: Theme.of(context).colorScheme.onSurfaceVariant,
++                          ),
++                    ),
++                    const SizedBox(height: 14),
++                    Row(
++                      mainAxisAlignment: MainAxisAlignment.center,
++                      children: [
++                        Flexible(child: connectingAnimChild),
++                        const SizedBox(width: 8),
++                        _buildReloadButton(context),
++                      ],
++                    ),
++                  ],
+                 ),
+-                label: Text(state.tunnelUp
+-                    ? getLocalText.s("Stop")
+-                    : getLocalText.s("Start")),
+               ),
+-              const SizedBox(width: 8),
+-              // Статус-чип отдаёт ширину первым: Start/Stop и reload имеют
+-              // натуральный размер, а длинный статус сжимается с эллипсисом.
+-              Flexible(child: connectingAnimChild),
+-              const SizedBox(width: 8),
+-              _buildReloadButton(context),
+-            ],
++            ),
+           ),
+           // §116 — единый banner-механизм: проекция состояния → BannerStack.
+           // Три исторических плашки (settings_changed / restart / last_error)
 diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
 index a4a2656..ffa6b59 100644
 --- a/app/lib/screens/home_screen.dart
@@ -563,6 +722,24 @@ index 082b8cb..d471700 100644
  
  Localhost HTTP server for dev introspection and control. Runs inside the
  Flutter app when "Debug API toggle" is enabled in App Settings → Developer.
+diff --git a/app/lib/services/l10n/locale_controller.dart b/app/lib/services/l10n/locale_controller.dart
+index 2c787f1..ea5000f 100644
+--- a/app/lib/services/l10n/locale_controller.dart
++++ b/app/lib/services/l10n/locale_controller.dart
+@@ -26,10 +26,10 @@ GetLocalText get getLocalText => LocaleController.I.text;
+ class LocaleController extends ChangeNotifier with WidgetsBindingObserver {
+   static final LocaleController I = LocaleController();
+ 
+-  static const supportedTags = ['en', 'ru'];
+-  static const supportedLocales = [Locale('en'), Locale('ru')];
++  static const supportedTags = ['en', 'ru', 'fa'];
++  static const supportedLocales = [Locale('en'), Locale('ru'), Locale('fa')];
+ 
+-  /// 'system' | 'en' | 'ru' (зеркало var `app_language`).
++  /// 'system' | 'en' | 'ru' | 'fa' (зеркало var `app_language`).
+   String setting = 'system';
+ 
+   Locale? _lastApplied;
 diff --git a/app/lib/services/oom_share.dart b/app/lib/services/oom_share.dart
 index bc2b628..b7a99a1 100644
 --- a/app/lib/services/oom_share.dart
@@ -609,6 +786,28 @@ index d4b8025..99fed86 100644
          '@donateLink': donate,
          '@issuesLink': issues,
          '@boostyLink': boosty,
+diff --git a/app/lib/services/settings_storage.dart b/app/lib/services/settings_storage.dart
+index 0e7db07..e081ef9 100644
+--- a/app/lib/services/settings_storage.dart
++++ b/app/lib/services/settings_storage.dart
+@@ -638,13 +638,15 @@ class SettingsStorage {
+ 
+   /// §279 — допустимые значения `app_language`. Неизвестное (hand-edited
+   /// бэкап, будущие языки) → 'system'.
+-  static const appLanguageValues = {'system', 'en', 'ru'};
++  static const appLanguageValues = {'system', 'en', 'ru', 'fa'};
+ 
+   /// §279 — язык приложения. Default 'system' — следовать языку устройства.
+   /// Запись из кода приложения — только через LocaleController.set()
+   /// (владелец пайплайна); прямой setAppLanguage — storage-половина.
+   static Future<String> getAppLanguage() async {
+-    final v = await getVar('app_language', 'system');
++    // Venzo is Persian-first. Existing users keep their explicit choice;
++    // fresh installs open in Persian and can switch to System/English/Russian.
++    final v = await getVar('app_language', 'fa');
+     return appLanguageValues.contains(v) ? v : 'system';
+   }
+ 
 diff --git a/app/lib/services/venzo_managed_subscriptions.dart b/app/lib/services/venzo_managed_subscriptions.dart
 new file mode 100644
 index 0000000..007b775
@@ -654,6 +853,18 @@ index 0000000..007b775
 +        ),
 +      ];
 +}
+diff --git a/app/pubspec.yaml b/app/pubspec.yaml
+index 8049177..273d6c8 100644
+--- a/app/pubspec.yaml
++++ b/app/pubspec.yaml
+@@ -59,6 +59,7 @@ flutter:
+   assets:
+     - assets/wizard_template.json
+     - assets/l10n/ru/ # §285 — русская локализация (ui.json + template.json; английский базовый, в коде)
++    - assets/l10n/fa/ # Venzo Persian-first UI + RTL template overlay
+     - assets/donate.json # §362 — способы поддержки (донат-попап в About)
+     - assets/warp_endpoints.json # §136 — WARP endpoint/SNI random pools
+     - assets/icons/app_icon.png
 diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
 new file mode 100644
 index 0000000..080571a
@@ -673,5 +884,221 @@ index 0000000..080571a
 +    expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
 +    expect(subscriptions.map((s) => s.id).toSet(), hasLength(2));
 +    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(2));
++  });
++}
+diff --git a/app/assets/l10n/fa/ui.json b/app/assets/l10n/fa/ui.json
+new file mode 100644
+index 0000000..6c3a4ea
+--- /dev/null
++++ b/app/assets/l10n/fa/ui.json
+@@ -0,0 +1,98 @@
++{
++  "About": {"value": "درباره برنامه"},
++  "Add a server": {"value": "افزودن سرور"},
++  "Allow": {"value": "اجازه دادن"},
++  "Allow background activity": {"value": "اجازه فعالیت در پس‌زمینه"},
++  "Allow notifications": {"value": "اجازه اعلان‌ها"},
++  "Another VPN is active": {"value": "یک VPN دیگر فعال است"},
++  "App Settings": {"value": "تنظیمات برنامه"},
++  "App connections": {"value": "اتصال‌های برنامه"},
++  "Apply": {"value": "اعمال"},
++  "Apply to %s": {"value": "اعمال برای %s"},
++  "Auto-start on boot": {"value": "اجرای خودکار پس از روشن شدن دستگاه"},
++  "Back": {"value": "بازگشت"},
++  "Behavior": {"value": "رفتار"},
++  "Cancel": {"value": "انصراف"},
++  "Channel": {"value": "کانال"},
++  "Channels and routing rules": {"value": "کانال‌ها و قوانین مسیریابی"},
++  "Check for updates?": {"value": "بررسی به‌روزرسانی‌ها؟"},
++  "Close": {"value": "بستن"},
++  "Close filters": {"value": "بستن فیلترها"},
++  "Config Editor": {"value": "ویرایشگر کانفیگ"},
++  "Config loading error": {"value": "خطا در بارگذاری کانفیگ"},
++  "Config variables": {"value": "متغیرهای کانفیگ"},
++  "Connect": {"value": "اتصال"},
++  "Connect a subscription or add a node manually to get started.": {"value": "برای شروع، یک اشتراک اضافه کنید یا سرور را دستی وارد کنید."},
++  "Connected": {"value": "متصل"},
++  "Connecting…": {"value": "در حال اتصال…"},
++  "Continue": {"value": "ادامه"},
++  "Copy": {"value": "کپی"},
++  "Dark": {"value": "تیره"},
++  "Default": {"value": "پیش‌فرض"},
++  "Delete": {"value": "حذف"},
++  "Disable battery restrictions": {"value": "غیرفعال کردن محدودیت باتری"},
++  "Disconnect": {"value": "قطع اتصال"},
++  "Disconnected": {"value": "قطع"},
++  "Dismiss": {"value": "نادیده گرفتن"},
++  "DNS Settings": {"value": "تنظیمات DNS"},
++  "DNS servers and rules": {"value": "سرورها و قوانین DNS"},
++  "Done": {"value": "انجام شد"},
++  "Edit": {"value": "ویرایش"},
++  "Enable": {"value": "فعال کردن"},
++  "Error": {"value": "خطا"},
++  "Export": {"value": "خروجی گرفتن"},
++  "Filter": {"value": "فیلتر"},
++  "General": {"value": "عمومی"},
++  "Got it": {"value": "متوجه شدم"},
++  "Hide filters": {"value": "پنهان کردن فیلترها"},
++  "Import": {"value": "وارد کردن"},
++  "Language": {"value": "زبان"},
++  "Last 100 events": {"value": "۱۰۰ رویداد اخیر"},
++  "Later": {"value": "بعداً"},
++  "Light": {"value": "روشن"},
++  "Name": {"value": "نام"},
++  "No nodes in this channel.\nTry another one.": {"value": "در این کانال سروری وجود ندارد.\nکانال دیگری را امتحان کنید."},
++  "Nodes": {"value": "سرورها"},
++  "OK": {"value": "تأیید"},
++  "Open Settings": {"value": "باز کردن تنظیمات"},
++  "Outbound connections to servers": {"value": "اتصال‌های خروجی به سرورها"},
++  "Paste": {"value": "چسباندن"},
++  "Ping Settings": {"value": "تنظیمات پینگ"},
++  "Rebuild config only": {"value": "فقط بازسازی کانفیگ"},
++  "Reload": {"value": "بارگذاری دوباره"},
++  "Restart VPN to apply changes": {"value": "برای اعمال تغییرات VPN را دوباره راه‌اندازی کنید"},
++  "Restore from backup": {"value": "بازیابی نسخه پشتیبان"},
++  "Routing": {"value": "مسیریابی"},
++  "Save": {"value": "ذخیره"},
++  "Select channel": {"value": "انتخاب کانال"},
++  "Servers": {"value": "سرورها"},
++  "Settings changed — tap to rebuild config": {"value": "تنظیمات تغییر کرده؛ برای بازسازی کانفیگ لمس کنید"},
++  "Show filters": {"value": "نمایش فیلترها"},
++  "Skip": {"value": "رد کردن"},
++  "Smart Connect": {"value": "اتصال هوشمند"},
++  "Sort options": {"value": "مرتب‌سازی"},
++  "Speed Test": {"value": "تست سرعت"},
++  "Start": {"value": "اتصال"},
++  "Start VPN when device turns on": {"value": "با روشن شدن دستگاه، VPN را اجرا کن"},
++  "Statistics": {"value": "آمار"},
++  "Stop": {"value": "توقف"},
++  "Stop VPN?": {"value": "اتصال VPN قطع شود؟"},
++  "Stopping…": {"value": "در حال قطع…"},
++  "Subscriptions & proxy": {"value": "اشتراک‌ها و پروکسی"},
++  "Switch": {"value": "تغییر"},
++  "System": {"value": "سیستم"},
++  "System default": {"value": "پیش‌فرض دستگاه"},
++  "Taken by another VPN": {"value": "اتصال توسط VPN دیگری گرفته شد"},
++  "Tap to connect": {"value": "برای اتصال لمس کنید"},
++  "Test download/upload speed": {"value": "آزمایش سرعت دانلود و آپلود"},
++  "The best server is selected automatically": {"value": "بهترین سرور به‌صورت خودکار انتخاب می‌شود"},
++  "Theme": {"value": "پوسته"},
++  "Theme, appearance": {"value": "پوسته و ظاهر"},
++  "Traffic by outbound": {"value": "ترافیک بر اساس مسیر خروجی"},
++  "Unknown": {"value": "نامشخص"},
++  "Use \"%s\" as…": {"value": "استفاده از «%s» به‌عنوان…"},
++  "View, edit, import JSON": {"value": "مشاهده، ویرایش و وارد کردن JSON"},
++  "VPN Settings": {"value": "تنظیمات VPN"},
++  "VPN settings": {"value": "تنظیمات VPN"},
++  "Your connection is protected": {"value": "اتصال شما محافظت می‌شود"}
++}
+diff --git a/app/assets/l10n/fa/template.json b/app/assets/l10n/fa/template.json
+new file mode 100644
+index 0000000..ca8c671
+--- /dev/null
++++ b/app/assets/l10n/fa/template.json
+@@ -0,0 +1,17 @@
++{
++  "Automatic": {"value": "خودکار"},
++  "Direct": {"value": "مستقیم"},
++  "Block": {"value": "مسدود"},
++  "Auto": {"value": "خودکار"},
++  "Primary": {"value": "اصلی"},
++  "Secondary": {"value": "پشتیبان"},
++  "Enabled": {"value": "فعال"},
++  "Disabled": {"value": "غیرفعال"},
++  "VPN": {"value": "VPN"},
++  "Routing": {"value": "مسیریابی"},
++  "DNS": {"value": "DNS"},
++  "Connections": {"value": "اتصال‌ها"},
++  "Servers": {"value": "سرورها"},
++  "Advanced": {"value": "پیشرفته"},
++  "Default": {"value": "پیش‌فرض"}
++}
+diff --git a/app/android/app/src/main/res/values-fa/strings.xml b/app/android/app/src/main/res/values-fa/strings.xml
+new file mode 100644
+index 0000000..6b29cf7
+--- /dev/null
++++ b/app/android/app/src/main/res/values-fa/strings.xml
+@@ -0,0 +1,44 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="qc_first_open">برای دریافت مجوز VPN، Venzo VPN باز می‌شود (فقط یک‌بار)</string>
++    <string name="qc_consent_denied">مجوز VPN داده نشد. برای تلاش دوباره Venzo VPN را باز کنید.</string>
++    <string name="qc_connect_label">اتصال</string>
++    <string name="qc_disconnect_label">قطع اتصال</string>
++    <string name="notification_channel_name">سرویس VPN</string>
++    <string name="notification_channel_description">هنگام فعال بودن VPN نمایش داده می‌شود</string>
++    <string name="notification_status_starting">در حال اتصال…</string>
++    <string name="status_connected">متصل</string>
++    <string name="notification_action_stop">توقف</string>
++    <string name="notification_action_reconnect">اتصال دوباره</string>
++    <string name="notification_error_title">خطا</string>
++    <string name="core_channel_fallback_name">اعلان‌های هسته</string>
++    <string name="stop_alert_unknown_error">خطای ناشناخته</string>
++    <string name="stop_alert_libbox_init_failed">راه‌اندازی libbox ناموفق بود: %1$s</string>
++    <string name="stop_alert_empty_config">کانفیگ خالی است</string>
++    <string name="stop_alert_no_command_server">CommandServer راه‌اندازی نشده است</string>
++    <string name="stop_alert_start_failed">اجرای سرویس ناموفق بود: %1$s</string>
++    <string name="tile_status_connecting">در حال اتصال…</string>
++    <string name="tile_status_stopping">در حال قطع…</string>
++    <string name="tile_status_disconnected">قطع</string>
++    <string name="label_plugin_custom">Venzo VPN: سفارشی…</string>
++    <string name="label_plugin_start">Venzo VPN: اتصال</string>
++    <string name="label_plugin_stop">Venzo VPN: توقف</string>
++    <string name="label_plugin_toggle">Venzo VPN: تغییر وضعیت</string>
++    <string name="automation_blurb_start">اتصال VPN</string>
++    <string name="automation_blurb_stop">توقف VPN</string>
++    <string name="automation_blurb_toggle">تغییر وضعیت VPN</string>
++    <string name="automation_command_prompt">فرمان Venzo VPN:</string>
++    <string name="automation_condition_prompt">شرط Venzo VPN:</string>
++    <string name="automation_cmd_switch_node">تغییر سرور</string>
++    <string name="automation_cmd_set_group">تنظیم گروه</string>
++    <string name="automation_cmd_urltest_group">تست گروه</string>
++    <string name="automation_cmd_refresh_subs">به‌روزرسانی اشتراک‌ها</string>
++    <string name="automation_cmd_rebuild_config">بازسازی کانفیگ</string>
++    <string name="automation_cmd_reset_network">بازنشانی شبکه</string>
++    <string name="automation_check_vpn_up">VPN فعال است</string>
++    <string name="automation_check_active_node">سرور فعال =</string>
++    <string name="automation_check_active_group">گروه فعال =</string>
++    <string name="automation_value_label">مقدار (%1$s):</string>
++    <string name="automation_value_plain">مقدار:</string>
++    <string name="automation_save">ذخیره</string>
++</resources>
+diff --git a/app/test/services/l10n/persian_locale_test.dart b/app/test/services/l10n/persian_locale_test.dart
+new file mode 100644
+index 0000000..dd837e1
+--- /dev/null
++++ b/app/test/services/l10n/persian_locale_test.dart
+@@ -0,0 +1,33 @@
++import 'dart:convert';
++import 'dart:io';
++
++import 'package:flutter/widgets.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/services/l10n/locale_controller.dart';
++
++void main() {
++  test('Persian is a supported locale', () {
++    expect(LocaleController.supportedTags, contains('fa'));
++    expect(LocaleController.supportedLocales, contains(const Locale('fa')));
++  });
++
++  test('Persian dictionary covers the primary connection journey', () {
++    final raw = File('assets/l10n/fa/ui.json').readAsStringSync();
++    final dict = jsonDecode(raw) as Map<String, dynamic>;
++
++    for (final key in <String>[
++      'Smart Connect',
++      'Disconnect',
++      'The best server is selected automatically',
++      'Your connection is protected',
++      'Connected',
++      'Connecting…',
++      'Disconnected',
++      'Servers',
++      'App Settings',
++    ]) {
++      expect((dict[key] as Map<String, dynamic>)['value'], isNotEmpty,
++          reason: 'missing Persian translation for $key');
++    }
 +  });
 +}
