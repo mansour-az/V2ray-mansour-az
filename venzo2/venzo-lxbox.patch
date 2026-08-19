@@ -431,7 +431,7 @@ index 293ca751d46a5a45165ba1d210d75d28945da277..db2df62dea351e8a0e80fdc208fe3d47
    "Rules menu": {
      "value": "Меню правил"
 diff --git a/app/lib/controllers/home_controller.dart b/app/lib/controllers/home_controller.dart
-index cfad4abc0f3b24249633e1355f4cab4f6d596746..ab957f01e66dd5e6c66777c00ff8127b8fd3d8e3 100644
+index cfad4abc0f3b24249633e1355f4cab4f6d596746..06621c0f7fbe2090512a79c693a567079f5ae347 100644
 --- a/app/lib/controllers/home_controller.dart
 +++ b/app/lib/controllers/home_controller.dart
 @@ -622,7 +622,7 @@ class HomeController extends ChangeNotifier
@@ -454,6 +454,22 @@ index cfad4abc0f3b24249633e1355f4cab4f6d596746..ab957f01e66dd5e6c66777c00ff8127b
  
      // selectedGroup = активный селектор (vpn-1), activeInGroup = его выбранная
      // нода (`now`). Формат подтекста: «<селектор>: <нода>».
+@@ -1261,6 +1261,7 @@ class HomeController extends ChangeNotifier
+   /// свежий снапшот групп через unary `getGroups` (детерминированно, не
+   /// пересоздавая screenClient как раньше). `null` (ядро не STARTED) → оставляем
+   /// текущее; непустой → применяем. Закрывает остаточную гонку push'а.
++  @override
+   Future<void> pullToRefresh() async {
+     if (!_state.tunnelUp) {
+       _applyGroups(_state.ccGroups);
+@@ -1310,6 +1311,7 @@ class HomeController extends ChangeNotifier
+     await _pushNotificationLabels();
+   }
+ 
++  @override
+   Future<void> switchNode(String nodeTag) async {
+     final group = _state.selectedGroup;
+     if (group == null || !_state.tunnelUp) return;
 diff --git a/app/lib/controllers/home_controller/ping_orchestration.dart b/app/lib/controllers/home_controller/ping_orchestration.dart
 index 8acde21c0f960e799e6dfe327ec3cd841bd131bb..93a8cd38854606bd1188e43556354c38bf99a8e9 100644
 --- a/app/lib/controllers/home_controller/ping_orchestration.dart
@@ -941,10 +957,21 @@ index 8dfb69590c5269d61120f7b18e7b6d1ecde0eb98..ff0d092922ddc1571cbcaf13fc8f19d0
          TextButton(
            onPressed: () => Navigator.of(ctx).pop(false),
 diff --git a/app/lib/screens/home/widgets/home_controls.dart b/app/lib/screens/home/widgets/home_controls.dart
-index 6289bc5f5bafbc046c94e844d9cabfbc302ece07..20ea10c3d5024934a2944f1d4f216381b3877d6f 100644
+index 6289bc5f5bafbc046c94e844d9cabfbc302ece07..4100ce910bf37ffcada0ff84caf38a398f8f6924 100644
 --- a/app/lib/screens/home/widgets/home_controls.dart
 +++ b/app/lib/screens/home/widgets/home_controls.dart
-@@ -80,46 +80,106 @@ class HomeControls extends StatelessWidget {
+@@ -65,6 +65,10 @@ class HomeControls extends StatelessWidget {
+   final Future<void> Function() onRebuildAndReconnect;
+   final Future<void> Function() onRebuildAndStart;
+ 
++  // Kept as a getter so a future expert-mode preference can replace the
++  // implementation without restoring the removed controls from scratch.
++  bool get _showAdvancedControls => false;
++
+   /// §316 — отдать краш-репорт и погасить плашку. Штамп пишем в любом
+   /// случае: пользователь плашку уже увидел, повторять на каждом запуске —
+   /// навязчиво, даже если share сорвался (файл никуда не делся, он есть
+@@ -80,46 +84,105 @@ class HomeControls extends StatelessWidget {
    Widget build(BuildContext context) {
      final isConnecting = state.tunnel == TunnelStatus.connecting;
      final isStopping = state.tunnel == TunnelStatus.stopping;
@@ -953,7 +980,6 @@ index 6289bc5f5bafbc046c94e844d9cabfbc302ece07..20ea10c3d5024934a2944f1d4f216381
      final toggleEnabled = canToggle && (state.tunnelUp || state.configRaw.isNotEmpty);
 +    // Venzo's default home is intentionally one-tap. The advanced channel and
 +    // manual ping controls stay implemented for a future expert-mode switch.
-+    const showAdvancedControls = false;
  
      return Padding(
        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -1080,21 +1106,21 @@ index 6289bc5f5bafbc046c94e844d9cabfbc302ece07..20ea10c3d5024934a2944f1d4f216381
            ),
            // §116 — единый banner-механизм: проекция состояния → BannerStack.
            // Три исторических плашки (settings_changed / restart / last_error)
-@@ -150,9 +210,10 @@ class HomeControls extends StatelessWidget {
+@@ -150,9 +213,10 @@ class HomeControls extends StatelessWidget {
                ),
              ),
            ),
 -          const SizedBox(height: 16),
 -          Row(
 -            children: [
-+          if (showAdvancedControls) ...[
++          if (_showAdvancedControls) ...[
 +            const SizedBox(height: 16),
 +            Row(
 +              children: [
                Text(getLocalText.s("Channel"),
                    style: const TextStyle(fontWeight: FontWeight.w600)),
                const SizedBox(width: 12),
-@@ -218,8 +279,9 @@ class HomeControls extends StatelessWidget {
+@@ -218,8 +282,9 @@ class HomeControls extends StatelessWidget {
                      ),
                    ),
                  ),
@@ -1142,7 +1168,7 @@ index ff0e2384ea8f2855a3077f265a31c6f2333f6337..9f24a476098de1ac0f667fe1b1ae7577
                leading: const Icon(Icons.dns_outlined),
                title: Text(getLocalText.s("Servers")),
 diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
-index a4a26561d485790315220cc72ad7c20733fac766..aec1dd50cc06b3659cf9b9d486fed38d401ba90e 100644
+index a4a26561d485790315220cc72ad7c20733fac766..56c27cc1dad97fb73ec97143bc6672cb51b03f93 100644
 --- a/app/lib/screens/home_screen.dart
 +++ b/app/lib/screens/home_screen.dart
 @@ -32,6 +32,7 @@ import 'home/widgets/home_drawer.dart';
@@ -1153,15 +1179,18 @@ index a4a26561d485790315220cc72ad7c20733fac766..aec1dd50cc06b3659cf9b9d486fed38d
  import '../widgets/pool_view_dialog.dart';
  import 'home/home_menus.dart';
  import 'home/home_dialogs.dart';
-@@ -720,6 +721,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
-         final startActive = !state.tunnelUp;
-         final startEnabled = !state.busy && !state.tunnelUp && state.configRaw.isNotEmpty;
-         final stopEnabled = !state.busy && state.tunnelUp;
-+        const simpleHome = true;
-         // §328 — «нет серверов» считается по payload-нодам (конфиг + entries),
-         // а не по наличию файла конфига: шаблонная сборка при нуле серверов
-         // оставляет configRaw непустым навсегда. `e.nodeCount` — персистентный
-@@ -734,7 +736,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+@@ -62,6 +63,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+   late final SubscriptionController _subController;
+   late final AutoUpdater _autoUpdater;
+ 
++  // Venzo defaults to a one-tap home. A getter avoids compile-time dead-code
++  // diagnostics and leaves a clean hook for a future expert-mode setting.
++  bool get _simpleHome => true;
++
+   /// §366 — авто-обновление кэшированных rule-set'ов по TTL.
+   late final RuleSetAutoUpdater _ruleSetAutoUpdater;
+ 
+@@ -734,7 +739,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
          );
          return Scaffold(
            // l10n-exempt: brand name, идентичен во всех локалях
@@ -1170,16 +1199,16 @@ index a4a26561d485790315220cc72ad7c20733fac766..aec1dd50cc06b3659cf9b9d486fed38d
            drawer: HomeDrawer(
              controller: _controller,
              subController: _subController,
-@@ -787,7 +789,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+@@ -787,7 +792,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                            _subController.progressMessage!.render()),
                  // §095 — NODES-строка только когда подключено И фильтр закрыт.
                  // STOP-режим: нод нет → фильтровать нечего → строку прячем.
 -                if (state.tunnelUp && !_filter.panelExpanded) ...[
-+                if (!simpleHome && state.tunnelUp && !_filter.panelExpanded) ...[
++                if (!_simpleHome && state.tunnelUp && !_filter.panelExpanded) ...[
                    const SizedBox(height: 12),
                    NodesHeader(
                      controller: _controller,
-@@ -799,21 +801,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+@@ -799,21 +804,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                    const SizedBox(height: 4),
                  ],
                ],
@@ -1198,7 +1227,7 @@ index a4a26561d485790315220cc72ad7c20733fac766..aec1dd50cc06b3659cf9b9d486fed38d
 -                onSelectServer: _scrollToNode, // §203
 -                onViewPool: _showPool, // §208
 -              ),
-+              if (showEmptyGuide || !simpleHome)
++              if (showEmptyGuide || !_simpleHome)
 +                HomeNodeList(
 +                  controller: _controller,
 +                  subController: _subController,
@@ -1214,7 +1243,7 @@ index a4a26561d485790315220cc72ad7c20733fac766..aec1dd50cc06b3659cf9b9d486fed38d
 +                  onSelectServer: _scrollToNode, // §203
 +                  onViewPool: _showPool, // §208
 +                ),
-+              if (!showEmptyGuide && simpleHome)
++              if (!showEmptyGuide && _simpleHome)
 +                const Expanded(child: VenzoPremiumCard()),
              ],
            ),
