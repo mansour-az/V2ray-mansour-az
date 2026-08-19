@@ -292,10 +292,21 @@ index 2200acc..ad42d92 100644
      // §076: bootstrap mtime compare — restore in-memory configDirty после
      // possible kill mid-session. Если settings новее чем saved config →
 diff --git a/app/lib/main.dart b/app/lib/main.dart
-index ccf911b..467aa17 100644
+index ccf911b..f0be374 100644
 --- a/app/lib/main.dart
 +++ b/app/lib/main.dart
-@@ -256,7 +256,7 @@ class LxBoxApp extends StatelessWidget {
+@@ -243,7 +243,9 @@ final themeNotifier = ThemeNotifier();
+ class LxBoxApp extends StatelessWidget {
+   const LxBoxApp({super.key});
+ 
+-  static const _seed = Colors.indigo;
++  // Venzo brand crimson: vivid enough for primary actions while Material 3
++  // derives accessible light/dark containers and contrast automatically.
++  static const _seed = Color(0xFFD6001C);
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -256,7 +258,7 @@ class LxBoxApp extends StatelessWidget {
          // LocaleController._applyLocale (dict-reload на каждую смену); отдельного
          // per-build присваивания активного локализатора не требуется.
          return MaterialApp(
