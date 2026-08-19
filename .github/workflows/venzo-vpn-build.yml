@@ -1,4 +1,4 @@
-name: Build Venzo VPN 2.0
+name: Build Venzo VPN 2.1
 
 on:
   push:
@@ -45,6 +45,31 @@ jobs:
           flutter-version: ${{ steps.flutter.outputs.version }}
           cache: true
 
+      - name: Configure permanent release signing
+        working-directory: venzo-src/app/android
+        env:
+          VENZO_KEYSTORE_BASE64: ${{ secrets.VENZO_KEYSTORE_BASE64 }}
+          VENZO_STORE_PASSWORD: ${{ secrets.VENZO_STORE_PASSWORD }}
+          VENZO_KEY_PASSWORD: ${{ secrets.VENZO_KEY_PASSWORD }}
+          VENZO_KEY_ALIAS: ${{ secrets.VENZO_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          for name in VENZO_KEYSTORE_BASE64 VENZO_STORE_PASSWORD VENZO_KEY_PASSWORD VENZO_KEY_ALIAS; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub Actions secret: $name" >&2
+              exit 1
+            fi
+          done
+          printf '%s' "$VENZO_KEYSTORE_BASE64" | base64 --decode > venzo-release.jks
+          chmod 600 venzo-release.jks
+          {
+            echo "storeFile=venzo-release.jks"
+            echo "storePassword=$VENZO_STORE_PASSWORD"
+            echo "keyAlias=$VENZO_KEY_ALIAS"
+            echo "keyPassword=$VENZO_KEY_PASSWORD"
+          } > key.properties
+          chmod 600 key.properties
+
       - name: Install dependencies and generate icons
         working-directory: venzo-src/app
         run: |
@@ -56,6 +81,7 @@ jobs:
         run: |
           flutter analyze
           flutter test test/services/venzo_managed_subscriptions_test.dart
+          flutter test test/services/l10n/persian_locale_test.dart
 
       - name: Fetch verified sing-box-lx core
         working-directory: venzo-src
@@ -68,16 +94,21 @@ jobs:
         run: >-
           flutter build apk --release
           --target-platform android-arm64
-          --build-name 2.0.0
-          --build-number 20000500
+          --build-name 2.1.0
+          --build-number 20100500
 
       - name: Name APK
-        run: cp venzo-src/app/build/app/outputs/flutter-apk/app-release.apk Venzo-VPN-2.0.0-arm64.apk
+        run: cp venzo-src/app/build/app/outputs/flutter-apk/app-release.apk Venzo-VPN-2.1.0-arm64.apk
+
+      - name: Verify release signature
+        run: |
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
+            verify --verbose --print-certs Venzo-VPN-2.1.0-arm64.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Venzo-VPN-2.0.0-arm64
-          path: Venzo-VPN-2.0.0-arm64.apk
+          name: Venzo-VPN-2.1.0-arm64
+          path: Venzo-VPN-2.1.0-arm64.apk
           if-no-files-found: error
           retention-days: 30
