@@ -1248,7 +1248,7 @@ index ff0e238..763df24 100644
                title: Text(getLocalText.s("Servers")),
 diff --git a/app/lib/screens/home/widgets/venzo_connection_panel.dart b/app/lib/screens/home/widgets/venzo_connection_panel.dart
 new file mode 100644
-index 0000000..b071ab2
+index 0000000..7ad8d52
 --- /dev/null
 +++ b/app/lib/screens/home/widgets/venzo_connection_panel.dart
 @@ -0,0 +1,179 @@
@@ -1378,7 +1378,7 @@ index 0000000..b071ab2
 +                      child: ListView.separated(
 +                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
 +                        itemCount: servers.length,
-+                        separatorBuilder: (_, __) => const Divider(height: 1),
++                        separatorBuilder: (_, _) => const Divider(height: 1),
 +                        itemBuilder: (context, index) {
 +                          final server = servers[index];
 +                          return ListTile(
