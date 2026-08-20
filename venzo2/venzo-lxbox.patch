@@ -41,6 +41,56 @@ index afc73f1..1769da4 100644
    Буква «L» (вертикаль + низ) + «×» в центре + закрашенный наконечник ↗
    в правом верхнем углу (outbound). Читается как «L×» + box-стрелка.
  
+diff --git a/app/android/app/src/main/res/values-fa/strings.xml b/app/android/app/src/main/res/values-fa/strings.xml
+new file mode 100644
+index 0000000..6b29cf7
+--- /dev/null
++++ b/app/android/app/src/main/res/values-fa/strings.xml
+@@ -0,0 +1,44 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="qc_first_open">برای دریافت مجوز VPN، Venzo VPN باز می‌شود (فقط یک‌بار)</string>
++    <string name="qc_consent_denied">مجوز VPN داده نشد. برای تلاش دوباره Venzo VPN را باز کنید.</string>
++    <string name="qc_connect_label">اتصال</string>
++    <string name="qc_disconnect_label">قطع اتصال</string>
++    <string name="notification_channel_name">سرویس VPN</string>
++    <string name="notification_channel_description">هنگام فعال بودن VPN نمایش داده می‌شود</string>
++    <string name="notification_status_starting">در حال اتصال…</string>
++    <string name="status_connected">متصل</string>
++    <string name="notification_action_stop">توقف</string>
++    <string name="notification_action_reconnect">اتصال دوباره</string>
++    <string name="notification_error_title">خطا</string>
++    <string name="core_channel_fallback_name">اعلان‌های هسته</string>
++    <string name="stop_alert_unknown_error">خطای ناشناخته</string>
++    <string name="stop_alert_libbox_init_failed">راه‌اندازی libbox ناموفق بود: %1$s</string>
++    <string name="stop_alert_empty_config">کانفیگ خالی است</string>
++    <string name="stop_alert_no_command_server">CommandServer راه‌اندازی نشده است</string>
++    <string name="stop_alert_start_failed">اجرای سرویس ناموفق بود: %1$s</string>
++    <string name="tile_status_connecting">در حال اتصال…</string>
++    <string name="tile_status_stopping">در حال قطع…</string>
++    <string name="tile_status_disconnected">قطع</string>
++    <string name="label_plugin_custom">Venzo VPN: سفارشی…</string>
++    <string name="label_plugin_start">Venzo VPN: اتصال</string>
++    <string name="label_plugin_stop">Venzo VPN: توقف</string>
++    <string name="label_plugin_toggle">Venzo VPN: تغییر وضعیت</string>
++    <string name="automation_blurb_start">اتصال VPN</string>
++    <string name="automation_blurb_stop">توقف VPN</string>
++    <string name="automation_blurb_toggle">تغییر وضعیت VPN</string>
++    <string name="automation_command_prompt">فرمان Venzo VPN:</string>
++    <string name="automation_condition_prompt">شرط Venzo VPN:</string>
++    <string name="automation_cmd_switch_node">تغییر سرور</string>
++    <string name="automation_cmd_set_group">تنظیم گروه</string>
++    <string name="automation_cmd_urltest_group">تست گروه</string>
++    <string name="automation_cmd_refresh_subs">به‌روزرسانی اشتراک‌ها</string>
++    <string name="automation_cmd_rebuild_config">بازسازی کانفیگ</string>
++    <string name="automation_cmd_reset_network">بازنشانی شبکه</string>
++    <string name="automation_check_vpn_up">VPN فعال است</string>
++    <string name="automation_check_active_node">سرور فعال =</string>
++    <string name="automation_check_active_group">گروه فعال =</string>
++    <string name="automation_value_label">مقدار (%1$s):</string>
++    <string name="automation_value_plain">مقدار:</string>
++    <string name="automation_save">ذخیره</string>
++</resources>
 diff --git a/app/android/app/src/main/res/values-ru/strings.xml b/app/android/app/src/main/res/values-ru/strings.xml
 index 6943922..9680461 100644
 --- a/app/android/app/src/main/res/values-ru/strings.xml
@@ -129,6 +179,139 @@ index a777ed9..3b430d1 100644
      <locale android:name="ru" />
 +    <locale android:name="fa" />
  </locale-config>
+diff --git a/app/assets/l10n/fa/template.json b/app/assets/l10n/fa/template.json
+new file mode 100644
+index 0000000..ca8c671
+--- /dev/null
++++ b/app/assets/l10n/fa/template.json
+@@ -0,0 +1,17 @@
++{
++  "Automatic": {"value": "خودکار"},
++  "Direct": {"value": "مستقیم"},
++  "Block": {"value": "مسدود"},
++  "Auto": {"value": "خودکار"},
++  "Primary": {"value": "اصلی"},
++  "Secondary": {"value": "پشتیبان"},
++  "Enabled": {"value": "فعال"},
++  "Disabled": {"value": "غیرفعال"},
++  "VPN": {"value": "VPN"},
++  "Routing": {"value": "مسیریابی"},
++  "DNS": {"value": "DNS"},
++  "Connections": {"value": "اتصال‌ها"},
++  "Servers": {"value": "سرورها"},
++  "Advanced": {"value": "پیشرفته"},
++  "Default": {"value": "پیش‌فرض"}
++}
+diff --git a/app/assets/l10n/fa/ui.json b/app/assets/l10n/fa/ui.json
+new file mode 100644
+index 0000000..6314470
+--- /dev/null
++++ b/app/assets/l10n/fa/ui.json
+@@ -0,0 +1,104 @@
++{
++  "About": {"value": "درباره برنامه"},
++  "Add a server": {"value": "افزودن سرور"},
++  "Allow": {"value": "اجازه دادن"},
++  "Allow background activity": {"value": "اجازه فعالیت در پس‌زمینه"},
++  "Allow notifications": {"value": "اجازه اعلان‌ها"},
++  "Another VPN is active": {"value": "یک VPN دیگر فعال است"},
++  "App Settings": {"value": "تنظیمات برنامه"},
++  "App connections": {"value": "اتصال‌های برنامه"},
++  "Apply": {"value": "اعمال"},
++  "Apply to %s": {"value": "اعمال برای %s"},
++  "Auto-start on boot": {"value": "اجرای خودکار پس از روشن شدن دستگاه"},
++  "Back": {"value": "بازگشت"},
++  "Behavior": {"value": "رفتار"},
++  "Cancel": {"value": "انصراف"},
++  "Channel": {"value": "کانال"},
++  "Channels and routing rules": {"value": "کانال‌ها و قوانین مسیریابی"},
++  "Check for updates?": {"value": "بررسی به‌روزرسانی‌ها؟"},
++  "Close": {"value": "بستن"},
++  "Close filters": {"value": "بستن فیلترها"},
++  "Config Editor": {"value": "ویرایشگر کانفیگ"},
++  "Config loading error": {"value": "خطا در بارگذاری کانفیگ"},
++  "Config variables": {"value": "متغیرهای کانفیگ"},
++  "Connect": {"value": "اتصال"},
++  "Connect a subscription or add a node manually to get started.": {"value": "برای شروع، یک اشتراک اضافه کنید یا سرور را دستی وارد کنید."},
++  "Connected": {"value": "متصل"},
++  "Connecting…": {"value": "در حال اتصال…"},
++  "Continue": {"value": "ادامه"},
++  "Copy": {"value": "کپی"},
++  "Dark": {"value": "تیره"},
++  "Default": {"value": "پیش‌فرض"},
++  "Delete": {"value": "حذف"},
++  "Disable battery restrictions": {"value": "غیرفعال کردن محدودیت باتری"},
++  "Disconnect": {"value": "قطع اتصال"},
++  "Disconnected": {"value": "قطع"},
++  "Dismiss": {"value": "نادیده گرفتن"},
++  "DNS Settings": {"value": "تنظیمات DNS"},
++  "DNS servers and rules": {"value": "سرورها و قوانین DNS"},
++  "Done": {"value": "انجام شد"},
++  "Edit": {"value": "ویرایش"},
++  "Enable": {"value": "فعال کردن"},
++  "Error": {"value": "خطا"},
++  "Export": {"value": "خروجی گرفتن"},
++  "Filter": {"value": "فیلتر"},
++  "General": {"value": "عمومی"},
++  "Got it": {"value": "متوجه شدم"},
++  "Hide filters": {"value": "پنهان کردن فیلترها"},
++  "Import": {"value": "وارد کردن"},
++  "Language": {"value": "زبان"},
++  "Last 100 events": {"value": "۱۰۰ رویداد اخیر"},
++  "Later": {"value": "بعداً"},
++  "Light": {"value": "روشن"},
++  "Name": {"value": "نام"},
++  "No nodes in this channel.\nTry another one.": {"value": "در این کانال سروری وجود ندارد.\nکانال دیگری را امتحان کنید."},
++  "Nodes": {"value": "سرورها"},
++  "OK": {"value": "تأیید"},
++  "Open Settings": {"value": "باز کردن تنظیمات"},
++  "Outbound connections to servers": {"value": "اتصال‌های خروجی به سرورها"},
++  "Paste": {"value": "چسباندن"},
++  "Ping Settings": {"value": "تنظیمات پینگ"},
++  "Rebuild config only": {"value": "فقط بازسازی کانفیگ"},
++  "Reload": {"value": "بارگذاری دوباره"},
++  "Restart VPN to apply changes": {"value": "برای اعمال تغییرات VPN را دوباره راه‌اندازی کنید"},
++  "Restore from backup": {"value": "بازیابی نسخه پشتیبان"},
++  "Routing": {"value": "مسیریابی"},
++  "Save": {"value": "ذخیره"},
++  "Select channel": {"value": "انتخاب کانال"},
++  "Servers": {"value": "سرورها"},
++  "Settings changed — tap to rebuild config": {"value": "تنظیمات تغییر کرده؛ برای بازسازی کانفیگ لمس کنید"},
++  "Show filters": {"value": "نمایش فیلترها"},
++  "Skip": {"value": "رد کردن"},
++  "Smart Connect": {"value": "اتصال هوشمند"},
++  "Sort options": {"value": "مرتب‌سازی"},
++  "Speed Test": {"value": "تست سرعت"},
++  "Start": {"value": "اتصال"},
++  "Start VPN when device turns on": {"value": "با روشن شدن دستگاه، VPN را اجرا کن"},
++  "Statistics": {"value": "آمار"},
++  "Stop": {"value": "توقف"},
++  "Stop VPN?": {"value": "اتصال VPN قطع شود؟"},
++  "Stopping…": {"value": "در حال قطع…"},
++  "Subscriptions & proxy": {"value": "اشتراک‌ها و پروکسی"},
++  "Switch": {"value": "تغییر"},
++  "System": {"value": "سیستم"},
++  "System default": {"value": "پیش‌فرض دستگاه"},
++  "Taken by another VPN": {"value": "اتصال توسط VPN دیگری گرفته شد"},
++  "Tap to connect": {"value": "برای اتصال لمس کنید"},
++  "Test download/upload speed": {"value": "آزمایش سرعت دانلود و آپلود"},
++  "The best server is selected automatically": {"value": "بهترین سرور به‌صورت خودکار انتخاب می‌شود"},
++  "Theme": {"value": "پوسته"},
++  "Theme, appearance": {"value": "پوسته و ظاهر"},
++  "Traffic by outbound": {"value": "ترافیک بر اساس مسیر خروجی"},
++  "Unknown": {"value": "نامشخص"},
++  "Use \"%s\" as…": {"value": "استفاده از «%s» به‌عنوان…"},
++  "View, edit, import JSON": {"value": "مشاهده، ویرایش و وارد کردن JSON"},
++  "VPN Settings": {"value": "تنظیمات VPN"},
++  "VPN settings": {"value": "تنظیمات VPN"},
++  "Your connection is protected": {"value": "اتصال شما محافظت می‌شود"},
++  "Finding a working server…": {"value": "در حال پیدا کردن سرور سالم…"},
++  "Testing configs on your current internet": {"value": "کانفیگ‌ها روی اینترنت شما بررسی می‌شوند"},
++  "Connected to a working server": {"value": "به یک سرور سالم متصل شدید"},
++  "Tap once — Venzo finds and connects automatically": {"value": "فقط یک‌بار لمس کنید؛ ونزو خودش سرور سالم را پیدا می‌کند"},
++  "Dedicated high-speed servers are coming soon": {"value": "سرورهای اختصاصی و پرسرعت به‌زودی فعال می‌شوند"},
++  "Coming soon": {"value": "به‌زودی"}
++}
 diff --git a/app/assets/l10n/ru/ui.json b/app/assets/l10n/ru/ui.json
 index 293ca75..db2df62 100644
 --- a/app/assets/l10n/ru/ui.json
@@ -1063,6 +1246,249 @@ index ff0e238..763df24 100644
              ListTile(
                leading: const Icon(Icons.dns_outlined),
                title: Text(getLocalText.s("Servers")),
+diff --git a/app/lib/screens/home/widgets/venzo_connection_panel.dart b/app/lib/screens/home/widgets/venzo_connection_panel.dart
+new file mode 100644
+index 0000000..b071ab2
+--- /dev/null
++++ b/app/lib/screens/home/widgets/venzo_connection_panel.dart
+@@ -0,0 +1,179 @@
++import 'dart:async';
++
++import 'package:flutter/material.dart';
++
++import '../../../controllers/home_controller.dart';
++import '../../../models/home_state.dart';
++import '../../../services/venzo_server_info.dart';
++
++class VenzoConnectionPanel extends StatelessWidget {
++  const VenzoConnectionPanel({
++    super.key,
++    required this.controller,
++    required this.state,
++  });
++
++  final HomeController controller;
++  final HomeState state;
++
++  @override
++  Widget build(BuildContext context) {
++    if (!state.tunnelUp) return const SizedBox.shrink();
++    final active = VenzoServerInfo.active(state);
++    final servers = VenzoServerInfo.available(state);
++    final cs = Theme.of(context).colorScheme;
++
++    return Padding(
++      padding: const EdgeInsets.only(top: 12),
++      child: Card(
++        margin: EdgeInsets.zero,
++        child: Column(
++          children: [
++            ListTile(
++              leading: Text(active?.flag ?? '🌐',
++                  style: const TextStyle(fontSize: 30)),
++              title: Text(active?.location ?? 'در حال بررسی سرور…',
++                  style: const TextStyle(fontWeight: FontWeight.w700)),
++              subtitle: Text(active == null
++                  ? 'بهترین کانفیگ به‌صورت خودکار انتخاب می‌شود'
++                  : '${active.protocol}  •  ${active.pingMs > 0 ? '${active.pingMs} ms' : 'در حال اندازه‌گیری'}'),
++              trailing: Icon(Icons.verified_user_rounded, color: cs.primary),
++            ),
++            const Divider(height: 1),
++            ListTile(
++              leading: const Icon(Icons.dns_rounded),
++              title: const Text('سرورهای در دسترس'),
++              subtitle: Text(servers.isEmpty
++                  ? 'برای یافتن سرور سالم، تست پینگ را اجرا کنید'
++                  : '${servers.length} سرور سالم پیدا شد'),
++              trailing: const Icon(Icons.chevron_left),
++              onTap: () => _showServers(context),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++
++  Future<void> _showServers(BuildContext context) async {
++    await showModalBottomSheet<void>(
++      context: context,
++      isScrollControlled: true,
++      showDragHandle: true,
++      builder: (sheetContext) => AnimatedBuilder(
++        animation: controller,
++        builder: (context, _) {
++          final current = controller.state;
++          final servers = VenzoServerInfo.available(current);
++          return SafeArea(
++            child: SizedBox(
++              height: MediaQuery.sizeOf(context).height * .68,
++              child: Column(
++                children: [
++                  Padding(
++                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
++                    child: Row(
++                      children: [
++                        const Expanded(
++                          child: Text('انتخاب سرور سالم',
++                              style: TextStyle(
++                                  fontSize: 19, fontWeight: FontWeight.w800)),
++                        ),
++                        IconButton.filledTonal(
++                          tooltip: 'تست دوباره',
++                          onPressed: current.busy || controller.massPingRunning
++                              ? null
++                              : () => unawaited(controller.runMassUrltest()),
++                          icon: controller.massPingRunning
++                              ? const SizedBox.square(
++                                  dimension: 18,
++                                  child: CircularProgressIndicator(strokeWidth: 2))
++                              : const Icon(Icons.refresh),
++                        ),
++                      ],
++                    ),
++                  ),
++                  if (servers.isEmpty)
++                    Expanded(
++                      child: Center(
++                        child: Padding(
++                          padding: const EdgeInsets.all(28),
++                          child: Column(
++                            mainAxisSize: MainAxisSize.min,
++                            children: [
++                              const Icon(Icons.radar_rounded, size: 48),
++                              const SizedBox(height: 12),
++                              const Text('هنوز سرور سالمی اندازه‌گیری نشده است',
++                                  textAlign: TextAlign.center),
++                              const SizedBox(height: 12),
++                              FilledButton.icon(
++                                onPressed: controller.massPingRunning
++                                    ? null
++                                    : () => unawaited(
++                                        controller.runMassUrltest()),
++                                icon: const Icon(Icons.speed),
++                                label: const Text('شروع تست پینگ'),
++                              ),
++                            ],
++                          ),
++                        ),
++                      ),
++                    )
++                  else
++                    Expanded(
++                      child: ListView.separated(
++                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
++                        itemCount: servers.length,
++                        separatorBuilder: (_, __) => const Divider(height: 1),
++                        itemBuilder: (context, index) {
++                          final server = servers[index];
++                          return ListTile(
++                            leading: Text(server.flag,
++                                style: const TextStyle(fontSize: 28)),
++                            title: Text(server.location,
++                                style: const TextStyle(
++                                    fontWeight: FontWeight.w700)),
++                            subtitle: Text(server.protocol),
++                            trailing: Row(
++                              mainAxisSize: MainAxisSize.min,
++                              children: [
++                                Text('${server.pingMs} ms',
++                                    textDirection: TextDirection.ltr,
++                                    style: TextStyle(
++                                      color: server.pingMs < 250
++                                          ? Colors.green
++                                          : server.pingMs < 600
++                                              ? Colors.orange
++                                              : Colors.red,
++                                      fontWeight: FontWeight.w700,
++                                    )),
++                                const SizedBox(width: 8),
++                                Icon(server.selected
++                                    ? Icons.check_circle
++                                    : Icons.radio_button_unchecked),
++                              ],
++                            ),
++                            selected: server.selected,
++                            enabled: !current.busy,
++                            onTap: server.selected
++                                ? null
++                                : () async {
++                                    await controller
++                                        .selectVenzoServer(server.tag);
++                                    if (sheetContext.mounted) {
++                                      Navigator.of(sheetContext).pop();
++                                    }
++                                  },
++                          );
++                        },
++                      ),
++                    ),
++                ],
++              ),
++            ),
++          );
++        },
++      ),
++    );
++  }
++}
+diff --git a/app/lib/screens/home/widgets/venzo_premium_card.dart b/app/lib/screens/home/widgets/venzo_premium_card.dart
+new file mode 100644
+index 0000000..0178538
+--- /dev/null
++++ b/app/lib/screens/home/widgets/venzo_premium_card.dart
+@@ -0,0 +1,52 @@
++import 'package:flutter/material.dart';
++
++import '../../../services/l10n/locale_controller.dart';
++
++class VenzoPremiumCard extends StatelessWidget {
++  const VenzoPremiumCard({super.key});
++
++  @override
++  Widget build(BuildContext context) {
++    final cs = Theme.of(context).colorScheme;
++    return Center(
++      child: Padding(
++        padding: const EdgeInsets.all(16),
++        child: Card(
++          color: cs.surfaceContainerLow,
++          child: Padding(
++            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
++            child: Row(
++              children: [
++                Icon(Icons.workspace_premium_rounded, color: cs.primary),
++                const SizedBox(width: 12),
++                Expanded(
++                  child: Column(
++                    crossAxisAlignment: CrossAxisAlignment.start,
++                    mainAxisSize: MainAxisSize.min,
++                    children: [
++                      Text(
++                        'Venzo Premium', // l10n-exempt: product tier
++                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
++                              fontWeight: FontWeight.w700,
++                            ),
++                      ),
++                      const SizedBox(height: 3),
++                      Text(
++                        getLocalText.s(
++                            'Dedicated high-speed servers are coming soon'),
++                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
++                              color: cs.onSurfaceVariant,
++                            ),
++                      ),
++                    ],
++                  ),
++                ),
++                Chip(label: Text(getLocalText.s('Coming soon'))),
++              ],
++            ),
++          ),
++        ),
++      ),
++    );
++  }
++}
 diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
 index a4a2656..56c27cc 100644
 --- a/app/lib/screens/home_screen.dart
@@ -1157,6 +1583,180 @@ index b27b119..59e6396 100644
                  const SizedBox(height: 18),
                  Text(
                    getLocalText.s("No provider yet?"),
+diff --git a/app/lib/screens/venzo_store_screen.dart b/app/lib/screens/venzo_store_screen.dart
+new file mode 100644
+index 0000000..3459fa8
+--- /dev/null
++++ b/app/lib/screens/venzo_store_screen.dart
+@@ -0,0 +1,168 @@
++import 'package:flutter/material.dart';
++
++import '../services/project_links.dart';
++import '../services/url_launcher.dart' as ul;
++import '../services/venzo_store_api.dart';
++
++class VenzoStoreScreen extends StatefulWidget {
++  const VenzoStoreScreen({super.key});
++
++  @override
++  State<VenzoStoreScreen> createState() => _VenzoStoreScreenState();
++}
++
++class _VenzoStoreScreenState extends State<VenzoStoreScreen> {
++  final _api = VenzoStoreApi();
++  final _customer = TextEditingController();
++  late Future<List<VenzoPlan>> _plans;
++  String? _buying;
++
++  @override
++  void initState() {
++    super.initState();
++    _plans = _api.plans();
++  }
++
++  @override
++  void dispose() {
++    _customer.dispose();
++    super.dispose();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return Scaffold(
++      appBar: AppBar(title: const Text('خرید اشتراک Venzo')),
++      body: FutureBuilder<List<VenzoPlan>>(
++        future: _plans,
++        builder: (context, snapshot) {
++          if (snapshot.connectionState == ConnectionState.waiting) {
++            return const Center(child: CircularProgressIndicator());
++          }
++          if (snapshot.hasError) return _unavailable(context);
++          final plans = snapshot.data ?? const [];
++          if (plans.isEmpty) return _unavailable(context);
++          return ListView(
++            padding: const EdgeInsets.all(16),
++            children: [
++              Card(
++                color: Theme.of(context).colorScheme.primaryContainer,
++                child: const Padding(
++                  padding: EdgeInsets.all(16),
++                  child: Row(
++                    children: [
++                      Icon(Icons.workspace_premium_rounded, size: 34),
++                      SizedBox(width: 12),
++                      Expanded(
++                        child: Text(
++                          'پس از پرداخت، اشتراک اختصاصی به‌صورت خودکار در پنل PasarGuard ساخته می‌شود.',
++                          style: TextStyle(fontWeight: FontWeight.w600),
++                        ),
++                      ),
++                    ],
++                  ),
++                ),
++              ),
++              const SizedBox(height: 12),
++              TextField(
++                controller: _customer,
++                textDirection: TextDirection.ltr,
++                decoration: const InputDecoration(
++                  labelText: 'شماره موبایل یا شناسه تلگرام',
++                  prefixIcon: Icon(Icons.person_outline),
++                  border: OutlineInputBorder(),
++                ),
++              ),
++              const SizedBox(height: 16),
++              for (final plan in plans) ...[
++                _planCard(context, plan),
++                const SizedBox(height: 10),
++              ],
++            ],
++          );
++        },
++      ),
++    );
++  }
++
++  Widget _planCard(BuildContext context, VenzoPlan plan) {
++    final busy = _buying == plan.id;
++    return Card(
++      child: Padding(
++        padding: const EdgeInsets.all(16),
++        child: Column(
++          crossAxisAlignment: CrossAxisAlignment.stretch,
++          children: [
++            Text(plan.title,
++                style: Theme.of(context)
++                    .textTheme
++                    .titleMedium
++                    ?.copyWith(fontWeight: FontWeight.w800)),
++            const SizedBox(height: 8),
++            Text('${plan.days} روز  •  ${plan.dataGb == null ? 'نامحدود' : '${plan.dataGb} گیگابایت'}'),
++            const SizedBox(height: 12),
++            FilledButton(
++              onPressed: _buying == null ? () => _buy(plan) : null,
++              child: busy
++                  ? const SizedBox.square(
++                      dimension: 20,
++                      child: CircularProgressIndicator(strokeWidth: 2))
++                  : Text('خرید — ${_price(plan)}'),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++
++  String _price(VenzoPlan plan) {
++    final value = plan.price.toString().replaceAllMapped(
++        RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '٬');
++    return '$value ${plan.currency == 'IRR' ? 'ریال' : plan.currency}';
++  }
++
++  Future<void> _buy(VenzoPlan plan) async {
++    if (_customer.text.trim().length < 3) {
++      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
++          content: Text('شماره موبایل یا شناسه تلگرام را وارد کنید')));
++      return;
++    }
++    setState(() => _buying = plan.id);
++    try {
++      final checkout = await _api.createCheckout(
++          planId: plan.id, customer: _customer.text);
++      await ul.UrlLauncher.open(checkout.url);
++    } catch (_) {
++      if (mounted) {
++        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
++            content: Text('ساخت لینک پرداخت انجام نشد؛ دوباره تلاش کنید')));
++      }
++    } finally {
++      if (mounted) setState(() => _buying = null);
++    }
++  }
++
++  Widget _unavailable(BuildContext context) => Center(
++        child: Padding(
++          padding: const EdgeInsets.all(28),
++          child: Column(
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              const Icon(Icons.storefront_outlined, size: 58),
++              const SizedBox(height: 14),
++              const Text('فروش آنلاین در حال راه‌اندازی است',
++                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
++              const SizedBox(height: 8),
++              const Text('برای خرید فعلی با پشتیبانی Venzo تماس بگیرید.',
++                  textAlign: TextAlign.center),
++              const SizedBox(height: 16),
++              FilledButton.icon(
++                onPressed: () => ul.UrlLauncher.open(ProjectLinks.support),
++                icon: const Icon(Icons.support_agent),
++                label: const Text('@Venzzo_vpn'),
++              ),
++            ],
++          ),
++        ),
++      );
++}
 diff --git a/app/lib/services/crash_share.dart b/app/lib/services/crash_share.dart
 index d000b13..7862f6c 100644
 --- a/app/lib/services/crash_share.dart
@@ -1269,6 +1869,387 @@ index 0e7db07..e081ef9 100644
      return appLanguageValues.contains(v) ? v : 'system';
    }
  
+diff --git a/app/lib/services/venzo_managed_subscriptions.dart b/app/lib/services/venzo_managed_subscriptions.dart
+new file mode 100644
+index 0000000..007b775
+--- /dev/null
++++ b/app/lib/services/venzo_managed_subscriptions.dart
+@@ -0,0 +1,39 @@
++import '../models/server_list.dart';
++
++/// Curated, independent subscription sources seeded only on a fresh install.
++///
++/// Each source remains a normal editable subscription: users can disable,
++/// remove, replace, or add their own providers. Subscription bodies are cached
++/// by the existing HttpCache layer, so a temporary upstream outage does not
++/// remove the last working nodes from the device.
++class VenzoManagedSubscriptions {
++  VenzoManagedSubscriptions._();
++
++  static const _primaryUrl =
++      'https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt';
++  static const _backupUrl =
++      'https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/main/configs/vless_sub.txt';
++
++  static List<SubscriptionServers> defaults() => [
++        SubscriptionServers(
++          id: 'venzo-managed-primary-v1',
++          name: 'Venzo Fast Servers',
++          enabled: true,
++          tagPrefix: 'VZ1-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _primaryUrl,
++          updateIntervalHours: 1,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
++        SubscriptionServers(
++          id: 'venzo-managed-backup-v1',
++          name: 'Venzo Backup Servers',
++          enabled: true,
++          tagPrefix: 'VZ2-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _backupUrl,
++          updateIntervalHours: 2,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
++      ];
++}
+diff --git a/app/lib/services/venzo_premium.dart b/app/lib/services/venzo_premium.dart
+new file mode 100644
+index 0000000..dc39357
+--- /dev/null
++++ b/app/lib/services/venzo_premium.dart
+@@ -0,0 +1,68 @@
++import '../models/server_list.dart';
++
++/// Access tiers are deliberately separate from subscription transport. The
++/// backend can later issue a per-user HTTPS subscription after Telegram/payment
++/// verification without changing the VPN engine or the free catalog.
++enum VenzoAccessTier { free, premium }
++
++class VenzoPremiumEntitlement {
++  const VenzoPremiumEntitlement({
++    required this.accountId,
++    required this.subscriptionUrl,
++    required this.expiresAt,
++  });
++
++  final String accountId;
++  final Uri subscriptionUrl;
++  final DateTime expiresAt;
++
++  bool get isActive =>
++      subscriptionUrl.scheme == 'https' &&
++      subscriptionUrl.host.isNotEmpty &&
++      expiresAt.isAfter(DateTime.now().toUtc());
++}
++
++class VenzoPremiumProvisioner {
++  VenzoPremiumProvisioner._();
++
++  /// Compile-time hook for the future entitlement API. It is intentionally
++  /// empty in public builds; secrets and customer tokens never enter git.
++  static const apiBase = String.fromEnvironment(
++    'VENZO_PREMIUM_API_BASE',
++    defaultValue: '',
++  );
++
++  static bool get backendConfigured {
++    final uri = Uri.tryParse(apiBase);
++    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty;
++  }
++
++  /// Converts a verified backend entitlement into the same subscription model
++  /// already used by the free tier. Rebuild, cache, failover and Smart Connect
++  /// therefore work identically for paid servers.
++  static SubscriptionServers subscriptionFor(
++    VenzoPremiumEntitlement entitlement,
++  ) {
++    if (!entitlement.isActive) {
++      throw ArgumentError.value(entitlement, 'entitlement', 'inactive');
++    }
++    final safeAccount = entitlement.accountId
++        .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '')
++        .take(24);
++    return SubscriptionServers(
++      id: 'venzo-premium-$safeAccount',
++      name: 'Venzo Premium',
++      enabled: true,
++      tagPrefix: 'VZP-',
++      detourPolicy: DetourPolicy.defaults,
++      url: entitlement.subscriptionUrl.toString(),
++      updateIntervalHours: 1,
++      onUpdateAction: SubscriptionOnUpdateAction.reload,
++    );
++  }
++}
++
++extension on String {
++  String take(int maxLength) =>
++      length <= maxLength ? this : substring(0, maxLength);
++}
+diff --git a/app/lib/services/venzo_server_info.dart b/app/lib/services/venzo_server_info.dart
+new file mode 100644
+index 0000000..5b43c06
+--- /dev/null
++++ b/app/lib/services/venzo_server_info.dart
+@@ -0,0 +1,136 @@
++import '../models/home_state.dart';
++import '../vpn/cc_channel.dart';
++
++/// A user-facing view of a payload server. Control outbounds and failed
++/// probes are intentionally excluded from [available].
++class VenzoServerInfo {
++  const VenzoServerInfo({
++    required this.tag,
++    required this.location,
++    required this.flag,
++    required this.protocol,
++    required this.pingMs,
++    required this.selected,
++  });
++
++  final String tag;
++  final String location;
++  final String flag;
++  final String protocol;
++  final int pingMs;
++  final bool selected;
++
++  static String? activePayloadTag(HomeState state) {
++    var tag = state.activeInGroup;
++    final seen = <String>{};
++    while (tag != null && tag.isNotEmpty && seen.add(tag)) {
++      final group = state.groupOf(tag);
++      if (group == null || group.selected.isEmpty) return tag;
++      tag = group.selected;
++    }
++    return tag;
++  }
++
++  static List<VenzoServerInfo> available(HomeState state) {
++    final selector = state.selectedGroup == null
++        ? null
++        : state.groupOf(state.selectedGroup!);
++    if (selector == null) return const [];
++
++    final candidates = <String, CcOutbound>{};
++    for (final item in selector.items) {
++      final nested = state.groupOf(item.tag);
++      if (nested == null) {
++        candidates[item.tag] = item;
++      } else {
++        for (final child in nested.items) {
++          candidates[child.tag] = child;
++        }
++      }
++    }
++
++    final active = activePayloadTag(state);
++    final result = <VenzoServerInfo>[];
++    for (final outbound in candidates.values) {
++      if (state.isControlTag(outbound.tag)) continue;
++      final measured = state.delayOf(outbound.tag);
++      final coreDelay = outbound.urlTestTime > 0 ? outbound.urlTestDelay : null;
++      final delay = measured != null && measured >= 0 ? measured : coreDelay;
++      if (delay == null || delay <= 0) continue;
++      final place = _locationOf(outbound.tag);
++      result.add(VenzoServerInfo(
++        tag: outbound.tag,
++        location: place.$2,
++        flag: place.$1,
++        protocol: state.activeModel.protocolOf(outbound.tag) ??
++            (outbound.type.isEmpty ? 'Proxy' : outbound.type.toUpperCase()),
++        pingMs: delay,
++        selected: outbound.tag == active,
++      ));
++    }
++    result.sort((a, b) => a.pingMs.compareTo(b.pingMs));
++    return result;
++  }
++
++  static VenzoServerInfo? active(HomeState state) {
++    final activeTag = activePayloadTag(state);
++    if (activeTag == null) return null;
++    for (final server in available(state)) {
++      if (server.tag == activeTag) return server;
++    }
++    final place = _locationOf(activeTag);
++    return VenzoServerInfo(
++      tag: activeTag,
++      location: place.$2,
++      flag: place.$1,
++      protocol: state.activeModel.protocolOf(activeTag) ?? 'Proxy',
++      pingMs: state.delayOf(activeTag) ?? 0,
++      selected: true,
++    );
++  }
++
++  static (String, String) _locationOf(String tag) {
++    final flag = _firstFlag(tag);
++    final country = flag == null ? null : _countryByFlag[flag];
++    if (country != null) return (flag!, country);
++
++    final lower = tag.toLowerCase();
++    for (final entry in _countryHints.entries) {
++      if (entry.value.any(lower.contains)) return entry.key;
++    }
++    return ('🌐', 'نامشخص');
++  }
++
++  static String? _firstFlag(String value) {
++    final runes = value.runes.toList();
++    for (var i = 0; i + 1 < runes.length; i++) {
++      if (_isRegional(runes[i]) && _isRegional(runes[i + 1])) {
++        return String.fromCharCodes([runes[i], runes[i + 1]]);
++      }
++    }
++    return null;
++  }
++
++  static bool _isRegional(int rune) => rune >= 0x1F1E6 && rune <= 0x1F1FF;
++
++  static const _countryByFlag = <String, String>{
++    '🇩🇪': 'آلمان', '🇺🇸': 'آمریکا', '🇳🇱': 'هلند', '🇫🇮': 'فنلاند',
++    '🇫🇷': 'فرانسه', '🇬🇧': 'بریتانیا', '🇨🇦': 'کانادا', '🇹🇷': 'ترکیه',
++    '🇸🇬': 'سنگاپور', '🇯🇵': 'ژاپن', '🇨🇭': 'سوئیس', '🇸🇪': 'سوئد',
++    '🇦🇪': 'امارات', '🇮🇹': 'ایتالیا', '🇪🇸': 'اسپانیا', '🇵🇱': 'لهستان',
++    '🇷🇺': 'روسیه', '🇮🇳': 'هند', '🇭🇰': 'هنگ‌کنگ', '🇦🇺': 'استرالیا',
++  };
++
++  static const _countryHints = <(String, String), List<String>>{
++    ('🇩🇪', 'آلمان'): ['germany', 'de-', ' de '],
++    ('🇺🇸', 'آمریکا'): ['united states', 'usa', 'us-', ' us '],
++    ('🇳🇱', 'هلند'): ['netherlands', 'holland', 'nl-'],
++    ('🇫🇮', 'فنلاند'): ['finland', 'fi-'],
++    ('🇫🇷', 'فرانسه'): ['france', 'fr-'],
++    ('🇬🇧', 'بریتانیا'): ['united kingdom', 'england', 'uk-', 'gb-'],
++    ('🇨🇦', 'کانادا'): ['canada', 'ca-'],
++    ('🇹🇷', 'ترکیه'): ['turkey', 'turkiye', 'tr-'],
++    ('🇸🇬', 'سنگاپور'): ['singapore', 'sg-'],
++    ('🇯🇵', 'ژاپن'): ['japan', 'jp-'],
++  };
++}
+diff --git a/app/lib/services/venzo_store_api.dart b/app/lib/services/venzo_store_api.dart
+new file mode 100644
+index 0000000..2191b33
+--- /dev/null
++++ b/app/lib/services/venzo_store_api.dart
+@@ -0,0 +1,114 @@
++import 'dart:convert';
++
++import 'package:http/http.dart' as http;
++
++/// Public Venzo commerce API. PasarGuard admin credentials must only exist on
++/// this backend; they are deliberately never accepted by the Android app.
++class VenzoStoreApi {
++  VenzoStoreApi({http.Client? client}) : _client = client ?? http.Client();
++
++  static const baseUrl = String.fromEnvironment('VENZO_API_BASE');
++  final http.Client _client;
++
++  bool get isConfigured {
++    final uri = Uri.tryParse(baseUrl);
++    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return false;
++    return uri.scheme == 'https' ||
++        (uri.scheme == 'http' && uri.host.startsWith('10.'));
++  }
++
++  Future<List<VenzoPlan>> plans() async {
++    if (!isConfigured) throw const VenzoStoreException('API_NOT_CONFIGURED');
++    final response = await _client
++        .get(_uri('/v1/plans'), headers: const {'Accept': 'application/json'})
++        .timeout(const Duration(seconds: 15));
++    if (response.statusCode != 200) {
++      throw VenzoStoreException('PLANS_${response.statusCode}');
++    }
++    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
++    final rows = decoded is List ? decoded : (decoded as Map)['plans'];
++    if (rows is! List) throw const VenzoStoreException('INVALID_PLANS');
++    return rows
++        .whereType<Map>()
++        .map((row) => VenzoPlan.fromJson(row.cast<String, dynamic>()))
++        .where((plan) => plan.id.isNotEmpty && plan.price > 0)
++        .toList();
++  }
++
++  Future<VenzoCheckout> createCheckout({
++    required String planId,
++    required String customer,
++  }) async {
++    if (!isConfigured) throw const VenzoStoreException('API_NOT_CONFIGURED');
++    final response = await _client
++        .post(
++          _uri('/v1/orders'),
++          headers: const {
++            'Accept': 'application/json',
++            'Content-Type': 'application/json',
++          },
++          body: jsonEncode({
++            'plan_id': planId,
++            'customer': customer.trim(),
++            'client': 'venzo-android',
++          }),
++        )
++        .timeout(const Duration(seconds: 20));
++    if (response.statusCode != 200 && response.statusCode != 201) {
++      throw VenzoStoreException('CHECKOUT_${response.statusCode}');
++    }
++    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
++        .cast<String, dynamic>();
++    final checkout = VenzoCheckout.fromJson(json);
++    if (!checkout.url.startsWith('https://')) {
++      throw const VenzoStoreException('INVALID_CHECKOUT_URL');
++    }
++    return checkout;
++  }
++
++  Uri _uri(String path) => Uri.parse(baseUrl).resolve(path);
++}
++
++class VenzoPlan {
++  const VenzoPlan({
++    required this.id,
++    required this.title,
++    required this.price,
++    required this.currency,
++    required this.days,
++    required this.dataGb,
++  });
++
++  final String id;
++  final String title;
++  final int price;
++  final String currency;
++  final int days;
++  final int? dataGb;
++
++  factory VenzoPlan.fromJson(Map<String, dynamic> json) => VenzoPlan(
++        id: json['id']?.toString() ?? '',
++        title: json['title']?.toString() ?? '',
++        price: (json['price'] as num?)?.toInt() ?? 0,
++        currency: json['currency']?.toString() ?? 'IRR',
++        days: (json['days'] as num?)?.toInt() ?? 30,
++        dataGb: (json['data_gb'] as num?)?.toInt(),
++      );
++}
++
++class VenzoCheckout {
++  const VenzoCheckout({required this.orderId, required this.url});
++
++  final String orderId;
++  final String url;
++
++  factory VenzoCheckout.fromJson(Map<String, dynamic> json) => VenzoCheckout(
++        orderId: json['order_id']?.toString() ?? '',
++        url: json['checkout_url']?.toString() ?? '',
++      );
++}
++
++class VenzoStoreException implements Exception {
++  const VenzoStoreException(this.code);
++  final String code;
++}
 diff --git a/app/pubspec.yaml b/app/pubspec.yaml
 index 8049177..273d6c8 100644
 --- a/app/pubspec.yaml
@@ -1281,3 +2262,259 @@ index 8049177..273d6c8 100644
      - assets/donate.json # §362 — способы поддержки (донат-попап в About)
      - assets/warp_endpoints.json # §136 — WARP endpoint/SNI random pools
      - assets/icons/app_icon.png
+diff --git a/app/test/controllers/venzo_smart_connect_test.dart b/app/test/controllers/venzo_smart_connect_test.dart
+new file mode 100644
+index 0000000..96d20f9
+--- /dev/null
++++ b/app/test/controllers/venzo_smart_connect_test.dart
+@@ -0,0 +1,75 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/controllers/home_controller.dart';
++import 'package:lxbox/vpn/cc_channel.dart';
++
++CcOutbound outbound(String tag) =>
++    CcOutbound(tag: tag, type: 'vless', urlTestDelay: 0, urlTestTime: 0);
++
++CcGroup group({
++  required String tag,
++  required String type,
++  required bool selectable,
++  String selected = '',
++  List<CcOutbound> items = const [],
++}) =>
++    CcGroup(
++      tag: tag,
++      type: type,
++      selectable: selectable,
++      selected: selected,
++      isExpand: false,
++      items: items,
++    );
++
++void main() {
++  test('Smart Connect prefers the channel auto URLTest group', () {
++    final selector = group(
++      tag: 'vpn-1',
++      type: 'Selector',
++      selectable: true,
++      items: [outbound('generic-auto'), outbound('vpn-1-auto')],
++    );
++    final generic = group(
++      tag: 'generic-auto',
++      type: 'URLTest',
++      selectable: false,
++    );
++    final preferred = group(
++      tag: 'vpn-1-auto',
++      type: 'URLTest',
++      selectable: false,
++    );
++
++    expect(
++      chooseVenzoSmartAutoGroup(
++        selectorTag: selector.tag,
++        selector: selector,
++        urltestGroups: [generic, preferred],
++      )?.tag,
++      'vpn-1-auto',
++    );
++  });
++
++  test('Smart Connect does not select an unrelated URLTest group', () {
++    final selector = group(
++      tag: 'vpn-1',
++      type: 'Selector',
++      selectable: true,
++      items: [outbound('manual-node')],
++    );
++    final unrelated = group(
++      tag: 'vpn-2-auto',
++      type: 'URLTest',
++      selectable: false,
++    );
++
++    expect(
++      chooseVenzoSmartAutoGroup(
++        selectorTag: selector.tag,
++        selector: selector,
++        urltestGroups: [unrelated],
++      ),
++      isNull,
++    );
++  });
++}
+diff --git a/app/test/services/l10n/persian_locale_test.dart b/app/test/services/l10n/persian_locale_test.dart
+new file mode 100644
+index 0000000..dd837e1
+--- /dev/null
++++ b/app/test/services/l10n/persian_locale_test.dart
+@@ -0,0 +1,33 @@
++import 'dart:convert';
++import 'dart:io';
++
++import 'package:flutter/widgets.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/services/l10n/locale_controller.dart';
++
++void main() {
++  test('Persian is a supported locale', () {
++    expect(LocaleController.supportedTags, contains('fa'));
++    expect(LocaleController.supportedLocales, contains(const Locale('fa')));
++  });
++
++  test('Persian dictionary covers the primary connection journey', () {
++    final raw = File('assets/l10n/fa/ui.json').readAsStringSync();
++    final dict = jsonDecode(raw) as Map<String, dynamic>;
++
++    for (final key in <String>[
++      'Smart Connect',
++      'Disconnect',
++      'The best server is selected automatically',
++      'Your connection is protected',
++      'Connected',
++      'Connecting…',
++      'Disconnected',
++      'Servers',
++      'App Settings',
++    ]) {
++      expect((dict[key] as Map<String, dynamic>)['value'], isNotEmpty,
++          reason: 'missing Persian translation for $key');
++    }
++  });
++}
+diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
+new file mode 100644
+index 0000000..080571a
+--- /dev/null
++++ b/app/test/services/venzo_managed_subscriptions_test.dart
+@@ -0,0 +1,15 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/services/venzo_managed_subscriptions.dart';
++
++void main() {
++  test('managed subscriptions are independent, enabled and bounded', () {
++    final subscriptions = VenzoManagedSubscriptions.defaults();
++
++    expect(subscriptions, hasLength(2));
++    expect(subscriptions.every((s) => s.enabled), isTrue);
++    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(), hasLength(2));
++    expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
++    expect(subscriptions.map((s) => s.id).toSet(), hasLength(2));
++    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(2));
++  });
++}
+diff --git a/app/test/services/venzo_premium_test.dart b/app/test/services/venzo_premium_test.dart
+new file mode 100644
+index 0000000..fbce16f
+--- /dev/null
++++ b/app/test/services/venzo_premium_test.dart
+@@ -0,0 +1,33 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/models/server_list.dart';
++import 'package:lxbox/services/venzo_premium.dart';
++
++void main() {
++  test('premium entitlement provisions an isolated subscription', () {
++    final entitlement = VenzoPremiumEntitlement(
++      accountId: 'user-42',
++      subscriptionUrl: Uri.parse('https://premium.venzo.example/sub/user-42'),
++      expiresAt: DateTime.now().toUtc().add(const Duration(days: 30)),
++    );
++
++    final subscription = VenzoPremiumProvisioner.subscriptionFor(entitlement);
++    expect(subscription.name, 'Venzo Premium');
++    expect(subscription.tagPrefix, 'VZP-');
++    expect(subscription.enabled, isTrue);
++    expect(subscription.onUpdateAction, SubscriptionOnUpdateAction.reload);
++    expect(Uri.parse(subscription.url).scheme, 'https');
++  });
++
++  test('expired or insecure premium entitlement is rejected', () {
++    final expired = VenzoPremiumEntitlement(
++      accountId: 'user-42',
++      subscriptionUrl: Uri.parse('http://premium.venzo.example/sub'),
++      expiresAt: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
++    );
++
++    expect(
++      () => VenzoPremiumProvisioner.subscriptionFor(expired),
++      throwsArgumentError,
++    );
++  });
++}
+diff --git a/docs/VENZO_STORE_API.md b/docs/VENZO_STORE_API.md
+new file mode 100644
+index 0000000..ced897d
+--- /dev/null
++++ b/docs/VENZO_STORE_API.md
+@@ -0,0 +1,70 @@
++# Venzo Store API contract
++
++The Android app talks only to the public Venzo Store API. It must never call
++the PasarGuard admin API or contain PasarGuard credentials.
++
++## Android build setting
++
++Build with the public HTTPS origin:
++
++```text
++--dart-define=VENZO_API_BASE=https://api.example.com
++```
++
++## Public routes
++
++### `GET /v1/plans`
++
++```json
++{
++  "plans": [
++    {
++      "id": "monthly-20",
++      "title": "یک‌ماهه ۲۰ گیگ",
++      "price": 600000,
++      "currency": "IRR",
++      "days": 30,
++      "data_gb": 20
++    }
++  ]
++}
++```
++
++### `POST /v1/orders`
++
++Request:
++
++```json
++{
++  "plan_id": "monthly-20",
++  "customer": "@customer",
++  "client": "venzo-android"
++}
++```
++
++Response:
++
++```json
++{
++  "order_id": "vz_123",
++  "checkout_url": "https://pay.example.com/vz_123"
++}
++```
++
++## Backend responsibilities
++
++1. Validate the plan server-side; never trust price, duration, or traffic from
++   the app.
++2. Create a pending order and return a short-lived HTTPS checkout URL.
++3. Verify the payment provider callback server-to-server and make processing
++   idempotent by payment authority/transaction ID.
++4. Only after verified payment, authenticate to PasarGuard with server-side
++   credentials and create/renew the user with the plan's traffic and expiry.
++5. Store the returned `subscription_url` against the order for later secure
++   delivery to the customer.
++6. Apply rate limits, audit logging, and strict CORS/body-size limits. Never
++   return the PasarGuard bearer token or admin credentials to the app.
++
++PasarGuard is the subscription/provisioning system; it does not replace the
++payment gateway. The payment gateway and its callback credentials must be
++chosen before the purchase flow can be activated in production.
