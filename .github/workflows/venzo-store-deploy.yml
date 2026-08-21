@@ -1,0 +1,92 @@
+name: Deploy Venzo Store API
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PASARGUARD_BASE_URL: ${{ secrets.PASARGUARD_BASE_URL }}
+          PASARGUARD_API_KEY: ${{ secrets.PASARGUARD_API_KEY }}
+          PROVISION_SECRET: ${{ secrets.PROVISION_SECRET }}
+          TRON_WALLET_ADDRESS: ${{ secrets.TRON_WALLET_ADDRESS }}
+          TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
+          USDT_IRR: ${{ secrets.USDT_IRR }}
+          TRX_IRR: ${{ secrets.TRX_IRR }}
+          CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
+          CARD_HOLDER: ${{ secrets.CARD_HOLDER }}
+          PASARGUARD_GROUP_IDS: ${{ vars.PASARGUARD_GROUP_IDS }}
+          USDT_TRC20_CONTRACT: ${{ vars.USDT_TRC20_CONTRACT }}
+        run: |
+          set -euo pipefail
+          required=(
+            CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+            PASARGUARD_BASE_URL PASARGUARD_API_KEY PROVISION_SECRET
+            TRON_WALLET_ADDRESS TRONGRID_API_KEY USDT_IRR TRX_IRR
+            CARD_NUMBER CARD_HOLDER PASARGUARD_GROUP_IDS USDT_TRC20_CONTRACT
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub secret or variable: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Apply public Worker variables
+        working-directory: venzo2/store-api
+        env:
+          PASARGUARD_GROUP_IDS: ${{ vars.PASARGUARD_GROUP_IDS }}
+          USDT_TRC20_CONTRACT: ${{ vars.USDT_TRC20_CONTRACT }}
+        run: |
+          jq \
+            --arg groups "$PASARGUARD_GROUP_IDS" \
+            --arg contract "$USDT_TRC20_CONTRACT" \
+            '.vars.PASARGUARD_GROUP_IDS = $groups | .vars.USDT_TRC20_CONTRACT = $contract' \
+            wrangler.jsonc > wrangler.deploy.jsonc
+
+      - name: Deploy Worker and encrypted secrets
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: venzo2/store-api
+          wranglerVersion: 4.45.0
+          command: deploy --config wrangler.deploy.jsonc
+          secrets: |
+            PASARGUARD_BASE_URL
+            PASARGUARD_API_KEY
+            PROVISION_SECRET
+            TRON_WALLET_ADDRESS
+            TRONGRID_API_KEY
+            USDT_IRR
+            TRX_IRR
+            CARD_NUMBER
+            CARD_HOLDER
+        env:
+          PASARGUARD_BASE_URL: ${{ secrets.PASARGUARD_BASE_URL }}
+          PASARGUARD_API_KEY: ${{ secrets.PASARGUARD_API_KEY }}
+          PROVISION_SECRET: ${{ secrets.PROVISION_SECRET }}
+          TRON_WALLET_ADDRESS: ${{ secrets.TRON_WALLET_ADDRESS }}
+          TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
+          USDT_IRR: ${{ secrets.USDT_IRR }}
+          TRX_IRR: ${{ secrets.TRX_IRR }}
+          CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
+          CARD_HOLDER: ${{ secrets.CARD_HOLDER }}
+
+      - name: Show deployment URL
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: echo "Worker deployed to ${DEPLOYMENT_URL}"
