@@ -1,4 +1,4 @@
-name: Build Venzo VPN 2.3
+name: Build Venzo VPN 2.4
 
 on:
   push:
@@ -7,6 +7,12 @@ on:
       - "venzo2/**"
       - ".github/workflows/venzo-vpn-build.yml"
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the verified artifacts as GitHub Release v2.4.0
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -97,47 +103,47 @@ jobs:
           flutter build apk --release
           --target-platform android-arm64
           --dart-define=VENZO_API_BASE=${{ vars.VENZO_API_BASE }}
-          --build-name 2.3.0
-          --build-number 20300500
+          --build-name 2.4.0
+          --build-number 20400500
 
       - name: Build Play Store app bundle
         working-directory: venzo-src/app
         run: >-
           flutter build appbundle --release
           --dart-define=VENZO_API_BASE=${{ vars.VENZO_API_BASE }}
-          --build-name 2.3.0
-          --build-number 20300500
+          --build-name 2.4.0
+          --build-number 20400500
 
       - name: Name release files
         run: |
-          cp venzo-src/app/build/app/outputs/flutter-apk/app-release.apk Venzo-VPN-2.3.0-arm64.apk
-          cp venzo-src/app/build/app/outputs/bundle/release/app-release.aab Venzo-VPN-2.3.0.aab
+          cp venzo-src/app/build/app/outputs/flutter-apk/app-release.apk Venzo-VPN-2.4.0-arm64.apk
+          cp venzo-src/app/build/app/outputs/bundle/release/app-release.aab Venzo-VPN-2.4.0.aab
 
       - name: Verify release signature
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
-            verify --verbose --print-certs Venzo-VPN-2.3.0-arm64.apk
+            verify --verbose --print-certs Venzo-VPN-2.4.0-arm64.apk
 
       - name: Create checksums
-        run: sha256sum Venzo-VPN-2.3.0-arm64.apk Venzo-VPN-2.3.0.aab > SHA256SUMS.txt
+        run: sha256sum Venzo-VPN-2.4.0-arm64.apk Venzo-VPN-2.4.0.aab > SHA256SUMS.txt
 
       - name: Upload APK and Play Store bundle
         uses: actions/upload-artifact@v4
         with:
-          name: Venzo-VPN-2.3.0-release
+          name: Venzo-VPN-2.4.0-release
           path: |
-            Venzo-VPN-2.3.0-arm64.apk
-            Venzo-VPN-2.3.0.aab
+            Venzo-VPN-2.4.0-arm64.apk
+            Venzo-VPN-2.4.0.aab
           if-no-files-found: error
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: github.ref == 'refs/heads/venzo-2.0'
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release == true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf '%s\n' \
-            '# Venzo VPN 2.3.0' \
+            '# Venzo VPN 2.4.0' \
             '' \
             '- اتصال هوشمند و انتخاب خودکار کانفیگ سالم' \
             '- رابط ساده فارسی با تم قرمز' \
@@ -148,10 +154,10 @@ jobs:
             '' \
             'فایل APK برای نصب مستقیم روی دستگاه‌های arm64 است. فایل AAB فقط برای Google Play Console استفاده می‌شود.' \
             > release-notes.md
-          gh release create v2.3.0 \
+          gh release create v2.4.0 \
             --target "$GITHUB_SHA" \
-            --title 'Venzo VPN 2.3.0' \
+            --title 'Venzo VPN 2.4.0' \
             --notes-file release-notes.md \
-            Venzo-VPN-2.3.0-arm64.apk \
-            Venzo-VPN-2.3.0.aab \
+            Venzo-VPN-2.4.0-arm64.apk \
+            Venzo-VPN-2.4.0.aab \
             SHA256SUMS.txt
