@@ -60,3 +60,27 @@ instead of the PasarGuard administrator password.
 After deployment, set the GitHub repository variable `VENZO_API_BASE` to the
 Worker HTTPS origin for GitHub APK builds. The Play build keeps the external
 checkout hidden until Google Play Billing is complete.
+
+## GitHub Actions deployment
+
+The manual `Deploy Venzo Store API` workflow deploys the Worker and
+automatically provisions the `ORDERS` KV binding. Add these repository secrets
+before running it:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+PASARGUARD_BASE_URL
+PASARGUARD_API_KEY
+PROVISION_SECRET
+TRON_WALLET_ADDRESS
+TRONGRID_API_KEY
+USDT_IRR
+TRX_IRR
+CARD_NUMBER
+CARD_HOLDER
+```
+
+Add `PASARGUARD_GROUP_IDS` and `USDT_TRC20_CONTRACT` as repository variables.
+Do not paste payment details or API credentials into issues, workflow inputs,
+commits, or build logs.
