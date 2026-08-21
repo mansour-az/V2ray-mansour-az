@@ -6,22 +6,14 @@
   "observability": {
     "enabled": true
   },
+  "kv_namespaces": [
+    {
+      "binding": "ORDERS"
+    }
+  ],
   "vars": {
     "SUPPORT_URL": "https://t.me/Venzzo_vpn",
     "PASARGUARD_GROUP_IDS": "",
     "USDT_TRC20_CONTRACT": ""
-  },
-  "secrets": {
-    "required": [
-      "PASARGUARD_BASE_URL",
-      "PASARGUARD_API_KEY or PASARGUARD_ADMIN_USERNAME + PASARGUARD_ADMIN_PASSWORD",
-      "PROVISION_SECRET",
-      "TRON_WALLET_ADDRESS",
-      "TRONGRID_API_KEY",
-      "USDT_IRR",
-      "TRX_IRR",
-      "CARD_NUMBER",
-      "CARD_HOLDER"
-    ]
   }
 }
