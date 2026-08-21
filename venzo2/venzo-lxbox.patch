@@ -1595,17 +1595,263 @@ index b27b119..59e6396 100644
                  const SizedBox(height: 18),
                  Text(
                    getLocalText.s("No provider yet?"),
+diff --git a/app/lib/screens/venzo_payment_screen.dart b/app/lib/screens/venzo_payment_screen.dart
+new file mode 100644
+index 0000000..eda7f31
+--- /dev/null
++++ b/app/lib/screens/venzo_payment_screen.dart
+@@ -0,0 +1,239 @@
++import 'package:flutter/material.dart';
++import 'package:flutter/services.dart';
++
++import '../services/venzo_store_api.dart';
++
++class VenzoPaymentScreen extends StatefulWidget {
++  const VenzoPaymentScreen({
++    super.key,
++    required this.api,
++    required this.checkout,
++    required this.planTitle,
++  });
++
++  final VenzoStoreApi api;
++  final VenzoCheckout checkout;
++  final String planTitle;
++
++  @override
++  State<VenzoPaymentScreen> createState() => _VenzoPaymentScreenState();
++}
++
++class _VenzoPaymentScreenState extends State<VenzoPaymentScreen> {
++  final _reference = TextEditingController();
++  final _telegram = TextEditingController();
++  late VenzoOrder _order = widget.checkout.order;
++  bool _busy = false;
++
++  @override
++  void dispose() {
++    _reference.dispose();
++    _telegram.dispose();
++    super.dispose();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return Scaffold(
++      appBar: AppBar(title: const Text('پرداخت اشتراک')),
++      body: ListView(
++        padding: const EdgeInsets.all(16),
++        children: [
++          Text(widget.planTitle,
++              style: Theme.of(context)
++                  .textTheme
++                  .titleLarge
++                  ?.copyWith(fontWeight: FontWeight.w800)),
++          const SizedBox(height: 6),
++          Text('شماره سفارش: ${_order.id}',
++              textDirection: TextDirection.ltr),
++          const SizedBox(height: 16),
++          if (_order.isFulfilled) _fulfilledCard() else _paymentCard(),
++        ],
++      ),
++    );
++  }
++
++  Widget _paymentCard() {
++    if (_order.paymentMethod == 'card') return _cardTransfer();
++    final amount = _order.payment['amount']?.toString() ?? '';
++    final currency = _order.payment['currency']?.toString() ?? '';
++    final wallet = _order.payment['wallet_address']?.toString() ?? '';
++    return Card(
++      child: Padding(
++        padding: const EdgeInsets.all(16),
++        child: Column(
++          crossAxisAlignment: CrossAxisAlignment.stretch,
++          children: [
++            Text('پرداخت $currency روی شبکه TRON',
++                style: const TextStyle(fontWeight: FontWeight.w800)),
++            const SizedBox(height: 14),
++            _copyRow('مبلغ دقیق', '$amount $currency'),
++            const Divider(),
++            _copyRow('آدرس کیف پول', wallet),
++            const SizedBox(height: 12),
++            const Text(
++              'مبلغ را دقیقاً مطابق بالا ارسال کنید. پس از تأیید شبکه، اشتراک به‌صورت خودکار ساخته می‌شود.',
++            ),
++            const SizedBox(height: 16),
++            FilledButton.icon(
++              onPressed: _busy ? null : _refresh,
++              icon: _busy
++                  ? const SizedBox.square(
++                      dimension: 18,
++                      child: CircularProgressIndicator(strokeWidth: 2))
++                  : const Icon(Icons.refresh),
++              label: const Text('بررسی پرداخت'),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++
++  Widget _cardTransfer() {
++    final amount = _order.payment['amount']?.toString() ?? '';
++    final card = _order.payment['card_number']?.toString() ?? '';
++    final holder = _order.payment['card_holder']?.toString() ?? '';
++    final submitted = _order.status == 'awaiting_manual_review';
++    return Card(
++      child: Padding(
++        padding: const EdgeInsets.all(16),
++        child: Column(
++          crossAxisAlignment: CrossAxisAlignment.stretch,
++          children: [
++            const Text('کارت‌به‌کارت',
++                style: TextStyle(fontWeight: FontWeight.w800)),
++            const SizedBox(height: 14),
++            _copyRow('مبلغ', '$amount ریال'),
++            const Divider(),
++            _copyRow('شماره کارت', card),
++            Text('به نام $holder'),
++            const SizedBox(height: 16),
++            if (submitted) ...[
++              const Icon(Icons.hourglass_top_rounded, size: 42),
++              const SizedBox(height: 8),
++              const Text('رسید ثبت شد و در انتظار تأیید پشتیبانی است.',
++                  textAlign: TextAlign.center),
++              const SizedBox(height: 12),
++              OutlinedButton(
++                onPressed: _busy ? null : _refresh,
++                child: const Text('بررسی وضعیت'),
++              ),
++            ] else ...[
++              TextField(
++                controller: _reference,
++                textDirection: TextDirection.ltr,
++                decoration: const InputDecoration(
++                  labelText: 'شماره پیگیری یا مرجع پرداخت',
++                  border: OutlineInputBorder(),
++                ),
++              ),
++              const SizedBox(height: 10),
++              TextField(
++                controller: _telegram,
++                textDirection: TextDirection.ltr,
++                decoration: const InputDecoration(
++                  labelText: 'شناسه تلگرام برای پیگیری',
++                  hintText: '@username',
++                  border: OutlineInputBorder(),
++                ),
++              ),
++              const SizedBox(height: 14),
++              FilledButton(
++                onPressed: _busy ? null : _submitReceipt,
++                child: const Text('ثبت اطلاعات پرداخت'),
++              ),
++            ],
++          ],
++        ),
++      ),
++    );
++  }
++
++  Widget _fulfilledCard() => Card(
++        color: Theme.of(context).colorScheme.primaryContainer,
++        child: Padding(
++          padding: const EdgeInsets.all(16),
++          child: Column(
++            crossAxisAlignment: CrossAxisAlignment.stretch,
++            children: [
++              const Icon(Icons.verified_rounded, size: 52),
++              const SizedBox(height: 8),
++              const Text('پرداخت تأیید و اشتراک ساخته شد',
++                  textAlign: TextAlign.center,
++                  style: TextStyle(fontWeight: FontWeight.w800)),
++              const SizedBox(height: 16),
++              SelectableText(_order.subscriptionUrl ?? '',
++                  textDirection: TextDirection.ltr),
++              const SizedBox(height: 10),
++              FilledButton.icon(
++                onPressed: () => _copy(_order.subscriptionUrl ?? ''),
++                icon: const Icon(Icons.copy),
++                label: const Text('کپی لینک اشتراک'),
++              ),
++            ],
++          ),
++        ),
++      );
++
++  Widget _copyRow(String label, String value) => Row(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          Expanded(
++            child: Column(
++              crossAxisAlignment: CrossAxisAlignment.start,
++              children: [
++                Text(label, style: Theme.of(context).textTheme.labelMedium),
++                const SizedBox(height: 3),
++                SelectableText(value, textDirection: TextDirection.ltr),
++              ],
++            ),
++          ),
++          IconButton(onPressed: () => _copy(value), icon: const Icon(Icons.copy)),
++        ],
++      );
++
++  Future<void> _refresh() async {
++    setState(() => _busy = true);
++    try {
++      final order = await widget.api.orderStatus(widget.checkout);
++      if (mounted) setState(() => _order = order);
++    } catch (_) {
++      _message('بررسی پرداخت انجام نشد؛ دوباره تلاش کنید');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  Future<void> _submitReceipt() async {
++    if (_reference.text.trim().length < 3 || _telegram.text.trim().length < 3) {
++      _message('شماره پیگیری و شناسه تلگرام را کامل وارد کنید');
++      return;
++    }
++    setState(() => _busy = true);
++    try {
++      final order = await widget.api.submitCardReceipt(
++        checkout: widget.checkout,
++        reference: _reference.text,
++        telegramUsername: _telegram.text,
++      );
++      if (mounted) setState(() => _order = order);
++    } catch (_) {
++      _message('ثبت اطلاعات پرداخت انجام نشد');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  Future<void> _copy(String value) async {
++    if (value.isEmpty) return;
++    await Clipboard.setData(ClipboardData(text: value));
++    _message('کپی شد');
++  }
++
++  void _message(String text) {
++    if (!mounted) return;
++    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
++  }
++}
 diff --git a/app/lib/screens/venzo_store_screen.dart b/app/lib/screens/venzo_store_screen.dart
 new file mode 100644
-index 0000000..3459fa8
+index 0000000..91a3dc0
 --- /dev/null
 +++ b/app/lib/screens/venzo_store_screen.dart
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,225 @@
 +import 'package:flutter/material.dart';
 +
 +import '../services/project_links.dart';
 +import '../services/url_launcher.dart' as ul;
 +import '../services/venzo_store_api.dart';
++import 'venzo_payment_screen.dart';
 +
 +class VenzoStoreScreen extends StatefulWidget {
 +  const VenzoStoreScreen({super.key});
@@ -1730,11 +1976,23 @@ index 0000000..3459fa8
 +          content: Text('شماره موبایل یا شناسه تلگرام را وارد کنید')));
 +      return;
 +    }
++    final method = await _choosePayment();
++    if (method == null || !mounted) return;
 +    setState(() => _buying = plan.id);
 +    try {
 +      final checkout = await _api.createCheckout(
-+          planId: plan.id, customer: _customer.text);
-+      await ul.UrlLauncher.open(checkout.url);
++        planId: plan.id,
++        customer: _customer.text,
++        paymentMethod: method,
++      );
++      if (!mounted) return;
++      await Navigator.of(context).push(MaterialPageRoute(
++        builder: (_) => VenzoPaymentScreen(
++          api: _api,
++          checkout: checkout,
++          planTitle: plan.title,
++        ),
++      ));
 +    } catch (_) {
 +      if (mounted) {
 +        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -1744,6 +2002,50 @@ index 0000000..3459fa8
 +      if (mounted) setState(() => _buying = null);
 +    }
 +  }
++
++  Future<VenzoPaymentMethod?> _choosePayment() =>
++      showModalBottomSheet<VenzoPaymentMethod>(
++        context: context,
++        showDragHandle: true,
++        builder: (context) => SafeArea(
++          child: Padding(
++            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
++            child: Column(
++              mainAxisSize: MainAxisSize.min,
++              crossAxisAlignment: CrossAxisAlignment.stretch,
++              children: [
++                Text('روش پرداخت',
++                    style: Theme.of(context)
++                        .textTheme
++                        .titleLarge
++                        ?.copyWith(fontWeight: FontWeight.w800)),
++                const SizedBox(height: 12),
++                ListTile(
++                  leading: const Icon(Icons.currency_exchange),
++                  title: const Text('تتر USDT'),
++                  subtitle: const Text('شبکه TRON (TRC20)'),
++                  onTap: () => Navigator.pop(
++                      context, VenzoPaymentMethod.usdtTrc20),
++                ),
++                ListTile(
++                  leading: const Icon(Icons.token_rounded),
++                  title: const Text('ترون TRX'),
++                  subtitle: const Text('پرداخت مستقیم روی شبکه TRON'),
++                  onTap: () =>
++                      Navigator.pop(context, VenzoPaymentMethod.trx),
++                ),
++                ListTile(
++                  leading: const Icon(Icons.credit_card),
++                  title: const Text('کارت‌به‌کارت'),
++                  subtitle: const Text('ثبت رسید و تأیید توسط پشتیبانی'),
++                  onTap: () =>
++                      Navigator.pop(context, VenzoPaymentMethod.card),
++                ),
++              ],
++            ),
++          ),
++        ),
++      );
 +
 +  Widget _unavailable(BuildContext context) => Center(
 +        child: Padding(
@@ -2144,10 +2446,10 @@ index 0000000..5b43c06
 +}
 diff --git a/app/lib/services/venzo_store_api.dart b/app/lib/services/venzo_store_api.dart
 new file mode 100644
-index 0000000..2191b33
+index 0000000..39b30bd
 --- /dev/null
 +++ b/app/lib/services/venzo_store_api.dart
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,199 @@
 +import 'dart:convert';
 +
 +import 'package:http/http.dart' as http;
@@ -2188,6 +2490,7 @@ index 0000000..2191b33
 +  Future<VenzoCheckout> createCheckout({
 +    required String planId,
 +    required String customer,
++    required VenzoPaymentMethod paymentMethod,
 +  }) async {
 +    if (!isConfigured) throw const VenzoStoreException('API_NOT_CONFIGURED');
 +    final response = await _client
@@ -2200,6 +2503,7 @@ index 0000000..2191b33
 +          body: jsonEncode({
 +            'plan_id': planId,
 +            'customer': customer.trim(),
++            'payment_method': paymentMethod.apiValue,
 +            'client': 'venzo-android',
 +          }),
 +        )
@@ -2209,11 +2513,48 @@ index 0000000..2191b33
 +    }
 +    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
 +        .cast<String, dynamic>();
-+    final checkout = VenzoCheckout.fromJson(json);
-+    if (!checkout.url.startsWith('https://')) {
-+      throw const VenzoStoreException('INVALID_CHECKOUT_URL');
++    return VenzoCheckout.fromJson(json);
++  }
++
++  Future<VenzoOrder> orderStatus(VenzoCheckout checkout) async {
++    final response = await _client.get(
++      _uri('/v1/orders/${checkout.order.id}'),
++      headers: {
++        'Accept': 'application/json',
++        'Authorization': 'Bearer ${checkout.clientSecret}',
++      },
++    ).timeout(const Duration(seconds: 20));
++    if (response.statusCode != 200) {
++      throw VenzoStoreException('ORDER_${response.statusCode}');
 +    }
-+    return checkout;
++    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
++        .cast<String, dynamic>();
++    return VenzoOrder.fromJson((json['order'] as Map).cast<String, dynamic>());
++  }
++
++  Future<VenzoOrder> submitCardReceipt({
++    required VenzoCheckout checkout,
++    required String reference,
++    required String telegramUsername,
++  }) async {
++    final response = await _client.post(
++      _uri('/v1/orders/${checkout.order.id}/card-receipt'),
++      headers: {
++        'Accept': 'application/json',
++        'Content-Type': 'application/json',
++        'Authorization': 'Bearer ${checkout.clientSecret}',
++      },
++      body: jsonEncode({
++        'reference': reference.trim(),
++        'telegram_username': telegramUsername.trim(),
++      }),
++    ).timeout(const Duration(seconds: 20));
++    if (response.statusCode != 202) {
++      throw VenzoStoreException('RECEIPT_${response.statusCode}');
++    }
++    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
++        .cast<String, dynamic>();
++    return VenzoOrder.fromJson((json['order'] as Map).cast<String, dynamic>());
 +  }
 +
 +  Uri _uri(String path) => Uri.parse(baseUrl).resolve(path);
@@ -2246,15 +2587,61 @@ index 0000000..2191b33
 +      );
 +}
 +
++enum VenzoPaymentMethod { usdtTrc20, trx, card }
++
++extension VenzoPaymentMethodApi on VenzoPaymentMethod {
++  String get apiValue => switch (this) {
++        VenzoPaymentMethod.usdtTrc20 => 'usdt_trc20',
++        VenzoPaymentMethod.trx => 'trx',
++        VenzoPaymentMethod.card => 'card',
++      };
++}
++
 +class VenzoCheckout {
-+  const VenzoCheckout({required this.orderId, required this.url});
++  const VenzoCheckout({required this.order, required this.clientSecret});
 +
-+  final String orderId;
-+  final String url;
++  final VenzoOrder order;
++  final String clientSecret;
 +
-+  factory VenzoCheckout.fromJson(Map<String, dynamic> json) => VenzoCheckout(
-+        orderId: json['order_id']?.toString() ?? '',
-+        url: json['checkout_url']?.toString() ?? '',
++  factory VenzoCheckout.fromJson(Map<String, dynamic> json) {
++    final order = (json['order'] as Map?)?.cast<String, dynamic>() ?? const {};
++    final secret = json['client_secret']?.toString() ?? '';
++    if (order.isEmpty || secret.length < 32) {
++      throw const VenzoStoreException('INVALID_CHECKOUT');
++    }
++    return VenzoCheckout(
++      order: VenzoOrder.fromJson(order),
++      clientSecret: secret,
++    );
++  }
++}
++
++class VenzoOrder {
++  const VenzoOrder({
++    required this.id,
++    required this.status,
++    required this.paymentMethod,
++    required this.payment,
++    this.subscriptionUrl,
++    this.paymentTxid,
++  });
++
++  final String id;
++  final String status;
++  final String paymentMethod;
++  final Map<String, dynamic> payment;
++  final String? subscriptionUrl;
++  final String? paymentTxid;
++
++  bool get isFulfilled => status == 'fulfilled';
++
++  factory VenzoOrder.fromJson(Map<String, dynamic> json) => VenzoOrder(
++        id: json['id']?.toString() ?? '',
++        status: json['status']?.toString() ?? '',
++        paymentMethod: json['payment_method']?.toString() ?? '',
++        payment: (json['payment'] as Map?)?.cast<String, dynamic>() ?? const {},
++        subscriptionUrl: json['subscription_url']?.toString(),
++        paymentTxid: json['payment_txid']?.toString(),
 +      );
 +}
 +
