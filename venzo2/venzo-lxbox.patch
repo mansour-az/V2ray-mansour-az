@@ -1197,10 +1197,18 @@ index 6289bc5..ef510f8 100644
        ),
      );
 diff --git a/app/lib/screens/home/widgets/home_drawer.dart b/app/lib/screens/home/widgets/home_drawer.dart
-index ff0e238..763df24 100644
+index ff0e238..0c929b8 100644
 --- a/app/lib/screens/home/widgets/home_drawer.dart
 +++ b/app/lib/screens/home/widgets/home_drawer.dart
-@@ -13,6 +13,7 @@ import '../../settings_screen.dart';
+@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
+ 
+ import '../../../controllers/home_controller.dart';
+ import '../../../controllers/subscription_controller.dart';
++import '../../../services/install_source.dart';
+ import '../../../services/subscription/auto_updater.dart';
+ import '../../about_screen.dart';
+ import '../../app_settings_screen.dart';
+@@ -13,6 +14,7 @@ import '../../settings_screen.dart';
  import '../../speed_test_screen.dart';
  import '../../stats_screen.dart';
  import '../../subscriptions_screen.dart';
@@ -1208,7 +1216,7 @@ index ff0e238..763df24 100644
  import '../../../services/l10n/locale_controller.dart';
  
  /// Навигационное меню (Drawer) главного экрана: переход в разделы приложения.
-@@ -42,7 +43,36 @@ class HomeDrawer extends StatelessWidget {
+@@ -42,7 +44,40 @@ class HomeDrawer extends StatelessWidget {
        child: SafeArea(
          child: ListView(
            children: [
@@ -1236,12 +1244,16 @@ index ff0e238..763df24 100644
 +                ],
 +              ),
 +            ),
-+            ListTile(
-+              leading: const Icon(Icons.workspace_premium_rounded),
-+              title: const Text('خرید اشتراک'),
-+              subtitle: const Text('پلن‌های اختصاصی Venzo'),
-+              onTap: () => _go(context, const VenzoStoreScreen()),
-+            ),
++            // External checkout is not allowed for Play-distributed digital
++            // subscriptions. Keep it only in the independent GitHub APK until
++            // Google Play Billing is configured.
++            if (InstallSourceResolver.current == InstallSource.github)
++              ListTile(
++                leading: const Icon(Icons.workspace_premium_rounded),
++                title: const Text('خرید اشتراک'),
++                subtitle: const Text('پلن‌های اختصاصی Venzo'),
++                onTap: () => _go(context, const VenzoStoreScreen()),
++              ),
 +            const Divider(),
              ListTile(
                leading: const Icon(Icons.dns_outlined),
@@ -2442,6 +2454,123 @@ index 0000000..fbce16f
 +    );
 +  });
 +}
+diff --git a/docs/PRIVACY_POLICY.md b/docs/PRIVACY_POLICY.md
+index 9f82f3a..b969fa6 100644
+--- a/docs/PRIVACY_POLICY.md
++++ b/docs/PRIVACY_POLICY.md
+@@ -1,23 +1,32 @@
+ # Privacy Policy
+ 
+-**Application:** L×Box (`com.leadaxe.lxbox`)
+-**Last updated:** 14 August 2026
++**Application:** Venzo VPN (`com.venzo.vpn`)
++**Last updated:** 21 August 2026
+ 
+ > Русская версия: [PRIVACY_POLICY.ru.md](PRIVACY_POLICY.ru.md)
+ 
+ ## Summary
+ 
+-L×Box is a VPN and proxy client. It does not have user accounts, does not
+-contain analytics or advertising SDKs, and does not send your browsing activity
+-anywhere.
++Venzo VPN is a VPN and proxy client. It does not contain analytics or
++advertising SDKs and does not send browsing activity to Venzo.
+ 
+-The developer operates no servers that carry your traffic. Every server L×Box
+-connects to is one **you** added. Your traffic goes to those servers under
+-whatever terms their operator sets — the developer has no visibility into it.
++The free connection mode downloads a public server list selected by Venzo.
++Users may also add their own server or subscription. Traffic is carried by the
++selected VPN server and is subject to that server operator's terms.
++
++The GitHub-distributed edition may offer Venzo subscription purchases. When a
++user starts a purchase, the Venzo Store API receives the plan identifier and
++the phone number or Telegram identifier entered by the user. Order status,
++payment reference, plan, expiry and provisioned subscription are retained only
++for customer support, fraud prevention and service delivery. Payment details
++are handled by the payment provider and are not stored in the app.
++
++The Google Play edition does not direct users to an external checkout. Any
++future in-app digital purchase in that edition will use Google Play Billing.
+ 
+ ## What the app stores on your device
+ 
+-All application data stays on your device:
++The following VPN application data stays on your device:
+ 
+ * Servers, subscriptions and their cached contents
+ * Routing rules, DNS settings, per-app selections
+@@ -29,16 +38,17 @@ can export a backup yourself; that file goes wherever you send it.
+ 
+ ## Network requests the app makes on its own
+ 
+-Two automatic requests, both plain HTTP GET with no request body:
++The app may make these network requests:
+ 
+ | Endpoint | Purpose | Frequency |
+ |---|---|---|
+ | `api.github.com` | Check whether a newer release exists | At most once per 24 hours |
+-| `raw.githubusercontent.com` | Fetch the support feed, donation options and the public-server manifest | On launch, cached |
++| `raw.githubusercontent.com` / `cdn.jsdelivr.net` | Fetch support content and public-server manifests | On launch or refresh, cached |
++| Venzo Store API | Fetch plans and, only when requested, create an order | When the store is opened or the purchase button is pressed |
+ 
+-These send the application version in the `User-Agent` header. As with any
+-network request, the receiving server sees your IP address. Both endpoints
+-belong to GitHub and are covered by
++The GitHub requests send the application version in the `User-Agent` header.
++As with any network request, the receiving service sees your IP address. GitHub
++requests are covered by
+ [GitHub's Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+ 
+ ## Network requests you trigger
+@@ -93,31 +103,29 @@ measure throughput.
+ 
+ ## What the app does not do
+ 
+-* No account, registration or login
+ * No analytics, telemetry or crash reporting services
+ * No advertising SDKs, and no use of the Advertising ID
+ * No collection of browsing history, visited domains or traffic contents
+-* No sale or sharing of personal data — none is collected to begin with
++* No sale of personal data
+ 
+ Crash logs are written to local storage. They are shared only if you explicitly
+ choose to send them, using the system share dialog, to a destination you pick.
+ 
+ ## Children
+ 
+-L×Box is not directed at children and collects no data from anyone, including
+-children.
++Venzo VPN is not directed at children.
+ 
+ ## Third parties
+ 
+-The developer shares nothing, because nothing is collected. Requests you or the
+-app make reach the operators of those endpoints — GitHub, Cloudflare, and the
+-subscription and rule-set providers you configured — each under its own terms.
++Requests you or the app make reach the operators of those endpoints — GitHub,
++Cloudflare, Venzo's commerce/provisioning providers, Google Play where
++applicable, and subscription/rule-set providers — each under its own terms.
+ 
+ ## Source code
+ 
+-L×Box is free software under the GNU General Public License v3. The complete
+-source is public, so every statement here can be verified:
+-<https://github.com/Leadaxe/LxBox>
++Venzo VPN is based on free software released under the GNU General Public
++License v3. Its source is published at:
++<https://github.com/mansour-az/V2ray-mansour-az>
+ 
+ ## Changes
+ 
+@@ -126,5 +134,5 @@ visible in the repository's commit log.
+ 
+ ## Contact
+ 
+-Questions about this policy: [leadaxe@gmail.com](mailto:leadaxe@gmail.com)
+-Issues: <https://github.com/Leadaxe/LxBox/issues>
++Support: <https://t.me/Venzzo_vpn>
++Channel: <https://t.me/venzo_vpn>
 diff --git a/docs/VENZO_STORE_API.md b/docs/VENZO_STORE_API.md
 new file mode 100644
 index 0000000..ced897d

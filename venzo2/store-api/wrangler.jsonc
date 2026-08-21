@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "venzo-store-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-21",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "SUPPORT_URL": "https://t.me/Venzzo_vpn",
+    "PASARGUARD_GROUP_IDS": ""
+  },
+  "secrets": {
+    "required": [
+      "PASARGUARD_BASE_URL",
+      "PASARGUARD_API_KEY",
+      "PROVISION_SECRET"
+    ]
+  }
+}
