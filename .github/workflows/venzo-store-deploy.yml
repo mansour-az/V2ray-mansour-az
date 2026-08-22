@@ -2,6 +2,12 @@ name: Deploy Venzo Store API
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - venzo-2.0
+    paths:
+      - venzo2/store-api/**
+      - .github/workflows/venzo-store-deploy.yml
 
 permissions:
   contents: read
