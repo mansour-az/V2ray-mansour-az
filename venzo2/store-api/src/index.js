@@ -2,6 +2,10 @@ const GIB = 1024 ** 3;
 const DAY = 86400;
 const ORDER_TTL_MS = 30 * 60 * 1000;
 const STORE_SETTINGS_KEY = "settings:store";
+const TRX_RATE_CACHE_KEY = "rate:trx-irr";
+const TRX_RATE_MAX_AGE_MS = 5 * 60 * 1000;
+const TRX_RATE_STALE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const TRX_RATE_SAFETY_FACTOR = 0.98;
 const DEFAULT_PRICE_PER_GB_IRR = 30_000;
 const VOLUMES = [5, 10, 20, 50, 100];
 const DURATIONS = [
@@ -39,7 +43,21 @@ export default {
         return json({ error: "UNAUTHORIZED" }, 401, noStoreHeaders());
       }
       if (request.method === "GET") {
-        return json({ settings: await storeSettings(env) }, 200, noStoreHeaders());
+        const settings = await storeSettings(env);
+        const rate = await trxRate(env);
+        return json(
+          {
+            settings: {
+              ...settings,
+              trx_rate_irr: rate.ok ? rate.rate_irr : 0,
+              trx_rate_market_irr: rate.ok ? rate.market_rate_irr : 0,
+              trx_rate_updated_at: rate.ok ? rate.updated_at : 0,
+              trx_rate_source: rate.ok ? rate.source : "unavailable",
+            },
+          },
+          200,
+          noStoreHeaders(),
+        );
       }
       return updateStoreSettings(request, env);
     }
@@ -102,7 +120,7 @@ async function createOrder(request, env) {
   if (!plan || !customer || method !== "trx") {
     return json({ error: "INVALID_ORDER" }, 400);
   }
-  const payment = paymentFor(method, plan, env, settings);
+  const payment = await paymentFor(method, plan, env);
   if (!payment.ok) return json({ error: payment.error }, 503);
 
   const id = crypto.randomUUID().toLowerCase();
@@ -320,12 +338,14 @@ async function pasarGuardGroups(env) {
     : { ok: false, error: "PASARGUARD_GROUPS_INVALID" };
 }
 
-function paymentFor(method, plan, env, settings) {
+async function paymentFor(method, plan, env) {
   if (method !== "trx") return { ok: false, error: "INVALID_PAYMENT_METHOD" };
   const wallet = clean(env.TRON_WALLET_ADDRESS, 64);
-  const rate = positiveInteger(settings.trx_rate_irr);
-  if (!wallet || !rate) return { ok: false, error: "CRYPTO_PAYMENT_NOT_CONFIGURED" };
-  const baseAtomic = Math.ceil((plan.price * 1_000_000) / rate);
+  const rate = await trxRate(env);
+  if (!wallet || !rate.ok) {
+    return { ok: false, error: "CRYPTO_PAYMENT_NOT_CONFIGURED" };
+  }
+  const baseAtomic = Math.ceil((plan.price * 1_000_000) / rate.rate_irr);
   const marker = crypto.getRandomValues(new Uint16Array(1))[0] % 1000;
   const amountAtomic = Math.ceil(baseAtomic / 1000) * 1000 + marker;
   return {
@@ -336,7 +356,10 @@ function paymentFor(method, plan, env, settings) {
       currency: "TRX",
       network: "TRON",
       wallet_address: wallet,
-      rate_irr: rate,
+      rate_irr: rate.rate_irr,
+      market_rate_irr: rate.market_rate_irr,
+      rate_source: rate.source,
+      rate_updated_at: rate.updated_at,
     },
   };
 }
@@ -392,6 +415,75 @@ async function findCryptoPayment(order, env) {
   return tx ? { txid: tx.txID, paid_at: Number(tx.block_timestamp) } : null;
 }
 
+async function trxRate(env) {
+  const now = Date.now();
+  let cached = null;
+  if (env.ORDERS) {
+    try {
+      cached = await env.ORDERS.get(TRX_RATE_CACHE_KEY, "json");
+    } catch {
+      cached = null;
+    }
+  }
+  const cachedRate = positiveInteger(cached?.rate_irr);
+  const cachedMarketRate = positiveInteger(cached?.market_rate_irr);
+  const cachedAt = Number(cached?.updated_at || 0);
+  if (cachedRate && cachedMarketRate && now - cachedAt <= TRX_RATE_MAX_AGE_MS) {
+    return {
+      ok: true,
+      rate_irr: cachedRate,
+      market_rate_irr: cachedMarketRate,
+      updated_at: cachedAt,
+      source: "nobitex-cache",
+    };
+  }
+
+  try {
+    const response = await fetch(
+      "https://apiv2.nobitex.ir/market/stats?srcCurrency=trx&dstCurrency=rls",
+      {
+        headers: { Accept: "application/json", "User-Agent": "Venzo-Store/1.0" },
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!response.ok) throw new Error(`HTTP_${response.status}`);
+    const payload = await response.json();
+    const marketRate = positiveInteger(payload?.stats?.["trx-rls"]?.bestBuy);
+    if (!marketRate) throw new Error("INVALID_TRX_RATE");
+    const rate = Math.floor(marketRate * TRX_RATE_SAFETY_FACTOR);
+    const value = {
+      rate_irr: rate,
+      market_rate_irr: marketRate,
+      updated_at: now,
+    };
+    if (env.ORDERS) {
+      await env.ORDERS.put(TRX_RATE_CACHE_KEY, JSON.stringify(value), {
+        expirationTtl: 24 * 60 * 60,
+      });
+    }
+    return { ok: true, ...value, source: "nobitex" };
+  } catch (error) {
+    console.error("TRX rate fetch failed", {
+      message: String(error?.message || "unknown").slice(0, 80),
+    });
+  }
+
+  if (
+    cachedRate &&
+    cachedMarketRate &&
+    now - cachedAt <= TRX_RATE_STALE_MAX_AGE_MS
+  ) {
+    return {
+      ok: true,
+      rate_irr: cachedRate,
+      market_rate_irr: cachedMarketRate,
+      updated_at: cachedAt,
+      source: "nobitex-stale-cache",
+    };
+  }
+  return { ok: false, error: "TRX_RATE_UNAVAILABLE" };
+}
+
 async function storeSettings(env) {
   let saved = null;
   if (env.ORDERS) {
@@ -404,7 +496,6 @@ async function storeSettings(env) {
   return {
     price_per_gb_irr:
       positiveInteger(saved?.price_per_gb_irr) || DEFAULT_PRICE_PER_GB_IRR,
-    trx_rate_irr: positiveInteger(saved?.trx_rate_irr),
     pasarguard_group_ids: numericIds(saved?.pasarguard_group_ids),
     updated_at: Number(saved?.updated_at || 0),
   };
@@ -433,20 +524,16 @@ async function updateStoreSettings(request, env) {
   const parsed = await readJson(request);
   if (!parsed.ok) return parsed.response;
   const pricePerGb = positiveInteger(parsed.value.price_per_gb_irr);
-  const trxRate = positiveInteger(parsed.value.trx_rate_irr);
   const groupIds = numericIds(parsed.value.pasarguard_group_ids);
   if (
     pricePerGb < 1_000 ||
     pricePerGb > 100_000_000 ||
-    trxRate < 1_000 ||
-    trxRate > 1_000_000_000 ||
     groupIds.length === 0
   ) {
     return json({ error: "INVALID_SETTINGS" }, 400, noStoreHeaders());
   }
   const settings = {
     price_per_gb_irr: pricePerGb,
-    trx_rate_irr: trxRate,
     pasarguard_group_ids: groupIds,
     updated_at: Date.now(),
   };
@@ -455,11 +542,11 @@ async function updateStoreSettings(request, env) {
 }
 
 async function paymentAvailability(env) {
-  const settings = await storeSettings(env);
+  const rate = await trxRate(env);
   return {
     trx: Boolean(
       env.TRON_WALLET_ADDRESS &&
-        settings.trx_rate_irr &&
+        rate.ok &&
         env.TRONGRID_API_KEY,
     ),
   };
@@ -486,14 +573,14 @@ function adminPage() {
 </head>
 <body><main>
   <h1>Venzo VPN Store</h1>
-  <p>قیمت پلن‌ها و نرخ تبدیل TRX را بدون انتشار نسخه جدید اپ تغییر دهید.</p>
+  <p>قیمت پلن‌ها را بدون انتشار نسخه جدید اپ تغییر دهید. نرخ TRX خودکار و زنده دریافت می‌شود.</p>
   <form id="settings">
     <label for="secret">رمز مدیریت</label>
     <input id="secret" type="password" autocomplete="off" required>
     <label for="price">قیمت هر گیگ به ریال</label>
     <input id="price" type="number" min="1000" step="1000" required>
-    <label for="rate">قیمت هر TRX به ریال</label>
-    <input id="rate" type="number" min="1000" step="1" required>
+    <label for="rate">نرخ خودکار هر TRX به ریال</label>
+    <input id="rate" type="number" readonly>
     <label>گروه‌های دسترسی پاسارگارد</label>
     <div id="groups"><span>پس از واردکردن رمز، «دریافت تنظیمات» را بزنید.</span></div>
     <div class="actions">
@@ -502,7 +589,7 @@ function adminPage() {
     </div>
   </form>
   <div id="status" role="status"></div>
-  <p class="note">رمز مدیریت در مرورگر ذخیره نمی‌شود. نرخ‌ها را فقط به ریال و بدون جداکننده وارد کنید.</p>
+  <p class="note">رمز مدیریت در مرورگر ذخیره نمی‌شود. قیمت هر گیگ را به ریال و بدون جداکننده وارد کنید.</p>
 </main>
 <script nonce="${nonce}">
   const secret=document.querySelector('#secret'),price=document.querySelector('#price'),rate=document.querySelector('#rate'),groups=document.querySelector('#groups'),status=document.querySelector('#status');
@@ -534,7 +621,7 @@ function adminPage() {
   document.querySelector('#settings').addEventListener('submit',async event=>{
     event.preventDefault();message('در حال ذخیره...');
     try{
-      const response=await fetch('/v1/internal/settings',{method:'PUT',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({price_per_gb_irr:Number(price.value),trx_rate_irr:Number(rate.value),pasarguard_group_ids:selectedGroups()})});
+      const response=await fetch('/v1/internal/settings',{method:'PUT',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({price_per_gb_irr:Number(price.value),pasarguard_group_ids:selectedGroups()})});
       if(!response.ok){message(response.status===401?'رمز مدیریت نادرست است.':'مقادیر واردشده معتبر نیست.','error');return}
       message('قیمت‌ها و گروه‌ها با موفقیت ذخیره شد.','ok');
     }catch{message('خطای ارتباط با سرور.','error')}
