@@ -82,7 +82,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: venzo2/store-api
           wranglerVersion: 4.45.0
-          command: deploy --config wrangler.deploy.jsonc
+          command: deploy --config wrangler.jsonc
           secrets: |
             PASARGUARD_BASE_URL
             PASARGUARD_API_KEY
