@@ -2,10 +2,26 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "venzo-store-api",
   "main": "src/index.js",
-  "compatibility_date": "2026-08-21",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "head_sampling_rate": 1
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ACCOUNT_LEDGER",
+        "class_name": "AccountLedger"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-account-ledger",
+      "new_sqlite_classes": ["AccountLedger"]
+    }
+  ],
   "kv_namespaces": [
     {
       "binding": "ORDERS"
