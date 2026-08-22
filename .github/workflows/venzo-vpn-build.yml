@@ -102,7 +102,7 @@ jobs:
         run: >-
           flutter build apk --release
           --target-platform android-arm64
-          --dart-define=VENZO_API_BASE=${{ vars.VENZO_API_BASE }}
+          --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --build-name 2.4.0
           --build-number 20400500
 
@@ -110,7 +110,7 @@ jobs:
         working-directory: venzo-src/app
         run: >-
           flutter build appbundle --release
-          --dart-define=VENZO_API_BASE=${{ vars.VENZO_API_BASE }}
+          --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --build-name 2.4.0
           --build-number 20400500
 
