@@ -43,6 +43,18 @@ export default {
       }
       return updateStoreSettings(request, env);
     }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/v1/internal/pasarguard-groups"
+    ) {
+      if (!(await authorized(request, env.PROVISION_SECRET))) {
+        return json({ error: "UNAUTHORIZED" }, 401, noStoreHeaders());
+      }
+      const result = await pasarGuardGroups(env);
+      return result.ok
+        ? json({ groups: result.groups }, 200, noStoreHeaders())
+        : json({ error: result.error }, 502, noStoreHeaders());
+    }
     if (request.method === "POST" && url.pathname === "/v1/orders") {
       return createOrder(request, env);
     }
@@ -207,10 +219,10 @@ async function provision(body, env) {
   if (!orderId || !customer || !plan) return { ok: false, error: "INVALID_ORDER" };
 
   const baseUrl = validHttpsOrigin(env.PASARGUARD_BASE_URL);
-  const groupIds = String(env.PASARGUARD_GROUP_IDS || "")
-    .split(",")
-    .map((value) => Number(value.trim()))
-    .filter((value) => Number.isSafeInteger(value) && value > 0);
+  const settings = await storeSettings(env);
+  const groupIds = settings.pasarguard_group_ids.length
+    ? settings.pasarguard_group_ids
+    : numericIds(String(env.PASARGUARD_GROUP_IDS || "").split(","));
   if (!baseUrl || groupIds.length === 0) {
     return { ok: false, error: "PASARGUARD_NOT_CONFIGURED" };
   }
@@ -279,6 +291,33 @@ async function pasarGuardAuth(baseUrl, env) {
   const token = await response.json();
   if (!token.access_token) return { ok: false, error: "PASARGUARD_TOKEN_INVALID" };
   return { ok: true, headers: { Authorization: `Bearer ${token.access_token}` } };
+}
+
+async function pasarGuardGroups(env) {
+  const baseUrl = validHttpsOrigin(env.PASARGUARD_BASE_URL);
+  if (!baseUrl) return { ok: false, error: "PASARGUARD_NOT_CONFIGURED" };
+  const auth = await pasarGuardAuth(baseUrl, env);
+  if (!auth.ok) return auth;
+  const response = await fetch(`${baseUrl}/api/groups/simple`, {
+    headers: { Accept: "application/json", ...auth.headers },
+  });
+  if (!response.ok) return { ok: false, error: "PASARGUARD_GROUPS_FAILED" };
+  const payload = await response.json();
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.groups)
+      ? payload.groups
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.data?.groups)
+          ? payload.data.groups
+          : [];
+  const groups = rows
+    .map((row) => ({ id: positiveInteger(row?.id), name: clean(row?.name, 120) }))
+    .filter((row) => row.id && row.name);
+  return groups.length
+    ? { ok: true, groups }
+    : { ok: false, error: "PASARGUARD_GROUPS_INVALID" };
 }
 
 function paymentFor(method, plan, env, settings) {
@@ -366,6 +405,7 @@ async function storeSettings(env) {
     price_per_gb_irr:
       positiveInteger(saved?.price_per_gb_irr) || DEFAULT_PRICE_PER_GB_IRR,
     trx_rate_irr: positiveInteger(saved?.trx_rate_irr),
+    pasarguard_group_ids: numericIds(saved?.pasarguard_group_ids),
     updated_at: Number(saved?.updated_at || 0),
   };
 }
@@ -394,17 +434,20 @@ async function updateStoreSettings(request, env) {
   if (!parsed.ok) return parsed.response;
   const pricePerGb = positiveInteger(parsed.value.price_per_gb_irr);
   const trxRate = positiveInteger(parsed.value.trx_rate_irr);
+  const groupIds = numericIds(parsed.value.pasarguard_group_ids);
   if (
     pricePerGb < 1_000 ||
     pricePerGb > 100_000_000 ||
     trxRate < 1_000 ||
-    trxRate > 1_000_000_000
+    trxRate > 1_000_000_000 ||
+    groupIds.length === 0
   ) {
     return json({ error: "INVALID_SETTINGS" }, 400, noStoreHeaders());
   }
   const settings = {
     price_per_gb_irr: pricePerGb,
     trx_rate_irr: trxRate,
+    pasarguard_group_ids: groupIds,
     updated_at: Date.now(),
   };
   await env.ORDERS.put(STORE_SETTINGS_KEY, JSON.stringify(settings));
@@ -437,6 +480,7 @@ function adminPage() {
     h1{margin:0 0 8px;color:var(--red);font-size:25px}p{color:var(--muted);line-height:1.8;margin:0 0 20px}
     label{display:block;margin:14px 0 7px;font-weight:700}input{width:100%;background:#0e0f12;color:#fff;border:1px solid #34363e;border-radius:12px;padding:13px;font-size:16px;direction:ltr}
     .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}button{border:0;border-radius:12px;padding:13px;font-weight:800;cursor:pointer}button.primary{background:var(--red);color:#fff}button.secondary{background:#30323a;color:#fff}
+    #groups{display:grid;gap:8px;margin-top:8px}.group{display:flex;align-items:center;gap:10px;background:#0e0f12;border:1px solid #34363e;border-radius:12px;padding:12px}.group input{width:auto}.group label{margin:0;font-weight:600}
     #status{min-height:26px;margin-top:14px;color:#ffcf70}.note{font-size:13px;margin-top:18px}.ok{color:#63e6a4!important}.error{color:#ff808e!important}
   </style>
 </head>
@@ -450,6 +494,8 @@ function adminPage() {
     <input id="price" type="number" min="1000" step="1000" required>
     <label for="rate">قیمت هر TRX به ریال</label>
     <input id="rate" type="number" min="1000" step="1" required>
+    <label>گروه‌های دسترسی پاسارگارد</label>
+    <div id="groups"><span>پس از واردکردن رمز، «دریافت تنظیمات» را بزنید.</span></div>
     <div class="actions">
       <button class="secondary" type="button" id="load">دریافت قیمت فعلی</button>
       <button class="primary" type="submit">ذخیره تغییرات</button>
@@ -459,23 +505,38 @@ function adminPage() {
   <p class="note">رمز مدیریت در مرورگر ذخیره نمی‌شود. نرخ‌ها را فقط به ریال و بدون جداکننده وارد کنید.</p>
 </main>
 <script nonce="${nonce}">
-  const secret=document.querySelector('#secret'),price=document.querySelector('#price'),rate=document.querySelector('#rate'),status=document.querySelector('#status');
+  const secret=document.querySelector('#secret'),price=document.querySelector('#price'),rate=document.querySelector('#rate'),groups=document.querySelector('#groups'),status=document.querySelector('#status');
   const headers=()=>({'Accept':'application/json','Authorization':'Bearer '+secret.value});
   const message=(text,kind='')=>{status.textContent=text;status.className=kind};
+  const selectedGroups=()=>[...groups.querySelectorAll('input:checked')].map(input=>Number(input.value));
+  function renderGroups(rows,selected){
+    groups.replaceChildren();
+    for(const row of rows){
+      const wrap=document.createElement('div');wrap.className='group';
+      const input=document.createElement('input');input.type='checkbox';input.value=String(row.id);input.id='group-'+row.id;input.checked=selected.length===0||selected.includes(row.id);
+      const label=document.createElement('label');label.htmlFor=input.id;label.textContent=row.name;
+      wrap.append(input,label);groups.append(wrap);
+    }
+  }
   async function load(){
     if(!secret.value){message('ابتدا رمز مدیریت را وارد کنید.','error');return}
     message('در حال دریافت...');
-    const response=await fetch('/v1/internal/settings',{headers:headers(),cache:'no-store'});
-    if(!response.ok){message(response.status===401?'رمز مدیریت نادرست است.':'دریافت تنظیمات ناموفق بود.','error');return}
-    const body=await response.json();price.value=body.settings.price_per_gb_irr;rate.value=body.settings.trx_rate_irr||'';message('تنظیمات فعلی دریافت شد.','ok');
+    const [settingsResponse,groupsResponse]=await Promise.all([
+      fetch('/v1/internal/settings',{headers:headers(),cache:'no-store'}),
+      fetch('/v1/internal/pasarguard-groups',{headers:headers(),cache:'no-store'})
+    ]);
+    if(!settingsResponse.ok||!groupsResponse.ok){message(settingsResponse.status===401||groupsResponse.status===401?'رمز مدیریت نادرست است.':'دریافت تنظیمات یا گروه‌ها ناموفق بود.','error');return}
+    const body=await settingsResponse.json(),groupBody=await groupsResponse.json();
+    price.value=body.settings.price_per_gb_irr;rate.value=body.settings.trx_rate_irr||'';
+    renderGroups(groupBody.groups,body.settings.pasarguard_group_ids||[]);message('تنظیمات و گروه‌ها دریافت شد.','ok');
   }
   document.querySelector('#load').addEventListener('click',()=>load().catch(()=>message('خطای ارتباط با سرور.','error')));
   document.querySelector('#settings').addEventListener('submit',async event=>{
     event.preventDefault();message('در حال ذخیره...');
     try{
-      const response=await fetch('/v1/internal/settings',{method:'PUT',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({price_per_gb_irr:Number(price.value),trx_rate_irr:Number(rate.value)})});
+      const response=await fetch('/v1/internal/settings',{method:'PUT',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({price_per_gb_irr:Number(price.value),trx_rate_irr:Number(rate.value),pasarguard_group_ids:selectedGroups()})});
       if(!response.ok){message(response.status===401?'رمز مدیریت نادرست است.':'مقادیر واردشده معتبر نیست.','error');return}
-      message('قیمت‌ها با موفقیت ذخیره شد.','ok');
+      message('قیمت‌ها و گروه‌ها با موفقیت ذخیره شد.','ok');
     }catch{message('خطای ارتباط با سرور.','error')}
   });
 </script></body></html>`;
@@ -580,6 +641,11 @@ function digits(value, maxLength) {
 function positiveInteger(value) {
   const result = Number(value);
   return Number.isSafeInteger(result) && result > 0 ? result : 0;
+}
+
+function numericIds(values) {
+  const rows = Array.isArray(values) ? values : [];
+  return [...new Set(rows.map(positiveInteger).filter(Boolean))].slice(0, 100);
 }
 
 function validHttpsOrigin(value) {
