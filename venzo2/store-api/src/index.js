@@ -1,3 +1,5 @@
+import { DurableObject } from "cloudflare:workers";
+
 const GIB = 1024 ** 3;
 const DAY = 86400;
 const ORDER_TTL_MS = 30 * 60 * 1000;
@@ -13,6 +15,130 @@ const DURATIONS = [
   { months: 2, days: 60, label: "دوماهه" },
   { months: 3, days: 90, label: "سه‌ماهه" },
 ];
+
+export class AccountLedger extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    ctx.blockConcurrencyWhile(async () => {
+      this.sql.exec(`
+        CREATE TABLE IF NOT EXISTS account (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          customer TEXT NOT NULL,
+          token_hash TEXT NOT NULL,
+          balance_irr INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          subscription_json TEXT
+        );
+        CREATE TABLE IF NOT EXISTS ledger (
+          reference TEXT PRIMARY KEY,
+          amount_irr INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          description TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+      `);
+    });
+  }
+
+  initialize(customer, tokenHash) {
+    const now = Date.now();
+    this.sql.exec(
+      "INSERT OR IGNORE INTO account(singleton,customer,token_hash,balance_irr,created_at,updated_at) VALUES(1,?,?,0,?,?)",
+      customer,
+      tokenHash,
+      now,
+      now,
+    );
+    return this.snapshotByHash(tokenHash);
+  }
+
+  snapshotByHash(tokenHash) {
+    const account = this.sql.exec(
+      "SELECT customer,token_hash,balance_irr,created_at,updated_at,subscription_json FROM account WHERE singleton=1",
+    ).toArray()[0];
+    if (!account || !timingSafeTextEqual(account.token_hash, tokenHash)) {
+      return { ok: false, error: "UNAUTHORIZED" };
+    }
+    const transactions = this.sql.exec(
+      "SELECT reference,amount_irr,kind,description,created_at FROM ledger ORDER BY created_at DESC LIMIT 30",
+    ).toArray();
+    return {
+      ok: true,
+      account: {
+        customer: account.customer,
+        balance_irr: Number(account.balance_irr || 0),
+        created_at: Number(account.created_at || 0),
+        updated_at: Number(account.updated_at || 0),
+        subscription: parseStoredJson(account.subscription_json),
+        transactions,
+      },
+    };
+  }
+
+  credit(tokenHash, amountIrr, reference, description) {
+    return this.ctx.storage.transactionSync(() => {
+      const auth = this.snapshotByHash(tokenHash);
+      if (!auth.ok) return auth;
+      const now = Date.now();
+      const written = this.sql.exec(
+        "INSERT OR IGNORE INTO ledger(reference,amount_irr,kind,description,created_at) VALUES(?,?,'credit',?,?)",
+        reference,
+        amountIrr,
+        description,
+        now,
+      );
+      if (written.rowsWritten > 0) {
+        this.sql.exec(
+          "UPDATE account SET balance_irr=balance_irr+?,updated_at=? WHERE singleton=1",
+          amountIrr,
+          now,
+        );
+      }
+      return this.snapshotByHash(tokenHash);
+    });
+  }
+
+  debit(tokenHash, amountIrr, reference, description) {
+    return this.ctx.storage.transactionSync(() => {
+      const auth = this.snapshotByHash(tokenHash);
+      if (!auth.ok) return auth;
+      const exists = this.sql.exec(
+        "SELECT reference FROM ledger WHERE reference=?",
+        reference,
+      ).toArray()[0];
+      if (exists) return { ok: true, account: auth.account, duplicate: true };
+      const balance = Number(auth.account.balance_irr || 0);
+      if (balance < amountIrr) return { ok: false, error: "INSUFFICIENT_BALANCE" };
+      const now = Date.now();
+      this.sql.exec(
+        "INSERT INTO ledger(reference,amount_irr,kind,description,created_at) VALUES(?,?,'debit',?,?)",
+        reference,
+        -amountIrr,
+        description,
+        now,
+      );
+      this.sql.exec(
+        "UPDATE account SET balance_irr=balance_irr-?,updated_at=? WHERE singleton=1",
+        amountIrr,
+        now,
+      );
+      return this.snapshotByHash(tokenHash);
+    });
+  }
+
+  setSubscription(tokenHash, subscription) {
+    const auth = this.snapshotByHash(tokenHash);
+    if (!auth.ok) return auth;
+    this.sql.exec(
+      "UPDATE account SET subscription_json=?,updated_at=? WHERE singleton=1",
+      JSON.stringify(subscription),
+      Date.now(),
+    );
+    return this.snapshotByHash(tokenHash);
+  }
+}
 
 export default {
   async fetch(request, env) {
@@ -39,6 +165,15 @@ export default {
         200,
         publicHeaders(),
       );
+    }
+    if (request.method === "POST" && url.pathname === "/v1/account/register") {
+      return registerAccount(request, env);
+    }
+    if (request.method === "GET" && url.pathname === "/v1/account") {
+      return getAccount(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/v1/wallet/topups") {
+      return createWalletTopup(request, env);
     }
     if (request.method === "GET" && url.pathname === "/admin") {
       return adminPage();
@@ -126,6 +261,80 @@ export default {
   },
 };
 
+async function registerAccount(request, env) {
+  if (!env.ACCOUNT_LEDGER) return json({ error: "ACCOUNTS_NOT_CONFIGURED" }, 503);
+  const parsed = await readJson(request);
+  if (!parsed.ok) return parsed.response;
+  const customer = clean(parsed.value.customer, 120);
+  if (!customer) return json({ error: "INVALID_CUSTOMER" }, 400, noStoreHeaders());
+  const accountId = crypto.randomUUID().toLowerCase();
+  const token = randomToken(32);
+  const tokenHash = await sha256(token);
+  const stub = env.ACCOUNT_LEDGER.getByName(accountId);
+  const created = await stub.initialize(customer, tokenHash);
+  if (!created.ok) return json({ error: created.error }, 500, noStoreHeaders());
+  return json(
+    { account: publicAccount(created.account, accountId), account_token: token },
+    201,
+    noStoreHeaders(),
+  );
+}
+
+async function getAccount(request, env) {
+  const auth = await requiredAccountAuth(request, env);
+  if (!auth.ok) return json({ error: auth.error }, auth.status, noStoreHeaders());
+  let snapshot = await auth.stub.snapshotByHash(auth.tokenHash);
+  if (!snapshot.ok) return json({ error: snapshot.error }, 401, noStoreHeaders());
+  const subscription = snapshot.account.subscription;
+  if (subscription?.username) {
+    const live = await pasarGuardUser(subscription.username, env);
+    if (live.ok) {
+      const normalized = subscriptionFromPasarGuard(live.user, subscription.subscription_url);
+      snapshot = await auth.stub.setSubscription(auth.tokenHash, normalized);
+    }
+  }
+  return json({ account: publicAccount(snapshot.account, auth.accountId) }, 200, noStoreHeaders());
+}
+
+async function createWalletTopup(request, env) {
+  if (!env.ORDERS) return json({ error: "STORE_NOT_CONFIGURED" }, 503);
+  const auth = await requiredAccountAuth(request, env);
+  if (!auth.ok) return json({ error: auth.error }, auth.status, noStoreHeaders());
+  const parsed = await readJson(request);
+  if (!parsed.ok) return parsed.response;
+  const amount = positiveInteger(parsed.value.amount_irr);
+  const method = String(parsed.value.payment_method || "");
+  if (amount < 50_000 || amount > 100_000_000 || !["trx", "card", "rial_gateway"].includes(method)) {
+    return json({ error: "INVALID_TOPUP" }, 400, noStoreHeaders());
+  }
+  const payment = await paymentFor(method, { price: amount }, env);
+  if (!payment.ok) return json({ error: payment.error }, 503, noStoreHeaders());
+  const storedPayment = method === "card"
+    ? { amount: payment.value.amount, currency: payment.value.currency, card_last4: payment.value.card_number.slice(-4) }
+    : payment.value;
+  const id = crypto.randomUUID().toLowerCase();
+  const clientSecret = randomToken(32);
+  const now = Date.now();
+  const order = {
+    id,
+    plan_id: "wallet-topup",
+    customer: auth.account.customer,
+    account_id: auth.accountId,
+    account_token_hash: auth.tokenHash,
+    purpose: "wallet_topup",
+    payment_method: method,
+    status: "awaiting_payment",
+    price_irr: amount,
+    payment: storedPayment,
+    client_secret_hash: await sha256(clientSecret),
+    created_at: now,
+    expires_at: now + ORDER_TTL_MS,
+    last_checked_at: 0,
+  };
+  await saveOrder(env, order);
+  return json({ order: publicOrder(order, env), client_secret: clientSecret }, 201, noStoreHeaders());
+}
+
 async function createOrder(request, env) {
   if (!env.ORDERS) return json({ error: "STORE_NOT_CONFIGURED" }, 503);
   const parsed = await readJson(request);
@@ -134,10 +343,18 @@ async function createOrder(request, env) {
   const plan = plansFrom(settings).find((item) => item.id === parsed.value.plan_id);
   const customer = clean(parsed.value.customer, 120);
   const method = String(parsed.value.payment_method || "");
-  if (!plan || !customer || !["trx", "card", "rial_gateway"].includes(method)) {
+  const accountAuth = await optionalAccountAuth(request, env);
+  const effectiveCustomer = accountAuth.ok ? accountAuth.account.customer : customer;
+  const renewUsername = clean(parsed.value.renew_username, 64);
+  if (!plan || !effectiveCustomer || !["trx", "card", "rial_gateway", "wallet"].includes(method)) {
     return json({ error: "INVALID_ORDER" }, 400);
   }
-  const payment = await paymentFor(method, plan, env);
+  if ((method === "wallet" || renewUsername) && !accountAuth.ok) {
+    return json({ error: "ACCOUNT_REQUIRED" }, 401, noStoreHeaders());
+  }
+  const payment = method === "wallet"
+    ? { ok: true, value: { amount: String(plan.price), currency: "IRR" } }
+    : await paymentFor(method, plan, env);
   if (!payment.ok) return json({ error: payment.error }, 503);
   const storedPayment = method === "card"
     ? {
@@ -153,7 +370,11 @@ async function createOrder(request, env) {
   const order = {
     id,
     plan_id: plan.id,
-    customer,
+    customer: effectiveCustomer,
+    account_id: accountAuth.ok ? accountAuth.accountId : null,
+    account_token_hash: accountAuth.ok ? accountAuth.tokenHash : null,
+    purpose: renewUsername ? "renewal" : "subscription",
+    renew_username: renewUsername || null,
     payment_method: method,
     status: "awaiting_payment",
     price_irr: plan.price,
@@ -163,6 +384,32 @@ async function createOrder(request, env) {
     expires_at: now + ORDER_TTL_MS,
     last_checked_at: 0,
   };
+  if (method === "wallet") {
+    const debit = await accountAuth.stub.debit(
+      accountAuth.tokenHash,
+      plan.price,
+      `order:${id}`,
+      renewUsername ? `تمدید ${plan.title}` : `خرید ${plan.title}`,
+    );
+    if (!debit.ok) return json({ error: debit.error }, 409, noStoreHeaders());
+    order.status = "paid";
+    order.paid_at = now;
+    const fulfilled = await fulfillOrder(order, env);
+    if (fulfilled.status === "provisioning_failed") {
+      await accountAuth.stub.credit(
+        accountAuth.tokenHash,
+        plan.price,
+        `refund:${id}`,
+        "بازگشت وجه سفارش ناموفق",
+      );
+    }
+    await saveOrder(env, fulfilled);
+    return json(
+      { order: publicOrder(fulfilled, env), client_secret: clientSecret },
+      201,
+      noStoreHeaders(),
+    );
+  }
   await saveOrder(env, order);
   return json(
     { order: publicOrder(order, env), client_secret: clientSecret },
@@ -261,10 +508,35 @@ async function listCardOrders(env) {
 }
 
 async function fulfillOrder(order, env) {
-  const result = await provision(
-    { order_id: order.id, plan_id: order.plan_id, customer: order.customer },
-    env,
-  );
+  if (order.purpose === "wallet_topup") {
+    const account = accountStubForOrder(order, env);
+    if (!account) {
+      order.status = "provisioning_failed";
+      order.provisioning_error = "ACCOUNT_NOT_CONFIGURED";
+      return order;
+    }
+    const credited = await account.stub.credit(
+      order.account_token_hash,
+      order.price_irr,
+      `topup:${order.id}`,
+      "شارژ کیف پول Venzo",
+    );
+    if (!credited.ok) {
+      order.status = "provisioning_failed";
+      order.provisioning_error = credited.error;
+      return order;
+    }
+    order.status = "fulfilled";
+    order.fulfilled_at = Date.now();
+    order.wallet_balance_irr = credited.account.balance_irr;
+    return order;
+  }
+  const result = order.purpose === "renewal"
+    ? await renewProvision(order, env)
+    : await provision(
+        { order_id: order.id, plan_id: order.plan_id, customer: order.customer },
+        env,
+      );
   if (!result.ok) {
     order.status = "provisioning_failed";
     order.provisioning_error = result.error;
@@ -274,6 +546,17 @@ async function fulfillOrder(order, env) {
   order.fulfilled_at = Date.now();
   order.subscription_url = result.value.subscription_url;
   order.pasarguard_username = result.value.username;
+  order.subscription = result.value.subscription || null;
+  const account = accountStubForOrder(order, env);
+  if (account) {
+    await account.stub.setSubscription(
+      order.account_token_hash,
+      result.value.subscription || {
+        username: result.value.username,
+        subscription_url: result.value.subscription_url,
+      },
+    );
+  }
   return order;
 }
 
@@ -330,8 +613,70 @@ async function provision(body, env) {
       username: user.username || username,
       subscription_url: user.subscription_url,
       plan_id: plan.id,
+      subscription: subscriptionFromPasarGuard(user, user.subscription_url),
     },
   };
+}
+
+async function renewProvision(order, env) {
+  const plan = (await plansFor(env)).find((item) => item.id === order.plan_id);
+  if (!plan || !order.renew_username) return { ok: false, error: "INVALID_RENEWAL" };
+  const current = await pasarGuardUser(order.renew_username, env);
+  if (!current.ok) return current;
+  const baseUrl = validHttpsOrigin(env.PASARGUARD_BASE_URL);
+  const auth = await pasarGuardAuth(baseUrl, env);
+  if (!auth.ok) return auth;
+  const now = Math.floor(Date.now() / 1000);
+  const currentExpire = epochSeconds(current.user.expire);
+  const currentLimit = Math.max(0, Number(current.user.data_limit || 0));
+  const used = Math.max(0, Number(current.user.used_traffic || 0));
+  const dataLimit = Math.max(currentLimit, used) + plan.data_gb * GIB;
+  const payload = {
+    status: "active",
+    expire: Math.max(now, currentExpire) + plan.days * DAY,
+    data_limit: dataLimit,
+    data_limit_reset_strategy: "no_reset",
+  };
+  const response = await fetch(
+    `${baseUrl}/api/user/by-id/${encodeURIComponent(String(current.user.id))}`,
+    {
+      method: "PUT",
+      headers: { Accept: "application/json", "Content-Type": "application/json", ...auth.headers },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    console.error("PasarGuard renewal failed", { status: response.status, order_id: order.id });
+    return { ok: false, error: "RENEWAL_FAILED" };
+  }
+  const user = await response.json();
+  const subscriptionUrl = String(user.subscription_url || current.user.subscription_url || "");
+  if (!subscriptionUrl.startsWith("https://")) {
+    return { ok: false, error: "INVALID_SUBSCRIPTION_URL" };
+  }
+  return {
+    ok: true,
+    value: {
+      order_id: order.id,
+      username: user.username || order.renew_username,
+      subscription_url: subscriptionUrl,
+      plan_id: plan.id,
+      subscription: subscriptionFromPasarGuard(user, subscriptionUrl),
+    },
+  };
+}
+
+async function pasarGuardUser(username, env) {
+  const baseUrl = validHttpsOrigin(env.PASARGUARD_BASE_URL);
+  if (!baseUrl) return { ok: false, error: "PASARGUARD_NOT_CONFIGURED" };
+  const auth = await pasarGuardAuth(baseUrl, env);
+  if (!auth.ok) return auth;
+  const response = await fetch(
+    `${baseUrl}/api/user/by-username/${encodeURIComponent(username)}`,
+    { headers: { Accept: "application/json", ...auth.headers } },
+  );
+  if (!response.ok) return { ok: false, error: "PASARGUARD_USER_FAILED" };
+  return { ok: true, user: await response.json() };
 }
 
 async function pasarGuardAuth(baseUrl, env) {
@@ -767,6 +1112,7 @@ function publicOrder(order, env) {
     payment: order.payment,
     created_at: order.created_at,
     expires_at: order.expires_at,
+    purpose: order.purpose || "subscription",
   };
   if (order.payment_method === "card" && env) {
     const cardNumber = digits(env.CARD_NUMBER, 16);
@@ -781,8 +1127,89 @@ function publicOrder(order, env) {
   }
   if (order.payment_txid) value.payment_txid = order.payment_txid;
   if (order.subscription_url) value.subscription_url = order.subscription_url;
+  if (order.subscription) value.subscription = order.subscription;
+  if (Number.isSafeInteger(order.wallet_balance_irr)) {
+    value.wallet_balance_irr = order.wallet_balance_irr;
+  }
   if (order.provisioning_error) value.provisioning_error = order.provisioning_error;
   return value;
+}
+
+async function optionalAccountAuth(request, env) {
+  const accountId = clean(request.headers.get("x-venzo-account"), 80);
+  const supplied = request.headers.get("authorization") || "";
+  if (!accountId || !supplied.startsWith("Bearer ") || !env.ACCOUNT_LEDGER) {
+    return { ok: false, error: "ACCOUNT_REQUIRED", status: 401 };
+  }
+  const token = supplied.slice(7);
+  if (token.length < 40 || token.length > 160) {
+    return { ok: false, error: "UNAUTHORIZED", status: 401 };
+  }
+  const tokenHash = await sha256(token);
+  const stub = env.ACCOUNT_LEDGER.getByName(accountId);
+  const snapshot = await stub.snapshotByHash(tokenHash);
+  if (!snapshot.ok) return { ok: false, error: "UNAUTHORIZED", status: 401 };
+  return { ok: true, accountId, tokenHash, stub, account: snapshot.account };
+}
+
+async function requiredAccountAuth(request, env) {
+  return optionalAccountAuth(request, env);
+}
+
+function accountStubForOrder(order, env) {
+  if (!order.account_id || !order.account_token_hash || !env.ACCOUNT_LEDGER) return null;
+  return { stub: env.ACCOUNT_LEDGER.getByName(order.account_id) };
+}
+
+function publicAccount(account, id) {
+  return {
+    id,
+    customer: account.customer,
+    balance_irr: Number(account.balance_irr || 0),
+    created_at: Number(account.created_at || 0),
+    updated_at: Number(account.updated_at || 0),
+    subscription: account.subscription || null,
+    transactions: Array.isArray(account.transactions) ? account.transactions : [],
+  };
+}
+
+function subscriptionFromPasarGuard(user, fallbackUrl = "") {
+  return {
+    id: positiveInteger(user?.id),
+    username: clean(user?.username, 64),
+    status: clean(user?.status, 32) || "unknown",
+    subscription_url: String(user?.subscription_url || fallbackUrl || ""),
+    expire_at: epochSeconds(user?.expire),
+    data_limit_bytes: Math.max(0, Number(user?.data_limit || 0)),
+    used_traffic_bytes: Math.max(0, Number(user?.used_traffic || 0)),
+    updated_at: Date.now(),
+  };
+}
+
+function epochSeconds(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 10_000_000_000 ? Math.floor(value / 1000) : Math.floor(value);
+  }
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
+}
+
+function parseStoredJson(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+}
+
+function timingSafeTextEqual(left, right) {
+  const a = String(left || "");
+  const b = String(right || "");
+  if (a.length !== b.length || a.length === 0) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 async function readJson(request) {
@@ -859,7 +1286,7 @@ function validHttpsOrigin(value) {
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Venzo-Account",
     "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
     "Access-Control-Max-Age": "86400",
   };
