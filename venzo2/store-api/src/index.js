@@ -1,24 +1,14 @@
 const GIB = 1024 ** 3;
 const DAY = 86400;
 const ORDER_TTL_MS = 30 * 60 * 1000;
+const STORE_SETTINGS_KEY = "settings:store";
+const DEFAULT_PRICE_PER_GB_IRR = 30_000;
 const VOLUMES = [5, 10, 20, 50, 100];
 const DURATIONS = [
   { months: 1, days: 30, label: "یک‌ماهه" },
   { months: 2, days: 60, label: "دوماهه" },
   { months: 3, days: 90, label: "سه‌ماهه" },
 ];
-
-const PLANS = DURATIONS.flatMap((duration) =>
-  VOLUMES.map((dataGb) => ({
-    id: `${duration.months}m-${dataGb}gb`,
-    title: `${duration.label} ${dataGb} گیگ`,
-    price: dataGb * duration.months * 30_000,
-    currency: "IRR",
-    days: duration.days,
-    data_gb: dataGb,
-    devices: "unlimited",
-  })),
-);
 
 export default {
   async fetch(request, env) {
@@ -32,11 +22,26 @@ export default {
         service: "venzo-store-api",
         store: Boolean(env.ORDERS),
         pasarguard: Boolean(validHttpsOrigin(env.PASARGUARD_BASE_URL)),
-        payments: paymentAvailability(env),
+        payments: await paymentAvailability(env),
       });
     }
     if (request.method === "GET" && url.pathname === "/v1/plans") {
-      return json({ plans: PLANS }, 200, publicHeaders());
+      return json({ plans: await plansFor(env) }, 200, publicHeaders());
+    }
+    if (request.method === "GET" && url.pathname === "/admin") {
+      return adminPage();
+    }
+    if (
+      ["GET", "PUT"].includes(request.method) &&
+      url.pathname === "/v1/internal/settings"
+    ) {
+      if (!(await authorized(request, env.PROVISION_SECRET))) {
+        return json({ error: "UNAUTHORIZED" }, 401, noStoreHeaders());
+      }
+      if (request.method === "GET") {
+        return json({ settings: await storeSettings(env) }, 200, noStoreHeaders());
+      }
+      return updateStoreSettings(request, env);
     }
     if (request.method === "POST" && url.pathname === "/v1/orders") {
       return createOrder(request, env);
@@ -78,13 +83,14 @@ async function createOrder(request, env) {
   if (!env.ORDERS) return json({ error: "STORE_NOT_CONFIGURED" }, 503);
   const parsed = await readJson(request);
   if (!parsed.ok) return parsed.response;
-  const plan = PLANS.find((item) => item.id === parsed.value.plan_id);
+  const settings = await storeSettings(env);
+  const plan = plansFrom(settings).find((item) => item.id === parsed.value.plan_id);
   const customer = clean(parsed.value.customer, 120);
   const method = String(parsed.value.payment_method || "");
-  if (!plan || !customer || !["usdt_trc20", "trx", "card"].includes(method)) {
+  if (!plan || !customer || method !== "trx") {
     return json({ error: "INVALID_ORDER" }, 400);
   }
-  const payment = paymentFor(method, plan, env);
+  const payment = paymentFor(method, plan, env, settings);
   if (!payment.ok) return json({ error: payment.error }, 503);
 
   const id = crypto.randomUUID().toLowerCase();
@@ -197,7 +203,7 @@ async function fulfillOrder(order, env) {
 async function provision(body, env) {
   const orderId = clean(body.order_id, 80);
   const customer = clean(body.customer, 120);
-  const plan = PLANS.find((item) => item.id === body.plan_id);
+  const plan = (await plansFor(env)).find((item) => item.id === body.plan_id);
   if (!orderId || !customer || !plan) return { ok: false, error: "INVALID_ORDER" };
 
   const baseUrl = validHttpsOrigin(env.PASARGUARD_BASE_URL);
@@ -275,28 +281,10 @@ async function pasarGuardAuth(baseUrl, env) {
   return { ok: true, headers: { Authorization: `Bearer ${token.access_token}` } };
 }
 
-function paymentFor(method, plan, env) {
-  if (method === "card") {
-    const cardNumber = digits(env.CARD_NUMBER, 24);
-    const holder = clean(env.CARD_HOLDER, 120);
-    if (cardNumber.length < 16 || !holder) {
-      return { ok: false, error: "CARD_PAYMENT_NOT_CONFIGURED" };
-    }
-    return {
-      ok: true,
-      value: {
-        amount: plan.price,
-        currency: "IRR",
-        card_number: cardNumber,
-        card_holder: holder,
-        review: "manual",
-      },
-    };
-  }
-
-  const usdt = method === "usdt_trc20";
+function paymentFor(method, plan, env, settings) {
+  if (method !== "trx") return { ok: false, error: "INVALID_PAYMENT_METHOD" };
   const wallet = clean(env.TRON_WALLET_ADDRESS, 64);
-  const rate = positiveInteger(usdt ? env.USDT_IRR : env.TRX_IRR);
+  const rate = positiveInteger(settings.trx_rate_irr);
   if (!wallet || !rate) return { ok: false, error: "CRYPTO_PAYMENT_NOT_CONFIGURED" };
   const baseAtomic = Math.ceil((plan.price * 1_000_000) / rate);
   const marker = crypto.getRandomValues(new Uint16Array(1))[0] % 1000;
@@ -306,7 +294,7 @@ function paymentFor(method, plan, env) {
     value: {
       amount: (amountAtomic / 1_000_000).toFixed(6),
       amount_atomic: String(amountAtomic),
-      currency: usdt ? "USDT" : "TRX",
+      currency: "TRX",
       network: "TRON",
       wallet_address: wallet,
       rate_irr: rate,
@@ -365,12 +353,143 @@ async function findCryptoPayment(order, env) {
   return tx ? { txid: tx.txID, paid_at: Number(tx.block_timestamp) } : null;
 }
 
-function paymentAvailability(env) {
+async function storeSettings(env) {
+  let saved = null;
+  if (env.ORDERS) {
+    try {
+      saved = await env.ORDERS.get(STORE_SETTINGS_KEY, "json");
+    } catch {
+      saved = null;
+    }
+  }
   return {
-    usdt_trc20: Boolean(env.TRON_WALLET_ADDRESS && env.USDT_IRR && env.TRONGRID_API_KEY),
-    trx: Boolean(env.TRON_WALLET_ADDRESS && env.TRX_IRR && env.TRONGRID_API_KEY),
-    card: Boolean(env.CARD_NUMBER && env.CARD_HOLDER),
+    price_per_gb_irr:
+      positiveInteger(saved?.price_per_gb_irr) || DEFAULT_PRICE_PER_GB_IRR,
+    trx_rate_irr: positiveInteger(saved?.trx_rate_irr),
+    updated_at: Number(saved?.updated_at || 0),
   };
+}
+
+function plansFrom(settings) {
+  return DURATIONS.flatMap((duration) =>
+    VOLUMES.map((dataGb) => ({
+      id: `${duration.months}m-${dataGb}gb`,
+      title: `${duration.label} ${dataGb} گیگ`,
+      price: dataGb * duration.months * settings.price_per_gb_irr,
+      currency: "IRR",
+      days: duration.days,
+      data_gb: dataGb,
+      devices: "unlimited",
+    })),
+  );
+}
+
+async function plansFor(env) {
+  return plansFrom(await storeSettings(env));
+}
+
+async function updateStoreSettings(request, env) {
+  if (!env.ORDERS) return json({ error: "STORE_NOT_CONFIGURED" }, 503);
+  const parsed = await readJson(request);
+  if (!parsed.ok) return parsed.response;
+  const pricePerGb = positiveInteger(parsed.value.price_per_gb_irr);
+  const trxRate = positiveInteger(parsed.value.trx_rate_irr);
+  if (
+    pricePerGb < 1_000 ||
+    pricePerGb > 100_000_000 ||
+    trxRate < 1_000 ||
+    trxRate > 1_000_000_000
+  ) {
+    return json({ error: "INVALID_SETTINGS" }, 400, noStoreHeaders());
+  }
+  const settings = {
+    price_per_gb_irr: pricePerGb,
+    trx_rate_irr: trxRate,
+    updated_at: Date.now(),
+  };
+  await env.ORDERS.put(STORE_SETTINGS_KEY, JSON.stringify(settings));
+  return json({ settings }, 200, noStoreHeaders());
+}
+
+async function paymentAvailability(env) {
+  const settings = await storeSettings(env);
+  return {
+    trx: Boolean(
+      env.TRON_WALLET_ADDRESS &&
+        settings.trx_rate_irr &&
+        env.TRONGRID_API_KEY,
+    ),
+  };
+}
+
+function adminPage() {
+  const nonce = randomToken(16);
+  const html = `<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>مدیریت فروش Venzo VPN</title>
+  <style nonce="${nonce}">
+    :root{color-scheme:dark;--red:#ef233c;--panel:#17181c;--muted:#a7a9b1}
+    *{box-sizing:border-box}body{margin:0;background:#0b0c0f;color:#fff;font-family:Tahoma,Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:20px}
+    main{width:min(560px,100%);background:var(--panel);border:1px solid #292b31;border-radius:22px;padding:24px;box-shadow:0 22px 70px #0008}
+    h1{margin:0 0 8px;color:var(--red);font-size:25px}p{color:var(--muted);line-height:1.8;margin:0 0 20px}
+    label{display:block;margin:14px 0 7px;font-weight:700}input{width:100%;background:#0e0f12;color:#fff;border:1px solid #34363e;border-radius:12px;padding:13px;font-size:16px;direction:ltr}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}button{border:0;border-radius:12px;padding:13px;font-weight:800;cursor:pointer}button.primary{background:var(--red);color:#fff}button.secondary{background:#30323a;color:#fff}
+    #status{min-height:26px;margin-top:14px;color:#ffcf70}.note{font-size:13px;margin-top:18px}.ok{color:#63e6a4!important}.error{color:#ff808e!important}
+  </style>
+</head>
+<body><main>
+  <h1>Venzo VPN Store</h1>
+  <p>قیمت پلن‌ها و نرخ تبدیل TRX را بدون انتشار نسخه جدید اپ تغییر دهید.</p>
+  <form id="settings">
+    <label for="secret">رمز مدیریت</label>
+    <input id="secret" type="password" autocomplete="off" required>
+    <label for="price">قیمت هر گیگ به ریال</label>
+    <input id="price" type="number" min="1000" step="1000" required>
+    <label for="rate">قیمت هر TRX به ریال</label>
+    <input id="rate" type="number" min="1000" step="1" required>
+    <div class="actions">
+      <button class="secondary" type="button" id="load">دریافت قیمت فعلی</button>
+      <button class="primary" type="submit">ذخیره تغییرات</button>
+    </div>
+  </form>
+  <div id="status" role="status"></div>
+  <p class="note">رمز مدیریت در مرورگر ذخیره نمی‌شود. نرخ‌ها را فقط به ریال و بدون جداکننده وارد کنید.</p>
+</main>
+<script nonce="${nonce}">
+  const secret=document.querySelector('#secret'),price=document.querySelector('#price'),rate=document.querySelector('#rate'),status=document.querySelector('#status');
+  const headers=()=>({'Accept':'application/json','Authorization':'Bearer '+secret.value});
+  const message=(text,kind='')=>{status.textContent=text;status.className=kind};
+  async function load(){
+    if(!secret.value){message('ابتدا رمز مدیریت را وارد کنید.','error');return}
+    message('در حال دریافت...');
+    const response=await fetch('/v1/internal/settings',{headers:headers(),cache:'no-store'});
+    if(!response.ok){message(response.status===401?'رمز مدیریت نادرست است.':'دریافت تنظیمات ناموفق بود.','error');return}
+    const body=await response.json();price.value=body.settings.price_per_gb_irr;rate.value=body.settings.trx_rate_irr||'';message('تنظیمات فعلی دریافت شد.','ok');
+  }
+  document.querySelector('#load').addEventListener('click',()=>load().catch(()=>message('خطای ارتباط با سرور.','error')));
+  document.querySelector('#settings').addEventListener('submit',async event=>{
+    event.preventDefault();message('در حال ذخیره...');
+    try{
+      const response=await fetch('/v1/internal/settings',{method:'PUT',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({price_per_gb_irr:Number(price.value),trx_rate_irr:Number(rate.value)})});
+      if(!response.ok){message(response.status===401?'رمز مدیریت نادرست است.':'مقادیر واردشده معتبر نیست.','error');return}
+      message('قیمت‌ها با موفقیت ذخیره شد.','ok');
+    }catch{message('خطای ارتباط با سرور.','error')}
+  });
+</script></body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+      "Content-Security-Policy": `default-src 'none'; connect-src 'self'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
+    },
+  });
 }
 
 async function saveOrder(env, order) {
@@ -476,7 +595,7 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
     "Access-Control-Max-Age": "86400",
   };
 }
