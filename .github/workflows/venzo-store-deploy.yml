@@ -56,13 +56,12 @@ jobs:
           PROVISION_SECRET: ${{ secrets.PROVISION_SECRET }}
           TRON_WALLET_ADDRESS: ${{ secrets.TRON_WALLET_ADDRESS }}
           TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
-          PASARGUARD_GROUP_IDS: ${{ vars.PASARGUARD_GROUP_IDS }}
         run: |
           set -euo pipefail
           required=(
             CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
             PASARGUARD_BASE_URL PASARGUARD_API_KEY PROVISION_SECRET
-            TRON_WALLET_ADDRESS TRONGRID_API_KEY PASARGUARD_GROUP_IDS
+            TRON_WALLET_ADDRESS TRONGRID_API_KEY
           )
           for name in "${required[@]}"; do
             if [ -z "${!name:-}" ]; then
@@ -70,16 +69,6 @@ jobs:
               exit 1
             fi
           done
-
-      - name: Apply public Worker variables
-        working-directory: venzo2/store-api
-        env:
-          PASARGUARD_GROUP_IDS: ${{ vars.PASARGUARD_GROUP_IDS }}
-        run: |
-          jq \
-            --arg groups "$PASARGUARD_GROUP_IDS" \
-            '.vars.PASARGUARD_GROUP_IDS = $groups | del(.vars.USDT_TRC20_CONTRACT)' \
-            wrangler.jsonc > wrangler.deploy.jsonc
 
       - name: Deploy Worker and encrypted secrets
         id: deploy
