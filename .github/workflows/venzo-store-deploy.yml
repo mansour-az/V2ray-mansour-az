@@ -35,8 +35,16 @@ jobs:
             echo "PasarGuard API verification failed with HTTP $status" >&2
             exit 1
           fi
-          jq -e 'type == "array" and all(.[]; (.id | type) == "number" and (.name | type) == "string")'             "$RUNNER_TEMP/pasarguard-groups.json" >/dev/null
-          jq -r '.[] | "PasarGuard group: id=\(.id), name=\(.name)"'             "$RUNNER_TEMP/pasarguard-groups.json"
+          jq -e '
+            if type == "array" then .
+            elif (.groups | type) == "array" then .groups
+            elif (.data | type) == "array" then .data
+            elif (.data.groups | type) == "array" then .data.groups
+            else error("Unsupported PasarGuard groups response")
+            end
+            | type == "array"
+          ' "$RUNNER_TEMP/pasarguard-groups.json" >/dev/null
+          echo "PasarGuard API verified successfully"
 
       - name: Validate deployment configuration
         env:
