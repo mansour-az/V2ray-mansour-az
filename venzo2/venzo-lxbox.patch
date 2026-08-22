@@ -1667,10 +1667,9 @@ index b27b119..59e6396 100644
                    getLocalText.s("No provider yet?"),
 diff --git a/app/lib/screens/venzo_payment_screen.dart b/app/lib/screens/venzo_payment_screen.dart
 new file mode 100644
-index 0000000..4b8ac94
 --- /dev/null
 +++ b/app/lib/screens/venzo_payment_screen.dart
-@@ -0,0 +1,397 @@
+@@ -0,0 +1,432 @@
 +import 'dart:async';
 +
 +import 'package:flutter/material.dart';
@@ -1716,9 +1715,13 @@ index 0000000..4b8ac94
 +  @override
 +  void initState() {
 +    super.initState();
-+    if (_order.isFulfilled) {
++    if (_order.isFulfilled && !_order.isWalletTopup) {
 +      WidgetsBinding.instance
 +          .addPostFrameCallback((_) => _activateAndConnect());
++    } else if (_order.isFulfilled) {
++      WidgetsBinding.instance.addPostFrameCallback((_) async {
++        await VenzoCheckoutStorage.clear();
++      });
 +    } else {
 +      _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
 +        if (mounted && !_busy) unawaited(_refresh());
@@ -1750,7 +1753,10 @@ index 0000000..4b8ac94
 +          Text('شماره سفارش: ${_order.id}',
 +              textDirection: TextDirection.ltr),
 +          const SizedBox(height: 16),
-+          if (_order.isFulfilled) _fulfilledCard() else _paymentCard(),
++          if (_order.isFulfilled)
++            _order.isWalletTopup ? _walletFulfilledCard() : _fulfilledCard()
++          else
++            _paymentCard(),
 +        ],
 +      ),
 +    );
@@ -1942,6 +1948,30 @@ index 0000000..4b8ac94
 +        ),
 +      );
 +
++  Widget _walletFulfilledCard() => Card(
++        color: Theme.of(context).colorScheme.primaryContainer,
++        child: Padding(
++          padding: const EdgeInsets.all(20),
++          child: Column(
++            children: [
++              const Icon(Icons.account_balance_wallet_rounded, size: 54),
++              const SizedBox(height: 10),
++              const Text('کیف پول با موفقیت شارژ شد',
++                  style: TextStyle(fontWeight: FontWeight.w800)),
++              if (_order.walletBalanceIrr != null) ...[
++                const SizedBox(height: 8),
++                Text('موجودی جدید: ${_order.walletBalanceIrr} ریال'),
++              ],
++              const SizedBox(height: 16),
++              FilledButton(
++                onPressed: () => Navigator.pop(context),
++                child: const Text('بازگشت به حساب من'),
++              ),
++            ],
++          ),
++        ),
++      );
++
 +  Widget _copyRow(String label, String value) => Row(
 +        crossAxisAlignment: CrossAxisAlignment.start,
 +        children: [
@@ -1967,8 +1997,12 @@ index 0000000..4b8ac94
 +      if (!mounted) return;
 +      setState(() => _order = order);
 +      await _saveCurrentOrder();
-+      activate = order.isFulfilled;
++      activate = order.isFulfilled && !order.isWalletTopup;
 +      if (activate) _pollTimer?.cancel();
++      if (order.isFulfilled && order.isWalletTopup) {
++        _pollTimer?.cancel();
++        await VenzoCheckoutStorage.clear();
++      }
 +    } catch (_) {
 +      _message('بررسی پرداخت انجام نشد؛ دوباره تلاش کنید');
 +    } finally {
@@ -2070,10 +2104,9 @@ index 0000000..4b8ac94
 +}
 diff --git a/app/lib/screens/venzo_store_screen.dart b/app/lib/screens/venzo_store_screen.dart
 new file mode 100644
-index 0000000..08f075e
 --- /dev/null
 +++ b/app/lib/screens/venzo_store_screen.dart
-@@ -0,0 +1,286 @@
+@@ -0,0 +1,352 @@
 +import 'package:flutter/material.dart';
 +
 +import '../controllers/home_controller.dart';
@@ -2081,6 +2114,7 @@ index 0000000..08f075e
 +import '../services/project_links.dart';
 +import '../services/url_launcher.dart' as ul;
 +import '../services/venzo_store_api.dart';
++import 'venzo_account_screen.dart';
 +import 'venzo_payment_screen.dart';
 +
 +class VenzoStoreScreen extends StatefulWidget {
@@ -2103,6 +2137,8 @@ index 0000000..08f075e
 +  late Future<List<VenzoPlan>> _plans;
 +  String? _buying;
 +  VenzoSavedCheckout? _pending;
++  VenzoAccountCredentials? _credentials;
++  VenzoAccount? _account;
 +  Set<VenzoPaymentMethod> _paymentMethods = {VenzoPaymentMethod.trx};
 +
 +  @override
@@ -2111,6 +2147,7 @@ index 0000000..08f075e
 +    _plans = _api.plans();
 +    _loadPending();
 +    _loadPaymentMethods();
++    _loadAccount();
 +  }
 +
 +  @override
@@ -2135,6 +2172,20 @@ index 0000000..08f075e
 +          return ListView(
 +            padding: const EdgeInsets.all(16),
 +            children: [
++              if (_credentials != null) ...[
++                Card(
++                  child: ListTile(
++                    leading: const Icon(Icons.account_balance_wallet_rounded),
++                    title: const Text('اشتراک من و کیف پول'),
++                    subtitle: Text(_account == null
++                        ? 'مشاهده حساب کاربری'
++                        : 'موجودی: ${_money(_account!.balanceIrr)}'),
++                    trailing: const Icon(Icons.arrow_back_rounded),
++                    onTap: _openAccount,
++                  ),
++                ),
++                const SizedBox(height: 12),
++              ],
 +              if (_pending != null) ...[
 +                Card(
 +                  child: ListTile(
@@ -2168,6 +2219,7 @@ index 0000000..08f075e
 +              const SizedBox(height: 12),
 +              TextField(
 +                controller: _customer,
++                readOnly: _credentials != null,
 +                textDirection: TextDirection.ltr,
 +                decoration: const InputDecoration(
 +                  labelText: 'شماره موبایل یا شناسه تلگرام',
@@ -2229,14 +2281,20 @@ index 0000000..08f075e
 +          content: Text('شماره موبایل یا شناسه تلگرام را وارد کنید')));
 +      return;
 +    }
-+    final method = await _choosePayment();
-+    if (method == null || !mounted) return;
 +    setState(() => _buying = plan.id);
 +    try {
++      final registration = await VenzoAccountStorage.ensure(
++          _api, _customer.text.trim());
++      _credentials = registration.credentials;
++      _account = registration.account;
++      if (mounted) setState(() {});
++      final method = await _choosePayment(plan);
++      if (method == null || !mounted) return;
 +      final checkout = await _api.createCheckout(
 +        planId: plan.id,
 +        customer: _customer.text,
 +        paymentMethod: method,
++        account: _credentials,
 +      );
 +      if (!mounted) return;
 +      final saved = VenzoSavedCheckout(
@@ -2258,7 +2316,7 @@ index 0000000..08f075e
 +    }
 +  }
 +
-+  Future<VenzoPaymentMethod?> _choosePayment() =>
++  Future<VenzoPaymentMethod?> _choosePayment(VenzoPlan plan) =>
 +      showModalBottomSheet<VenzoPaymentMethod>(
 +        context: context,
 +        showDragHandle: true,
@@ -2275,6 +2333,14 @@ index 0000000..08f075e
 +                        .titleLarge
 +                        ?.copyWith(fontWeight: FontWeight.w800)),
 +                const SizedBox(height: 12),
++                if ((_account?.balanceIrr ?? 0) >= plan.price)
++                  ListTile(
++                    leading: const Icon(Icons.account_balance_wallet_rounded),
++                    title: const Text('پرداخت از کیف پول'),
++                    subtitle: Text('موجودی: ${_money(_account!.balanceIrr)}'),
++                    onTap: () =>
++                        Navigator.pop(context, VenzoPaymentMethod.wallet),
++                  ),
 +                if (_paymentMethods.contains(VenzoPaymentMethod.trx))
 +                  ListTile(
 +                    leading: const Icon(Icons.token_rounded),
@@ -2321,6 +2387,35 @@ index 0000000..08f075e
 +    }
 +  }
 +
++  Future<void> _loadAccount() async {
++    final credentials = await VenzoAccountStorage.load();
++    if (credentials == null) return;
++    try {
++      final account = await _api.account(credentials);
++      if (!mounted) return;
++      _customer.text = account.customer;
++      setState(() {
++        _credentials = credentials;
++        _account = account;
++      });
++    } catch (_) {
++      if (mounted) setState(() => _credentials = credentials);
++    }
++  }
++
++  Future<void> _openAccount() async {
++    await Navigator.push(
++      context,
++      MaterialPageRoute(
++        builder: (_) => VenzoAccountScreen(
++          subController: widget.subController,
++          homeController: widget.homeController,
++        ),
++      ),
++    );
++    await _loadAccount();
++  }
++
 +  Future<void> _openPayment(VenzoSavedCheckout saved) async {
 +    await Navigator.of(context).push(MaterialPageRoute(
 +      builder: (_) => VenzoPaymentScreen(
@@ -2334,7 +2429,11 @@ index 0000000..08f075e
 +    ));
 +    final pending = await VenzoCheckoutStorage.load();
 +    if (mounted) setState(() => _pending = pending);
++    await _loadAccount();
 +  }
++
++  String _money(int value) =>
++      '${value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '٬')} ریال';
 +
 +  Widget _unavailable(BuildContext context) => Center(
 +        child: Padding(
@@ -2735,10 +2834,9 @@ index 0000000..5b43c06
 +}
 diff --git a/app/lib/services/venzo_store_api.dart b/app/lib/services/venzo_store_api.dart
 new file mode 100644
-index 0000000..d9c84be
 --- /dev/null
 +++ b/app/lib/services/venzo_store_api.dart
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,513 @@
 +import 'dart:convert';
 +
 +import 'package:http/http.dart' as http;
@@ -2801,25 +2899,86 @@ index 0000000..d9c84be
 +    required String planId,
 +    required String customer,
 +    required VenzoPaymentMethod paymentMethod,
++    VenzoAccountCredentials? account,
++    String? renewUsername,
 +  }) async {
 +    if (!isConfigured) throw const VenzoStoreException('API_NOT_CONFIGURED');
 +    final response = await _client
 +        .post(
 +          _uri('/v1/orders'),
-+          headers: const {
++          headers: {
 +            'Accept': 'application/json',
 +            'Content-Type': 'application/json',
++            if (account != null) ...account.headers,
 +          },
 +          body: jsonEncode({
 +            'plan_id': planId,
 +            'customer': customer.trim(),
 +            'payment_method': paymentMethod.apiValue,
++            if (renewUsername != null && renewUsername.isNotEmpty)
++              'renew_username': renewUsername,
 +            'client': 'venzo-android',
 +          }),
 +        )
 +        .timeout(const Duration(seconds: 20));
 +    if (response.statusCode != 200 && response.statusCode != 201) {
 +      throw VenzoStoreException('CHECKOUT_${response.statusCode}');
++    }
++    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
++        .cast<String, dynamic>();
++    return VenzoCheckout.fromJson(json);
++  }
++
++  Future<VenzoAccountRegistration> registerAccount(String customer) async {
++    final response = await _client.post(
++      _uri('/v1/account/register'),
++      headers: const {
++        'Accept': 'application/json',
++        'Content-Type': 'application/json',
++      },
++      body: jsonEncode({'customer': customer.trim()}),
++    ).timeout(const Duration(seconds: 20));
++    if (response.statusCode != 201) {
++      throw VenzoStoreException('ACCOUNT_${response.statusCode}');
++    }
++    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
++        .cast<String, dynamic>();
++    return VenzoAccountRegistration.fromJson(json);
++  }
++
++  Future<VenzoAccount> account(VenzoAccountCredentials credentials) async {
++    final response = await _client.get(
++      _uri('/v1/account'),
++      headers: {'Accept': 'application/json', ...credentials.headers},
++    ).timeout(const Duration(seconds: 20));
++    if (response.statusCode != 200) {
++      throw VenzoStoreException('ACCOUNT_${response.statusCode}');
++    }
++    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
++        .cast<String, dynamic>();
++    return VenzoAccount.fromJson(
++        (json['account'] as Map).cast<String, dynamic>());
++  }
++
++  Future<VenzoCheckout> createWalletTopup({
++    required VenzoAccountCredentials account,
++    required int amountIrr,
++    required VenzoPaymentMethod paymentMethod,
++  }) async {
++    final response = await _client.post(
++      _uri('/v1/wallet/topups'),
++      headers: {
++        'Accept': 'application/json',
++        'Content-Type': 'application/json',
++        ...account.headers,
++      },
++      body: jsonEncode({
++        'amount_irr': amountIrr,
++        'payment_method': paymentMethod.apiValue,
++      }),
++    ).timeout(const Duration(seconds: 20));
++    if (response.statusCode != 201) {
++      throw VenzoStoreException('TOPUP_${response.statusCode}');
 +    }
 +    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
 +        .cast<String, dynamic>();
@@ -2897,16 +3056,18 @@ index 0000000..d9c84be
 +      );
 +}
 +
-+enum VenzoPaymentMethod { trx, card, rialGateway }
++enum VenzoPaymentMethod { wallet, trx, card, rialGateway }
 +
 +extension VenzoPaymentMethodApi on VenzoPaymentMethod {
 +  String get apiValue => switch (this) {
++        VenzoPaymentMethod.wallet => 'wallet',
 +        VenzoPaymentMethod.trx => 'trx',
 +        VenzoPaymentMethod.card => 'card',
 +        VenzoPaymentMethod.rialGateway => 'rial_gateway',
 +      };
 +
 +  static VenzoPaymentMethod? fromApi(String value) => switch (value) {
++        'wallet' => VenzoPaymentMethod.wallet,
 +        'trx' => VenzoPaymentMethod.trx,
 +        'card' => VenzoPaymentMethod.card,
 +        'rial_gateway' => VenzoPaymentMethod.rialGateway,
@@ -2946,6 +3107,8 @@ index 0000000..d9c84be
 +    required this.payment,
 +    this.subscriptionUrl,
 +    this.paymentTxid,
++    this.purpose = 'subscription',
++    this.walletBalanceIrr,
 +  });
 +
 +  final String id;
@@ -2954,8 +3117,11 @@ index 0000000..d9c84be
 +  final Map<String, dynamic> payment;
 +  final String? subscriptionUrl;
 +  final String? paymentTxid;
++  final String purpose;
++  final int? walletBalanceIrr;
 +
 +  bool get isFulfilled => status == 'fulfilled';
++  bool get isWalletTopup => purpose == 'wallet_topup';
 +
 +  factory VenzoOrder.fromJson(Map<String, dynamic> json) => VenzoOrder(
 +        id: json['id']?.toString() ?? '',
@@ -2964,6 +3130,8 @@ index 0000000..d9c84be
 +        payment: (json['payment'] as Map?)?.cast<String, dynamic>() ?? const {},
 +        subscriptionUrl: json['subscription_url']?.toString(),
 +        paymentTxid: json['payment_txid']?.toString(),
++        purpose: json['purpose']?.toString() ?? 'subscription',
++        walletBalanceIrr: (json['wallet_balance_irr'] as num?)?.toInt(),
 +      );
 +
 +  Map<String, dynamic> toJson() => {
@@ -2973,7 +3141,160 @@ index 0000000..d9c84be
 +        'payment': payment,
 +        if (subscriptionUrl != null) 'subscription_url': subscriptionUrl,
 +        if (paymentTxid != null) 'payment_txid': paymentTxid,
++        'purpose': purpose,
++        if (walletBalanceIrr != null) 'wallet_balance_irr': walletBalanceIrr,
 +      };
++}
++
++class VenzoAccountCredentials {
++  const VenzoAccountCredentials({required this.id, required this.token});
++  final String id;
++  final String token;
++
++  Map<String, String> get headers => {
++        'X-Venzo-Account': id,
++        'Authorization': 'Bearer $token',
++      };
++
++  Map<String, dynamic> toJson() => {'id': id, 'token': token};
++
++  factory VenzoAccountCredentials.fromJson(Map<String, dynamic> json) =>
++      VenzoAccountCredentials(
++        id: json['id']?.toString() ?? '',
++        token: json['token']?.toString() ?? '',
++      );
++}
++
++class VenzoAccountRegistration {
++  const VenzoAccountRegistration({required this.account, required this.credentials});
++  final VenzoAccount account;
++  final VenzoAccountCredentials credentials;
++
++  factory VenzoAccountRegistration.fromJson(Map<String, dynamic> json) {
++    final account = VenzoAccount.fromJson(
++        (json['account'] as Map).cast<String, dynamic>());
++    return VenzoAccountRegistration(
++      account: account,
++      credentials: VenzoAccountCredentials(
++        id: account.id,
++        token: json['account_token']?.toString() ?? '',
++      ),
++    );
++  }
++}
++
++class VenzoAccount {
++  const VenzoAccount({
++    required this.id,
++    required this.customer,
++    required this.balanceIrr,
++    required this.transactions,
++    this.subscription,
++  });
++  final String id;
++  final String customer;
++  final int balanceIrr;
++  final VenzoSubscriptionStatus? subscription;
++  final List<VenzoWalletTransaction> transactions;
++
++  factory VenzoAccount.fromJson(Map<String, dynamic> json) => VenzoAccount(
++        id: json['id']?.toString() ?? '',
++        customer: json['customer']?.toString() ?? '',
++        balanceIrr: (json['balance_irr'] as num?)?.toInt() ?? 0,
++        subscription: json['subscription'] is Map
++            ? VenzoSubscriptionStatus.fromJson(
++                (json['subscription'] as Map).cast<String, dynamic>())
++            : null,
++        transactions: (json['transactions'] as List? ?? const [])
++            .whereType<Map>()
++            .map((row) => VenzoWalletTransaction.fromJson(
++                row.cast<String, dynamic>()))
++            .toList(),
++      );
++}
++
++class VenzoSubscriptionStatus {
++  const VenzoSubscriptionStatus({
++    required this.username,
++    required this.status,
++    required this.subscriptionUrl,
++    required this.expireAt,
++    required this.dataLimitBytes,
++    required this.usedTrafficBytes,
++  });
++  final String username;
++  final String status;
++  final String subscriptionUrl;
++  final int expireAt;
++  final int dataLimitBytes;
++  final int usedTrafficBytes;
++  int get remainingBytes =>
++      (dataLimitBytes - usedTrafficBytes).clamp(0, dataLimitBytes).toInt();
++
++  factory VenzoSubscriptionStatus.fromJson(Map<String, dynamic> json) =>
++      VenzoSubscriptionStatus(
++        username: json['username']?.toString() ?? '',
++        status: json['status']?.toString() ?? 'unknown',
++        subscriptionUrl: json['subscription_url']?.toString() ?? '',
++        expireAt: (json['expire_at'] as num?)?.toInt() ?? 0,
++        dataLimitBytes: (json['data_limit_bytes'] as num?)?.toInt() ?? 0,
++        usedTrafficBytes: (json['used_traffic_bytes'] as num?)?.toInt() ?? 0,
++      );
++}
++
++class VenzoWalletTransaction {
++  const VenzoWalletTransaction({
++    required this.amountIrr,
++    required this.kind,
++    required this.description,
++    required this.createdAt,
++  });
++  final int amountIrr;
++  final String kind;
++  final String description;
++  final int createdAt;
++
++  factory VenzoWalletTransaction.fromJson(Map<String, dynamic> json) =>
++      VenzoWalletTransaction(
++        amountIrr: (json['amount_irr'] as num?)?.toInt() ?? 0,
++        kind: json['kind']?.toString() ?? '',
++        description: json['description']?.toString() ?? '',
++        createdAt: (json['created_at'] as num?)?.toInt() ?? 0,
++      );
++}
++
++class VenzoAccountStorage {
++  VenzoAccountStorage._();
++  static const _key = 'venzo_account_credentials_v1';
++
++  static Future<VenzoAccountCredentials?> load() async {
++    final raw = await SettingsStorage.getVar(_key, '');
++    if (raw.isEmpty) return null;
++    try {
++      final value = VenzoAccountCredentials.fromJson(
++          (jsonDecode(raw) as Map).cast<String, dynamic>());
++      return value.id.isNotEmpty && value.token.length >= 32 ? value : null;
++    } catch (_) {
++      return null;
++    }
++  }
++
++  static Future<void> save(VenzoAccountCredentials value) =>
++      SettingsStorage.setVar(_key, jsonEncode(value.toJson()));
++
++  static Future<VenzoAccountRegistration> ensure(
++      VenzoStoreApi api, String customer) async {
++    final saved = await load();
++    if (saved != null) {
++      try {
++        return VenzoAccountRegistration(
++            account: await api.account(saved), credentials: saved);
++      } catch (_) {}
++    }
++    final created = await api.registerAccount(customer);
++    await save(created.credentials);
++    return created;
++  }
 +}
 +
 +class VenzoSavedCheckout {
@@ -3414,3 +3735,461 @@ index 0000000..ced897d
 +PasarGuard is the subscription/provisioning system; it does not replace the
 +payment gateway. The payment gateway and its callback credentials must be
 +chosen before the purchase flow can be activated in production.
+diff --git a/app/lib/screens/venzo_account_screen.dart b/app/lib/screens/venzo_account_screen.dart
+new file mode 100644
+--- /dev/null
++++ b/app/lib/screens/venzo_account_screen.dart
+@@ -0,0 +1,452 @@
++import 'package:flutter/material.dart';
++
++import '../controllers/home_controller.dart';
++import '../controllers/subscription_controller.dart';
++import '../services/venzo_premium.dart';
++import '../services/venzo_store_api.dart';
++import 'venzo_payment_screen.dart';
++
++class VenzoAccountScreen extends StatefulWidget {
++  const VenzoAccountScreen({
++    super.key,
++    required this.subController,
++    required this.homeController,
++  });
++
++  final SubscriptionController subController;
++  final HomeController homeController;
++
++  @override
++  State<VenzoAccountScreen> createState() => _VenzoAccountScreenState();
++}
++
++class _VenzoAccountScreenState extends State<VenzoAccountScreen> {
++  final _api = VenzoStoreApi();
++  VenzoAccountCredentials? _credentials;
++  VenzoAccount? _account;
++  List<VenzoPlan> _plans = const [];
++  Set<VenzoPaymentMethod> _methods = const {};
++  bool _busy = true;
++  String? _error;
++
++  @override
++  void initState() {
++    super.initState();
++    _load();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return Scaffold(
++      appBar: AppBar(
++        title: const Text('اشتراک من'),
++        actions: [
++          IconButton(
++            onPressed: _busy ? null : _load,
++            icon: const Icon(Icons.refresh_rounded),
++            tooltip: 'به‌روزرسانی',
++          ),
++        ],
++      ),
++      body: _busy
++          ? const Center(child: CircularProgressIndicator())
++          : _credentials == null
++              ? _empty()
++              : _error != null && _account == null
++                  ? _failed()
++                  : _content(),
++    );
++  }
++
++  Widget _empty() => Center(
++        child: Padding(
++          padding: const EdgeInsets.all(28),
++          child: Column(
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              const Icon(Icons.person_outline_rounded, size: 64),
++              const SizedBox(height: 14),
++              const Text('هنوز حساب Venzo روی این دستگاه ساخته نشده است.',
++                  textAlign: TextAlign.center),
++              const SizedBox(height: 8),
++              const Text('با اولین خرید، حساب و کیف پول شما خودکار ساخته می‌شود.',
++                  textAlign: TextAlign.center),
++              const SizedBox(height: 18),
++              FilledButton(
++                onPressed: () => Navigator.pop(context),
++                child: const Text('مشاهده پلن‌ها'),
++              ),
++            ],
++          ),
++        ),
++      );
++
++  Widget _failed() => Center(
++        child: Padding(
++          padding: const EdgeInsets.all(24),
++          child: Column(
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              const Icon(Icons.cloud_off_rounded, size: 56),
++              const SizedBox(height: 12),
++              Text(_error!, textAlign: TextAlign.center),
++              const SizedBox(height: 16),
++              FilledButton(onPressed: _load, child: const Text('تلاش دوباره')),
++            ],
++          ),
++        ),
++      );
++
++  Widget _content() {
++    final account = _account!;
++    final subscription = account.subscription;
++    return RefreshIndicator(
++      onRefresh: _load,
++      child: ListView(
++        padding: const EdgeInsets.all(16),
++        children: [
++          Card(
++            color: Theme.of(context).colorScheme.primaryContainer,
++            child: Padding(
++              padding: const EdgeInsets.all(18),
++              child: Column(
++                crossAxisAlignment: CrossAxisAlignment.stretch,
++                children: [
++                  const Row(
++                    children: [
++                      Icon(Icons.account_balance_wallet_rounded, size: 34),
++                      SizedBox(width: 10),
++                      Text('کیف پول Venzo',
++                          style: TextStyle(
++                              fontSize: 18, fontWeight: FontWeight.w800)),
++                    ],
++                  ),
++                  const SizedBox(height: 14),
++                  Text(_money(account.balanceIrr),
++                      textAlign: TextAlign.center,
++                      style: Theme.of(context)
++                          .textTheme
++                          .headlineSmall
++                          ?.copyWith(fontWeight: FontWeight.w900)),
++                  const SizedBox(height: 12),
++                  FilledButton.icon(
++                    onPressed: _busy ? null : _topup,
++                    icon: const Icon(Icons.add_card_rounded),
++                    label: const Text('افزایش موجودی'),
++                  ),
++                ],
++              ),
++            ),
++          ),
++          const SizedBox(height: 12),
++          Card(
++            child: Padding(
++              padding: const EdgeInsets.all(18),
++              child: subscription == null
++                  ? const Column(
++                      children: [
++                        Icon(Icons.vpn_key_off_outlined, size: 44),
++                        SizedBox(height: 10),
++                        Text('اشتراک اختصاصی فعالی ثبت نشده است.'),
++                      ],
++                    )
++                  : Column(
++                      crossAxisAlignment: CrossAxisAlignment.stretch,
++                      children: [
++                        const Text('سرور اختصاصی من',
++                            style: TextStyle(
++                                fontSize: 18, fontWeight: FontWeight.w800)),
++                        const SizedBox(height: 12),
++                        _row('وضعیت', _status(subscription.status)),
++                        _row('تاریخ انقضا', _date(subscription.expireAt)),
++                        _row('حجم باقی‌مانده',
++                            _bytes(subscription.remainingBytes)),
++                        _row('حجم مصرف‌شده',
++                            _bytes(subscription.usedTrafficBytes)),
++                        const SizedBox(height: 12),
++                        FilledButton.icon(
++                          onPressed: _busy ? null : _renew,
++                          icon: const Icon(Icons.autorenew_rounded),
++                          label: const Text('تمدید اشتراک'),
++                        ),
++                        const SizedBox(height: 8),
++                        OutlinedButton.icon(
++                          onPressed: _busy ? null : _updateSubscription,
++                          icon: const Icon(Icons.sync_rounded),
++                          label: const Text('آپدیت سابسکرایب'),
++                        ),
++                      ],
++                    ),
++            ),
++          ),
++          if (account.transactions.isNotEmpty) ...[
++            const SizedBox(height: 18),
++            Text('تراکنش‌های اخیر',
++                style: Theme.of(context)
++                    .textTheme
++                    .titleMedium
++                    ?.copyWith(fontWeight: FontWeight.w800)),
++            const SizedBox(height: 8),
++            for (final transaction in account.transactions)
++              ListTile(
++                leading: CircleAvatar(
++                  child: Icon(transaction.amountIrr >= 0
++                      ? Icons.south_west_rounded
++                      : Icons.north_east_rounded),
++                ),
++                title: Text(transaction.description),
++                subtitle: Text(_dateMs(transaction.createdAt)),
++                trailing: Text(
++                  '${transaction.amountIrr >= 0 ? '+' : ''}${_money(transaction.amountIrr)}',
++                  textDirection: TextDirection.rtl,
++                ),
++              ),
++          ],
++        ],
++      ),
++    );
++  }
++
++  Widget _row(String title, String value) => Padding(
++        padding: const EdgeInsets.symmetric(vertical: 5),
++        child: Row(
++          children: [
++            Expanded(child: Text(title)),
++            Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
++          ],
++        ),
++      );
++
++  Future<void> _load() async {
++    setState(() {
++      _busy = true;
++      _error = null;
++    });
++    try {
++      final credentials = await VenzoAccountStorage.load();
++      if (credentials == null) {
++        if (mounted) setState(() => _credentials = null);
++        return;
++      }
++      final values = await Future.wait([
++        _api.account(credentials),
++        _api.plans(),
++        _api.paymentMethods(),
++      ]);
++      if (!mounted) return;
++      setState(() {
++        _credentials = credentials;
++        _account = values[0] as VenzoAccount;
++        _plans = values[1] as List<VenzoPlan>;
++        _methods = values[2] as Set<VenzoPaymentMethod>;
++      });
++    } catch (_) {
++      if (mounted) setState(() => _error = 'دریافت اطلاعات حساب انجام نشد.');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  Future<void> _topup() async {
++    final amount = await showModalBottomSheet<int>(
++      context: context,
++      showDragHandle: true,
++      builder: (context) => SafeArea(
++        child: Column(
++          mainAxisSize: MainAxisSize.min,
++          children: [
++            const ListTile(title: Text('مبلغ شارژ کیف پول')),
++            for (final value in [100000, 300000, 500000, 1000000])
++              ListTile(
++                title: Text(_money(value)),
++                onTap: () => Navigator.pop(context, value),
++              ),
++          ],
++        ),
++      ),
++    );
++    if (amount == null || !mounted) return;
++    final method = await _choosePayment(allowWallet: false);
++    if (method == null || !mounted) return;
++    setState(() => _busy = true);
++    try {
++      final checkout = await _api.createWalletTopup(
++        account: _credentials!,
++        amountIrr: amount,
++        paymentMethod: method,
++      );
++      await _openPayment(checkout, 'شارژ کیف پول', 0);
++    } catch (_) {
++      _message('ساخت درخواست شارژ انجام نشد.');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  Future<void> _renew() async {
++    if (_plans.isEmpty || _account?.subscription == null) return;
++    final plan = await showModalBottomSheet<VenzoPlan>(
++      context: context,
++      showDragHandle: true,
++      builder: (context) => SafeArea(
++        child: ListView(
++          shrinkWrap: true,
++          children: [
++            const ListTile(title: Text('انتخاب پلن تمدید')),
++            for (final plan in _plans)
++              ListTile(
++                title: Text(plan.title),
++                subtitle: Text('${plan.days} روز'),
++                trailing: Text(_money(plan.price)),
++                onTap: () => Navigator.pop(context, plan),
++              ),
++          ],
++        ),
++      ),
++    );
++    if (plan == null || !mounted) return;
++    final method = await _choosePayment(
++        allowWallet: _account!.balanceIrr >= plan.price);
++    if (method == null || !mounted) return;
++    setState(() => _busy = true);
++    try {
++      final checkout = await _api.createCheckout(
++        planId: plan.id,
++        customer: _account!.customer,
++        paymentMethod: method,
++        account: _credentials,
++        renewUsername: _account!.subscription!.username,
++      );
++      await _openPayment(checkout, 'تمدید ${plan.title}', plan.days);
++    } catch (_) {
++      _message('ساخت سفارش تمدید انجام نشد.');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  Future<VenzoPaymentMethod?> _choosePayment({required bool allowWallet}) =>
++      showModalBottomSheet<VenzoPaymentMethod>(
++        context: context,
++        showDragHandle: true,
++        builder: (context) => SafeArea(
++          child: Column(
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              if (allowWallet)
++                ListTile(
++                  leading: const Icon(Icons.account_balance_wallet_rounded),
++                  title: const Text('پرداخت از کیف پول'),
++                  onTap: () => Navigator.pop(context, VenzoPaymentMethod.wallet),
++                ),
++              if (_methods.contains(VenzoPaymentMethod.trx))
++                ListTile(
++                  leading: const Icon(Icons.token_rounded),
++                  title: const Text('ترون TRX'),
++                  onTap: () => Navigator.pop(context, VenzoPaymentMethod.trx),
++                ),
++              if (_methods.contains(VenzoPaymentMethod.card))
++                ListTile(
++                  leading: const Icon(Icons.credit_card_rounded),
++                  title: const Text('کارت‌به‌کارت'),
++                  onTap: () => Navigator.pop(context, VenzoPaymentMethod.card),
++                ),
++              if (_methods.contains(VenzoPaymentMethod.rialGateway))
++                ListTile(
++                  leading: const Icon(Icons.account_balance_rounded),
++                  title: const Text('درگاه ریالی'),
++                  onTap: () => Navigator.pop(
++                      context, VenzoPaymentMethod.rialGateway),
++                ),
++            ],
++          ),
++        ),
++      );
++
++  Future<void> _openPayment(
++      VenzoCheckout checkout, String title, int days) async {
++    final saved = VenzoSavedCheckout(
++      checkout: checkout,
++      planTitle: title,
++      planDays: days,
++    );
++    await VenzoCheckoutStorage.save(saved);
++    if (!mounted) return;
++    await Navigator.push(
++      context,
++      MaterialPageRoute(
++        builder: (_) => VenzoPaymentScreen(
++          api: _api,
++          checkout: checkout,
++          planTitle: title,
++          planDays: days,
++          subController: widget.subController,
++          homeController: widget.homeController,
++        ),
++      ),
++    );
++    await _load();
++  }
++
++  Future<void> _updateSubscription() async {
++    final subscription = _account?.subscription;
++    final uri = Uri.tryParse(subscription?.subscriptionUrl ?? '');
++    if (subscription == null || uri == null || uri.scheme != 'https') {
++      _message('لینک اشتراک معتبر نیست.');
++      return;
++    }
++    setState(() => _busy = true);
++    try {
++      final entitlement = VenzoPremiumEntitlement(
++        accountId: _credentials!.id,
++        subscriptionUrl: uri,
++        expiresAt: DateTime.fromMillisecondsSinceEpoch(
++          subscription.expireAt * 1000,
++          isUtc: true,
++        ),
++      );
++      final imported = await widget.subController.installVenzoSubscription(
++          VenzoPremiumProvisioner.subscriptionFor(entitlement));
++      if (!imported) throw StateError('IMPORT_FAILED');
++      final config = await widget.subController.generateConfig();
++      if (config == null ||
++          !await widget.homeController.saveParsedConfig(config)) {
++        throw StateError('BUILD_FAILED');
++      }
++      if (widget.homeController.state.tunnelUp) {
++        await widget.homeController.reconnect();
++      }
++      _message('سابسکرایب با موفقیت آپدیت شد.');
++    } catch (_) {
++      _message('آپدیت سابسکرایب انجام نشد.');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  String _money(int value) =>
++      '${value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '٬')} ریال';
++
++  String _bytes(int value) => '${(value / (1024 * 1024 * 1024)).toStringAsFixed(1)} گیگ';
++
++  String _status(String value) => switch (value) {
++        'active' => 'فعال',
++        'disabled' => 'غیرفعال',
++        'expired' => 'منقضی',
++        'limited' => 'اتمام حجم',
++        _ => value,
++      };
++
++  String _date(int epochSeconds) {
++    if (epochSeconds <= 0) return 'نامحدود';
++    final date = DateTime.fromMillisecondsSinceEpoch(epochSeconds * 1000);
++    return '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}';
++  }
++
++  String _dateMs(int epochMs) => _date((epochMs / 1000).floor());
++
++  void _message(String text) {
++    if (!mounted) return;
++    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
++  }
++}
+
