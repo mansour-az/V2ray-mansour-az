@@ -32,6 +32,14 @@ export default {
     if (request.method === "GET" && url.pathname === "/v1/plans") {
       return json({ plans: await plansFor(env) }, 200, publicHeaders());
     }
+    if (request.method === "GET" && url.pathname === "/v1/payment-methods") {
+      const availability = await paymentAvailability(env);
+      return json(
+        { methods: Object.entries(availability).filter(([, enabled]) => enabled).map(([method]) => method) },
+        200,
+        publicHeaders(),
+      );
+    }
     if (request.method === "GET" && url.pathname === "/admin") {
       return adminPage();
     }
@@ -96,6 +104,15 @@ export default {
       }
       return approveCardOrder(request, env, approveMatch[1]);
     }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/v1/internal/card-orders"
+    ) {
+      if (!(await authorized(request, env.PROVISION_SECRET))) {
+        return json({ error: "UNAUTHORIZED" }, 401, noStoreHeaders());
+      }
+      return listCardOrders(env);
+    }
     if (request.method === "POST" && url.pathname === "/v1/internal/provision") {
       if (!(await authorized(request, env.PROVISION_SECRET))) {
         return json({ error: "UNAUTHORIZED" }, 401);
@@ -117,11 +134,18 @@ async function createOrder(request, env) {
   const plan = plansFrom(settings).find((item) => item.id === parsed.value.plan_id);
   const customer = clean(parsed.value.customer, 120);
   const method = String(parsed.value.payment_method || "");
-  if (!plan || !customer || method !== "trx") {
+  if (!plan || !customer || !["trx", "card", "rial_gateway"].includes(method)) {
     return json({ error: "INVALID_ORDER" }, 400);
   }
   const payment = await paymentFor(method, plan, env);
   if (!payment.ok) return json({ error: payment.error }, 503);
+  const storedPayment = method === "card"
+    ? {
+        amount: payment.value.amount,
+        currency: payment.value.currency,
+        card_last4: payment.value.card_number.slice(-4),
+      }
+    : payment.value;
 
   const id = crypto.randomUUID().toLowerCase();
   const clientSecret = randomToken(32);
@@ -133,7 +157,7 @@ async function createOrder(request, env) {
     payment_method: method,
     status: "awaiting_payment",
     price_irr: plan.price,
-    payment: payment.value,
+    payment: storedPayment,
     client_secret_hash: await sha256(clientSecret),
     created_at: now,
     expires_at: now + ORDER_TTL_MS,
@@ -141,7 +165,7 @@ async function createOrder(request, env) {
   };
   await saveOrder(env, order);
   return json(
-    { order: publicOrder(order), client_secret: clientSecret },
+    { order: publicOrder(order, env), client_secret: clientSecret },
     201,
     noStoreHeaders(),
   );
@@ -172,7 +196,7 @@ async function getOrder(request, env, id) {
     }
     await saveOrder(env, order);
   }
-  return json({ order: publicOrder(order) }, 200, noStoreHeaders());
+  return json({ order: publicOrder(order, env) }, 200, noStoreHeaders());
 }
 
 async function submitCardReceipt(request, env, id) {
@@ -193,7 +217,7 @@ async function submitCardReceipt(request, env, id) {
   order.status = "awaiting_manual_review";
   order.card_receipt = { reference, telegram_username: telegram, submitted_at: Date.now() };
   await saveOrder(env, order);
-  return json({ order: publicOrder(order) }, 202, noStoreHeaders());
+  return json({ order: publicOrder(order, env) }, 202, noStoreHeaders());
 }
 
 async function approveCardOrder(request, env, id) {
@@ -210,7 +234,30 @@ async function approveCardOrder(request, env, id) {
   order.paid_at = Date.now();
   order = await fulfillOrder(order, env);
   await saveOrder(env, order);
-  return json({ order: publicOrder(order) }, 200, noStoreHeaders());
+  return json({ order: publicOrder(order, env) }, 200, noStoreHeaders());
+}
+
+async function listCardOrders(env) {
+  if (!env.ORDERS) return json({ error: "STORE_NOT_CONFIGURED" }, 503);
+  const rows = [];
+  let cursor;
+  do {
+    const page = await env.ORDERS.list({ prefix: "order:", cursor, limit: 200 });
+    for (const key of page.keys) {
+      const order = await env.ORDERS.get(key.name, "json");
+      if (order?.payment_method === "card" &&
+          order?.status === "awaiting_manual_review") {
+        rows.push({
+          ...publicOrder(order),
+          customer: order.customer,
+          card_receipt: order.card_receipt,
+        });
+      }
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor && rows.length < 500);
+  rows.sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0));
+  return json({ orders: rows }, 200, noStoreHeaders());
 }
 
 async function fulfillOrder(order, env) {
@@ -339,6 +386,25 @@ async function pasarGuardGroups(env) {
 }
 
 async function paymentFor(method, plan, env) {
+  if (method === "card") {
+    const cardNumber = digits(env.CARD_NUMBER, 16);
+    const cardHolder = clean(env.CARD_HOLDER, 120);
+    if (cardNumber.length !== 16 || !cardHolder) {
+      return { ok: false, error: "CARD_PAYMENT_NOT_CONFIGURED" };
+    }
+    return {
+      ok: true,
+      value: {
+        amount: String(plan.price),
+        currency: "IRR",
+        card_number: cardNumber,
+        card_holder: cardHolder,
+      },
+    };
+  }
+  if (method === "rial_gateway") {
+    return { ok: false, error: "RIAL_GATEWAY_NOT_CONFIGURED" };
+  }
   if (method !== "trx") return { ok: false, error: "INVALID_PAYMENT_METHOD" };
   const wallet = clean(env.TRON_WALLET_ADDRESS, 64);
   const rate = await trxRate(env);
@@ -549,6 +615,8 @@ async function paymentAvailability(env) {
         rate.ok &&
         env.TRONGRID_API_KEY,
     ),
+    card: digits(env.CARD_NUMBER, 16).length === 16 && Boolean(clean(env.CARD_HOLDER, 120)),
+    rial_gateway: false,
   };
 }
 
@@ -568,6 +636,7 @@ function adminPage() {
     label{display:block;margin:14px 0 7px;font-weight:700}input{width:100%;background:#0e0f12;color:#fff;border:1px solid #34363e;border-radius:12px;padding:13px;font-size:16px;direction:ltr}
     .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}button{border:0;border-radius:12px;padding:13px;font-weight:800;cursor:pointer}button.primary{background:var(--red);color:#fff}button.secondary{background:#30323a;color:#fff}
     #groups{display:grid;gap:8px;margin-top:8px}.group{display:flex;align-items:center;gap:10px;background:#0e0f12;border:1px solid #34363e;border-radius:12px;padding:12px}.group input{width:auto}.group label{margin:0;font-weight:600}
+    #orders{display:grid;gap:10px;margin-top:12px}.order{background:#0e0f12;border:1px solid #34363e;border-radius:12px;padding:12px}.order small{display:block;color:var(--muted);direction:ltr;margin:4px 0}.order button{width:100%;margin-top:8px;background:#2e7d55;color:#fff}
     #status{min-height:26px;margin-top:14px;color:#ffcf70}.note{font-size:13px;margin-top:18px}.ok{color:#63e6a4!important}.error{color:#ff808e!important}
   </style>
 </head>
@@ -588,11 +657,15 @@ function adminPage() {
       <button class="primary" type="submit">ذخیره تغییرات</button>
     </div>
   </form>
+  <div class="actions">
+    <button class="secondary" type="button" id="card-orders">رسیدهای کارت‌به‌کارت</button>
+  </div>
+  <div id="orders"></div>
   <div id="status" role="status"></div>
   <p class="note">رمز مدیریت در مرورگر ذخیره نمی‌شود. قیمت هر گیگ را به ریال و بدون جداکننده وارد کنید.</p>
 </main>
 <script nonce="${nonce}">
-  const secret=document.querySelector('#secret'),price=document.querySelector('#price'),rate=document.querySelector('#rate'),groups=document.querySelector('#groups'),status=document.querySelector('#status');
+  const secret=document.querySelector('#secret'),price=document.querySelector('#price'),rate=document.querySelector('#rate'),groups=document.querySelector('#groups'),orders=document.querySelector('#orders'),status=document.querySelector('#status');
   const headers=()=>({'Accept':'application/json','Authorization':'Bearer '+secret.value});
   const message=(text,kind='')=>{status.textContent=text;status.className=kind};
   const selectedGroups=()=>[...groups.querySelectorAll('input:checked')].map(input=>Number(input.value));
@@ -617,7 +690,35 @@ function adminPage() {
     price.value=body.settings.price_per_gb_irr;rate.value=body.settings.trx_rate_irr||'';
     renderGroups(groupBody.groups,body.settings.pasarguard_group_ids||[]);message('تنظیمات و گروه‌ها دریافت شد.','ok');
   }
+  function renderOrders(rows){
+    orders.replaceChildren();
+    if(!rows.length){orders.textContent='رسید در انتظار تأیید وجود ندارد.';return}
+    for(const row of rows){
+      const wrap=document.createElement('div');wrap.className='order';
+      const title=document.createElement('strong');title.textContent=row.customer||'مشتری';
+      const plan=document.createElement('small');plan.textContent='پلن: '+row.plan_id+' | مبلغ: '+row.price_irr+' ریال';
+      const reference=document.createElement('small');reference.textContent='پیگیری: '+(row.card_receipt?.reference||'—')+' | تلگرام: '+(row.card_receipt?.telegram_username||'—');
+      const id=document.createElement('small');id.textContent='سفارش: '+row.id;
+      const approve=document.createElement('button');approve.type='button';approve.textContent='تأیید و ساخت اشتراک';approve.addEventListener('click',()=>approveOrder(row.id));
+      wrap.append(title,plan,reference,id,approve);orders.append(wrap);
+    }
+  }
+  async function loadOrders(){
+    if(!secret.value){message('ابتدا رمز مدیریت را وارد کنید.','error');return}
+    message('در حال دریافت رسیدها...');
+    const response=await fetch('/v1/internal/card-orders',{headers:headers(),cache:'no-store'});
+    if(!response.ok){message(response.status===401?'رمز مدیریت نادرست است.':'دریافت رسیدها ناموفق بود.','error');return}
+    const body=await response.json();renderOrders(body.orders||[]);message('رسیدها دریافت شد.','ok');
+  }
+  async function approveOrder(id){
+    const bankReference=prompt('شماره مرجع بانکی را وارد کنید:','manual');if(bankReference===null)return;
+    message('در حال تأیید و ساخت اشتراک...');
+    const response=await fetch('/v1/internal/card-orders/'+encodeURIComponent(id)+'/approve',{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({bank_reference:bankReference})});
+    if(!response.ok){message('تأیید سفارش یا ساخت اشتراک ناموفق بود.','error');return}
+    message('پرداخت تأیید و اشتراک ساخته شد.','ok');await loadOrders();
+  }
   document.querySelector('#load').addEventListener('click',()=>load().catch(()=>message('خطای ارتباط با سرور.','error')));
+  document.querySelector('#card-orders').addEventListener('click',()=>loadOrders().catch(()=>message('خطای ارتباط با سرور.','error')));
   document.querySelector('#settings').addEventListener('submit',async event=>{
     event.preventDefault();message('در حال ذخیره...');
     try{
@@ -656,7 +757,7 @@ async function orderAuthorized(request, order) {
   return (await sha256(supplied.slice(7))) === order.client_secret_hash;
 }
 
-function publicOrder(order) {
+function publicOrder(order, env) {
   const value = {
     id: order.id,
     plan_id: order.plan_id,
@@ -667,6 +768,17 @@ function publicOrder(order) {
     created_at: order.created_at,
     expires_at: order.expires_at,
   };
+  if (order.payment_method === "card" && env) {
+    const cardNumber = digits(env.CARD_NUMBER, 16);
+    const cardHolder = clean(env.CARD_HOLDER, 120);
+    if (cardNumber.length === 16 && cardHolder) {
+      value.payment = {
+        ...order.payment,
+        card_number: cardNumber,
+        card_holder: cardHolder,
+      };
+    }
+  }
   if (order.payment_txid) value.payment_txid = order.payment_txid;
   if (order.subscription_url) value.subscription_url = order.subscription_url;
   if (order.provisioning_error) value.provisioning_error = order.provisioning_error;
