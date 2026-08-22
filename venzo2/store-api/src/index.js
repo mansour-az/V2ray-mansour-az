@@ -385,25 +385,13 @@ async function createOrder(request, env) {
     last_checked_at: 0,
   };
   if (method === "wallet") {
-    const debit = await accountAuth.stub.debit(
-      accountAuth.tokenHash,
-      plan.price,
-      `order:${id}`,
-      renewUsername ? `تمدید ${plan.title}` : `خرید ${plan.title}`,
-    );
-    if (!debit.ok) return json({ error: debit.error }, 409, noStoreHeaders());
-    order.status = "paid";
-    order.paid_at = now;
-    const fulfilled = await fulfillOrder(order, env);
-    if (fulfilled.status === "provisioning_failed") {
-      await accountAuth.stub.credit(
-        accountAuth.tokenHash,
-        plan.price,
-        `refund:${id}`,
-        "بازگشت وجه سفارش ناموفق",
-      );
-    }
+    order.status = "wallet_processing";
+    await saveOrder(env, order);
+    const fulfilled = await processWalletOrder(order, env);
     await saveOrder(env, fulfilled);
+    if (fulfilled.status === "payment_failed") {
+      return json({ error: fulfilled.payment_error }, 409, noStoreHeaders());
+    }
     return json(
       { order: publicOrder(fulfilled, env), client_secret: clientSecret },
       201,
@@ -425,7 +413,10 @@ async function getOrder(request, env, id) {
   if (!(await orderAuthorized(request, order))) {
     return json({ error: "UNAUTHORIZED" }, 401);
   }
-  if (order.status === "awaiting_payment" && Date.now() > order.expires_at) {
+  if (order.status === "wallet_processing") {
+    order = await processWalletOrder(order, env);
+    await saveOrder(env, order);
+  } else if (order.status === "awaiting_payment" && Date.now() > order.expires_at) {
     order.status = "expired";
     await saveOrder(env, order);
   } else if (
@@ -444,6 +435,44 @@ async function getOrder(request, env, id) {
     await saveOrder(env, order);
   }
   return json({ order: publicOrder(order, env) }, 200, noStoreHeaders());
+}
+
+async function processWalletOrder(order, env) {
+  const account = accountStubForOrder(order, env);
+  if (!account) {
+    order.status = "payment_failed";
+    order.payment_error = "ACCOUNT_NOT_CONFIGURED";
+    return order;
+  }
+  const plan = (await plansFor(env)).find((item) => item.id === order.plan_id);
+  if (!plan) {
+    order.status = "payment_failed";
+    order.payment_error = "PLAN_NOT_FOUND";
+    return order;
+  }
+  const debit = await account.stub.debit(
+    order.account_token_hash,
+    order.price_irr,
+    `order:${order.id}`,
+    order.purpose === "renewal" ? `تمدید ${plan.title}` : `خرید ${plan.title}`,
+  );
+  if (!debit.ok) {
+    order.status = "payment_failed";
+    order.payment_error = debit.error;
+    return order;
+  }
+  order.status = "paid";
+  order.paid_at = order.paid_at || Date.now();
+  const fulfilled = await fulfillOrder(order, env);
+  if (fulfilled.status === "provisioning_failed") {
+    await account.stub.credit(
+      order.account_token_hash,
+      order.price_irr,
+      `refund:${order.id}`,
+      "بازگشت وجه سفارش ناموفق",
+    );
+  }
+  return fulfilled;
 }
 
 async function submitCardReceipt(request, env, id) {
@@ -1132,6 +1161,7 @@ function publicOrder(order, env) {
     value.wallet_balance_irr = order.wallet_balance_irr;
   }
   if (order.provisioning_error) value.provisioning_error = order.provisioning_error;
+  if (order.payment_error) value.payment_error = order.payment_error;
   return value;
 }
 
