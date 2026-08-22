@@ -62,12 +62,14 @@ jobs:
           PROVISION_SECRET: ${{ secrets.PROVISION_SECRET }}
           TRON_WALLET_ADDRESS: ${{ secrets.TRON_WALLET_ADDRESS }}
           TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
+          CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
+          CARD_HOLDER: ${{ secrets.CARD_HOLDER }}
         run: |
           set -euo pipefail
           required=(
             CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
             PASARGUARD_BASE_URL PASARGUARD_API_KEY PROVISION_SECRET
-            TRON_WALLET_ADDRESS TRONGRID_API_KEY
+            TRON_WALLET_ADDRESS TRONGRID_API_KEY CARD_NUMBER CARD_HOLDER
           )
           for name in "${required[@]}"; do
             if [ -z "${!name:-}" ]; then
@@ -91,12 +93,16 @@ jobs:
             PROVISION_SECRET
             TRON_WALLET_ADDRESS
             TRONGRID_API_KEY
+            CARD_NUMBER
+            CARD_HOLDER
         env:
           PASARGUARD_BASE_URL: ${{ secrets.PASARGUARD_BASE_URL }}
           PASARGUARD_API_KEY: ${{ secrets.PASARGUARD_API_KEY }}
           PROVISION_SECRET: ${{ secrets.PROVISION_SECRET }}
           TRON_WALLET_ADDRESS: ${{ secrets.TRON_WALLET_ADDRESS }}
           TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
+          CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
+          CARD_HOLDER: ${{ secrets.CARD_HOLDER }}
 
       - name: Show deployment URL
         env:
