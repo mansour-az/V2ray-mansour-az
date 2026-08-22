@@ -32,6 +32,7 @@ jobs:
         run: |
           cd venzo-src
           git apply ../venzo2/venzo-lxbox.patch
+          git apply ../venzo2/venzo-free-catalog.patch
           base64 --decode ../venzo2/icon.jpg.b64 > app/assets/icons/app_icon.png
 
       - name: Read Flutter version
@@ -104,7 +105,7 @@ jobs:
           --target-platform android-arm64
           --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --build-name 2.4.0
-          --build-number 20400500
+          --build-number 20400600
 
       - name: Build Play Store app bundle
         working-directory: venzo-src/app
@@ -112,7 +113,7 @@ jobs:
           flutter build appbundle --release
           --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --build-name 2.4.0
-          --build-number 20400500
+          --build-number 20400600
 
       - name: Name release files
         run: |
@@ -150,6 +151,7 @@ jobs:
             '- استفاده از لوگوی رسمی Venzo داخل برنامه' \
             '- نمایش لوکیشن، نوع کانفیگ و پینگ اتصال' \
             '- فهرست سرورهای سالم با انتخاب دستی' \
+            '- موتور خودکار جست‌وجو و تجمیع منابع رایگان' \
             '- فروشگاه پلن‌ها با API امن برای اتصال به PasarGuard' \
             '' \
             'فایل APK برای نصب مستقیم روی دستگاه‌های arm64 است. فایل AAB فقط برای Google Play Console استفاده می‌شود.' \
