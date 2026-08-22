@@ -139,7 +139,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: github.event_name == 'workflow_dispatch' && inputs.publish_release == true
+        if: (github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.4.0')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
