@@ -1845,7 +1845,7 @@ new file mode 100644
 index 0000000..91a3dc0
 --- /dev/null
 +++ b/app/lib/screens/venzo_store_screen.dart
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,226 @@
 +import 'package:flutter/material.dart';
 +
 +import '../services/project_links.dart';
@@ -2002,7 +2002,8 @@ index 0000000..91a3dc0
 +      if (mounted) setState(() => _buying = null);
 +    }
 +  }
-+
++  // Kept for backward-compatible patch structure; checkout is TRX-only.
++  // ignore: unused_element
 +  Future<VenzoPaymentMethod?> _choosePayment() =>
 +      showModalBottomSheet<VenzoPaymentMethod>(
 +        context: context,
