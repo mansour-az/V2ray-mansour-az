@@ -2,6 +2,10 @@ name: Deploy Venzo Store API
 
 on:
   workflow_dispatch:
+  push:
+    branches: [venzo-2.0]
+    paths:
+      - ".github/workflows/venzo-store-deploy.yml"
 
 permissions:
   contents: read
@@ -13,6 +17,26 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Verify PasarGuard API
+        env:
+          PASARGUARD_BASE_URL: ${{ secrets.PASARGUARD_BASE_URL }}
+          PASARGUARD_API_KEY: ${{ secrets.PASARGUARD_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PASARGUARD_BASE_URL:-}" ] || [ -z "${PASARGUARD_API_KEY:-}" ]; then
+            echo "Missing PasarGuard repository secrets" >&2
+            exit 1
+          fi
+          status="$(
+            curl --silent --show-error               --output "$RUNNER_TEMP/pasarguard-groups.json"               --write-out '%{http_code}'               --header 'Accept: application/json'               --header "X-API-Key: $PASARGUARD_API_KEY"               "${PASARGUARD_BASE_URL%/}/api/groups/simple"
+          )"
+          if [ "$status" != "200" ]; then
+            echo "PasarGuard API verification failed with HTTP $status" >&2
+            exit 1
+          fi
+          jq -e 'type == "array" and all(.[]; (.id | type) == "number" and (.name | type) == "string")'             "$RUNNER_TEMP/pasarguard-groups.json" >/dev/null
+          jq -r '.[] | "PasarGuard group: id=\(.id), name=\(.name)"'             "$RUNNER_TEMP/pasarguard-groups.json"
 
       - name: Validate deployment configuration
         env:
@@ -50,11 +74,7 @@ jobs:
           PASARGUARD_GROUP_IDS: ${{ vars.PASARGUARD_GROUP_IDS }}
           USDT_TRC20_CONTRACT: ${{ vars.USDT_TRC20_CONTRACT }}
         run: |
-          jq \
-            --arg groups "$PASARGUARD_GROUP_IDS" \
-            --arg contract "$USDT_TRC20_CONTRACT" \
-            '.vars.PASARGUARD_GROUP_IDS = $groups | .vars.USDT_TRC20_CONTRACT = $contract' \
-            wrangler.jsonc > wrangler.deploy.jsonc
+          jq             --arg groups "$PASARGUARD_GROUP_IDS"             --arg contract "$USDT_TRC20_CONTRACT"             '.vars.PASARGUARD_GROUP_IDS = $groups | .vars.USDT_TRC20_CONTRACT = $contract'             wrangler.jsonc > wrangler.deploy.jsonc
 
       - name: Deploy Worker and encrypted secrets
         id: deploy
