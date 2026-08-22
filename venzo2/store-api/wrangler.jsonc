@@ -1,12 +1,15 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "venzo-store-api",
-  "main": "src/index.js",
+  "main": "src/router.js",
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": ["17 */4 * * *"]
   },
   "durable_objects": {
     "bindings": [
