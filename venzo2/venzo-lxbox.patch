@@ -737,7 +737,7 @@ index 8acde21..93a8cd3 100644
      _autoPingTimer?.cancel();
      _autoPingTimer = null;
 diff --git a/app/lib/controllers/subscription_controller.dart b/app/lib/controllers/subscription_controller.dart
-index 2200acc..ad42d92 100644
+index 2200acc..821cc0a 100644
 --- a/app/lib/controllers/subscription_controller.dart
 +++ b/app/lib/controllers/subscription_controller.dart
 @@ -29,6 +29,7 @@ import '../services/parser/uri_parsers.dart';
@@ -766,6 +766,45 @@ index 2200acc..ad42d92 100644
      _entries = lists.map((l) => SubscriptionEntry(list: l)).toList();
      // §076: bootstrap mtime compare — restore in-memory configDirty после
      // possible kill mid-session. Если settings новее чем saved config →
+@@ -328,6 +338,38 @@ class SubscriptionController extends ChangeNotifier {
+     }
+   }
+ 
++  /// Installs or replaces a verified Venzo subscription, downloads its nodes,
++  /// and persists it before the purchase screen attempts to rebuild/start VPN.
++  Future<bool> installVenzoSubscription(SubscriptionServers subscription) async {
++    _busy = true;
++    _lastError = null;
++    notifyListeners();
++    try {
++      final existing = _entries.indexWhere((entry) {
++        final list = entry.list;
++        return list is SubscriptionServers &&
++            (list.id == subscription.id || list.url == subscription.url);
++      });
++      final entry = SubscriptionEntry(list: subscription);
++      if (existing >= 0) {
++        _entries[existing] = entry;
++      } else {
++        _entries.add(entry);
++      }
++      await _persist();
++      await _fetchEntryByRef(entry);
++      return entry.nodeCount > 0;
++    } catch (e) {
++      _lastError = humanizeError(e);
++      AppLog.I.error(
++          'installVenzoSubscription failed: ${_lastError?.renderEn()}');
++      return false;
++    } finally {
++      _busy = false;
++      notifyListeners();
++    }
++  }
++
+   /// §025 — «Get WARP». Регистрирует устройство в Cloudflare (приватный ключ
+   /// генерится на телефоне) и добавляет готовый WireGuard-узел как UserServer.
+   ///
 diff --git a/app/lib/main.dart b/app/lib/main.dart
 index ccf911b..f0be374 100644
 --- a/app/lib/main.dart
@@ -1197,7 +1236,7 @@ index 6289bc5..ef510f8 100644
        ),
      );
 diff --git a/app/lib/screens/home/widgets/home_drawer.dart b/app/lib/screens/home/widgets/home_drawer.dart
-index ff0e238..0c929b8 100644
+index ff0e238..53f1fb1 100644
 --- a/app/lib/screens/home/widgets/home_drawer.dart
 +++ b/app/lib/screens/home/widgets/home_drawer.dart
 @@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
@@ -1216,7 +1255,7 @@ index ff0e238..0c929b8 100644
  import '../../../services/l10n/locale_controller.dart';
  
  /// Навигационное меню (Drawer) главного экрана: переход в разделы приложения.
-@@ -42,7 +44,40 @@ class HomeDrawer extends StatelessWidget {
+@@ -42,7 +44,46 @@ class HomeDrawer extends StatelessWidget {
        child: SafeArea(
          child: ListView(
            children: [
@@ -1250,9 +1289,15 @@ index ff0e238..0c929b8 100644
 +            if (InstallSourceResolver.current == InstallSource.github)
 +              ListTile(
 +                leading: const Icon(Icons.workspace_premium_rounded),
-+                title: const Text('خرید اشتراک'),
++                title: const Text('خرید سرورهای اختصاصی'),
 +                subtitle: const Text('پلن‌های اختصاصی Venzo'),
-+                onTap: () => _go(context, const VenzoStoreScreen()),
++                onTap: () => _go(
++                  context,
++                  VenzoStoreScreen(
++                    subController: subController,
++                    homeController: controller,
++                  ),
++                ),
 +              ),
 +            const Divider(),
              ListTile(
@@ -1445,16 +1490,25 @@ index 0000000..7ad8d52
 +}
 diff --git a/app/lib/screens/home/widgets/venzo_premium_card.dart b/app/lib/screens/home/widgets/venzo_premium_card.dart
 new file mode 100644
-index 0000000..0178538
+index 0000000..bf15015
 --- /dev/null
 +++ b/app/lib/screens/home/widgets/venzo_premium_card.dart
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,72 @@
 +import 'package:flutter/material.dart';
 +
-+import '../../../services/l10n/locale_controller.dart';
++import '../../../controllers/home_controller.dart';
++import '../../../controllers/subscription_controller.dart';
++import '../../venzo_store_screen.dart';
 +
 +class VenzoPremiumCard extends StatelessWidget {
-+  const VenzoPremiumCard({super.key});
++  const VenzoPremiumCard({
++    super.key,
++    required this.subController,
++    required this.homeController,
++  });
++
++  final SubscriptionController subController;
++  final HomeController homeController;
 +
 +  @override
 +  Widget build(BuildContext context) {
@@ -1464,36 +1518,47 @@ index 0000000..0178538
 +        padding: const EdgeInsets.all(16),
 +        child: Card(
 +          color: cs.surfaceContainerLow,
-+          child: Padding(
-+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-+            child: Row(
-+              children: [
-+                Icon(Icons.workspace_premium_rounded, color: cs.primary),
-+                const SizedBox(width: 12),
-+                Expanded(
-+                  child: Column(
-+                    crossAxisAlignment: CrossAxisAlignment.start,
-+                    mainAxisSize: MainAxisSize.min,
-+                    children: [
-+                      Text(
-+                        'خرید سرورهای اختصاصی',
-+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-+                              fontWeight: FontWeight.w700,
-+                            ),
-+                      ),
-+                      const SizedBox(height: 3),
-+                      Text(
-+                        getLocalText.s(
-+                            'Dedicated high-speed servers are coming soon'),
-+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-+                              color: cs.onSurfaceVariant,
-+                            ),
-+                      ),
-+                    ],
++          clipBehavior: Clip.antiAlias,
++          child: InkWell(
++            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
++              builder: (_) => VenzoStoreScreen(
++                subController: subController,
++                homeController: homeController,
++              ),
++            )),
++            child: Padding(
++              padding:
++                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
++              child: Row(
++                children: [
++                  Icon(Icons.workspace_premium_rounded, color: cs.primary),
++                  const SizedBox(width: 12),
++                  Expanded(
++                    child: Column(
++                      crossAxisAlignment: CrossAxisAlignment.start,
++                      mainAxisSize: MainAxisSize.min,
++                      children: [
++                        Text(
++                          'خرید سرورهای اختصاصی',
++                          style:
++                              Theme.of(context).textTheme.titleSmall?.copyWith(
++                                    fontWeight: FontWeight.w700,
++                                  ),
++                        ),
++                        const SizedBox(height: 3),
++                        Text(
++                          'انتخاب پلن، پرداخت و اتصال خودکار',
++                          style:
++                              Theme.of(context).textTheme.bodySmall?.copyWith(
++                                    color: cs.onSurfaceVariant,
++                                  ),
++                        ),
++                      ],
++                    ),
 +                  ),
-+                ),
-+                Chip(label: Text(getLocalText.s('Coming soon'))),
-+              ],
++                  const Chip(label: Text('خرید')),
++                ],
++              ),
 +            ),
 +          ),
 +        ),
@@ -1502,7 +1567,7 @@ index 0000000..0178538
 +  }
 +}
 diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
-index a4a2656..56c27cc 100644
+index a4a2656..414947e 100644
 --- a/app/lib/screens/home_screen.dart
 +++ b/app/lib/screens/home_screen.dart
 @@ -32,6 +32,7 @@ import 'home/widgets/home_drawer.dart';
@@ -1542,7 +1607,7 @@ index a4a2656..56c27cc 100644
                    const SizedBox(height: 12),
                    NodesHeader(
                      controller: _controller,
-@@ -799,21 +804,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+@@ -799,21 +804,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                    const SizedBox(height: 4),
                  ],
                ],
@@ -1578,7 +1643,12 @@ index a4a2656..56c27cc 100644
 +                  onViewPool: _showPool, // §208
 +                ),
 +              if (!showEmptyGuide && _simpleHome)
-+                const Expanded(child: VenzoPremiumCard()),
++                Expanded(
++                  child: VenzoPremiumCard(
++                    subController: _subController,
++                    homeController: _controller,
++                  ),
++                ),
              ],
            ),
          );
@@ -1597,13 +1667,19 @@ index b27b119..59e6396 100644
                    getLocalText.s("No provider yet?"),
 diff --git a/app/lib/screens/venzo_payment_screen.dart b/app/lib/screens/venzo_payment_screen.dart
 new file mode 100644
-index 0000000..eda7f31
+index 0000000..4b8ac94
 --- /dev/null
 +++ b/app/lib/screens/venzo_payment_screen.dart
-@@ -0,0 +1,239 @@
+@@ -0,0 +1,397 @@
++import 'dart:async';
++
 +import 'package:flutter/material.dart';
 +import 'package:flutter/services.dart';
 +
++import '../controllers/home_controller.dart';
++import '../controllers/subscription_controller.dart';
++import '../services/url_launcher.dart' as ul;
++import '../services/venzo_premium.dart';
 +import '../services/venzo_store_api.dart';
 +
 +class VenzoPaymentScreen extends StatefulWidget {
@@ -1612,11 +1688,17 @@ index 0000000..eda7f31
 +    required this.api,
 +    required this.checkout,
 +    required this.planTitle,
++    required this.planDays,
++    required this.subController,
++    required this.homeController,
 +  });
 +
 +  final VenzoStoreApi api;
 +  final VenzoCheckout checkout;
 +  final String planTitle;
++  final int planDays;
++  final SubscriptionController subController;
++  final HomeController homeController;
 +
 +  @override
 +  State<VenzoPaymentScreen> createState() => _VenzoPaymentScreenState();
@@ -1627,9 +1709,26 @@ index 0000000..eda7f31
 +  final _telegram = TextEditingController();
 +  late VenzoOrder _order = widget.checkout.order;
 +  bool _busy = false;
++  bool _activated = false;
++  String? _activationError;
++  Timer? _pollTimer;
++
++  @override
++  void initState() {
++    super.initState();
++    if (_order.isFulfilled) {
++      WidgetsBinding.instance
++          .addPostFrameCallback((_) => _activateAndConnect());
++    } else {
++      _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
++        if (mounted && !_busy) unawaited(_refresh());
++      });
++    }
++  }
 +
 +  @override
 +  void dispose() {
++    _pollTimer?.cancel();
 +    _reference.dispose();
 +    _telegram.dispose();
 +    super.dispose();
@@ -1659,6 +1758,7 @@ index 0000000..eda7f31
 +
 +  Widget _paymentCard() {
 +    if (_order.paymentMethod == 'card') return _cardTransfer();
++    if (_order.paymentMethod == 'rial_gateway') return _rialGateway();
 +    final amount = _order.payment['amount']?.toString() ?? '';
 +    final currency = _order.payment['currency']?.toString() ?? '';
 +    final wallet = _order.payment['wallet_address']?.toString() ?? '';
@@ -1687,6 +1787,39 @@ index 0000000..eda7f31
 +                      child: CircularProgressIndicator(strokeWidth: 2))
 +                  : const Icon(Icons.refresh),
 +              label: const Text('بررسی پرداخت'),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++
++  Widget _rialGateway() {
++    final amount = _order.payment['amount']?.toString() ?? '';
++    final checkoutUrl = _order.payment['checkout_url']?.toString() ?? '';
++    return Card(
++      child: Padding(
++        padding: const EdgeInsets.all(16),
++        child: Column(
++          crossAxisAlignment: CrossAxisAlignment.stretch,
++          children: [
++            const Text('پرداخت آنلاین ریالی',
++                style: TextStyle(fontWeight: FontWeight.w800)),
++            const SizedBox(height: 12),
++            Text('مبلغ: $amount ریال'),
++            const SizedBox(height: 16),
++            FilledButton.icon(
++              onPressed: checkoutUrl.isEmpty
++                  ? null
++                  : () => ul.UrlLauncher.open(checkoutUrl),
++              icon: const Icon(Icons.open_in_browser_rounded),
++              label: const Text('ورود به درگاه پرداخت'),
++            ),
++            const SizedBox(height: 8),
++            OutlinedButton.icon(
++              onPressed: _busy ? null : _refresh,
++              icon: const Icon(Icons.refresh),
++              label: const Text('بررسی نتیجه پرداخت'),
 +            ),
 +          ],
 +        ),
@@ -1770,6 +1903,35 @@ index 0000000..eda7f31
 +              SelectableText(_order.subscriptionUrl ?? '',
 +                  textDirection: TextDirection.ltr),
 +              const SizedBox(height: 10),
++              if (_activated) ...[
++                const Row(
++                  mainAxisAlignment: MainAxisAlignment.center,
++                  children: [
++                    Icon(Icons.vpn_lock_rounded),
++                    SizedBox(width: 8),
++                    Text('اشتراک اضافه شد و اتصال آغاز شد'),
++                  ],
++                ),
++                const SizedBox(height: 10),
++              ] else ...[
++                if (_activationError != null) ...[
++                  Text(_activationError!,
++                      textAlign: TextAlign.center,
++                      style: TextStyle(
++                          color: Theme.of(context).colorScheme.error)),
++                  const SizedBox(height: 8),
++                ],
++                FilledButton.icon(
++                  onPressed: _busy ? null : _activateAndConnect,
++                  icon: _busy
++                      ? const SizedBox.square(
++                          dimension: 18,
++                          child: CircularProgressIndicator(strokeWidth: 2))
++                      : const Icon(Icons.vpn_lock_rounded),
++                  label: const Text('فعال‌سازی و اتصال'),
++                ),
++                const SizedBox(height: 10),
++              ],
 +              FilledButton.icon(
 +                onPressed: () => _copy(_order.subscriptionUrl ?? ''),
 +                icon: const Icon(Icons.copy),
@@ -1798,15 +1960,21 @@ index 0000000..eda7f31
 +      );
 +
 +  Future<void> _refresh() async {
++    var activate = false;
 +    setState(() => _busy = true);
 +    try {
 +      final order = await widget.api.orderStatus(widget.checkout);
-+      if (mounted) setState(() => _order = order);
++      if (!mounted) return;
++      setState(() => _order = order);
++      await _saveCurrentOrder();
++      activate = order.isFulfilled;
++      if (activate) _pollTimer?.cancel();
 +    } catch (_) {
 +      _message('بررسی پرداخت انجام نشد؛ دوباره تلاش کنید');
 +    } finally {
 +      if (mounted) setState(() => _busy = false);
 +    }
++    if (activate && mounted) await _activateAndConnect();
 +  }
 +
 +  Future<void> _submitReceipt() async {
@@ -1821,7 +1989,10 @@ index 0000000..eda7f31
 +        reference: _reference.text,
 +        telegramUsername: _telegram.text,
 +      );
-+      if (mounted) setState(() => _order = order);
++      if (mounted) {
++        setState(() => _order = order);
++        await _saveCurrentOrder();
++      }
 +    } catch (_) {
 +      _message('ثبت اطلاعات پرداخت انجام نشد');
 +    } finally {
@@ -1835,6 +2006,63 @@ index 0000000..eda7f31
 +    _message('کپی شد');
 +  }
 +
++  Future<void> _saveCurrentOrder() => VenzoCheckoutStorage.save(
++        VenzoSavedCheckout(
++          checkout: VenzoCheckout(
++            order: _order,
++            clientSecret: widget.checkout.clientSecret,
++          ),
++          planTitle: widget.planTitle,
++          planDays: widget.planDays,
++        ),
++      );
++
++  Future<void> _activateAndConnect() async {
++    if (_activated || _busy || !_order.isFulfilled) return;
++    final rawUrl = _order.subscriptionUrl ?? '';
++    final uri = Uri.tryParse(rawUrl);
++    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
++      setState(() => _activationError =
++          'لینک اشتراک معتبر دریافت نشد؛ با پشتیبانی تماس بگیرید.');
++      return;
++    }
++    setState(() {
++      _busy = true;
++      _activationError = null;
++    });
++    try {
++      final entitlement = VenzoPremiumEntitlement(
++        accountId: _order.id,
++        subscriptionUrl: uri,
++        expiresAt:
++            DateTime.now().toUtc().add(Duration(days: widget.planDays)),
++      );
++      final subscription =
++          VenzoPremiumProvisioner.subscriptionFor(entitlement);
++      final imported =
++          await widget.subController.installVenzoSubscription(subscription);
++      if (!imported) throw StateError('SUBSCRIPTION_IMPORT_FAILED');
++      final config = await widget.subController.generateConfig();
++      if (config == null) throw StateError('CONFIG_GENERATION_FAILED');
++      final saved = await widget.homeController.saveParsedConfig(config);
++      if (!saved) throw StateError('CONFIG_SAVE_FAILED');
++      if (widget.homeController.state.tunnelUp) {
++        await widget.homeController.reconnect();
++      } else {
++        await widget.homeController.start();
++      }
++      await VenzoCheckoutStorage.clear();
++      if (mounted) setState(() => _activated = true);
++    } catch (_) {
++      if (mounted) {
++        setState(() => _activationError =
++            'اشتراک ساخته شد اما فعال‌سازی خودکار انجام نشد؛ دوباره تلاش کنید.');
++      }
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
 +  void _message(String text) {
 +    if (!mounted) return;
 +    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -1842,19 +2070,28 @@ index 0000000..eda7f31
 +}
 diff --git a/app/lib/screens/venzo_store_screen.dart b/app/lib/screens/venzo_store_screen.dart
 new file mode 100644
-index 0000000..91a3dc0
+index 0000000..08f075e
 --- /dev/null
 +++ b/app/lib/screens/venzo_store_screen.dart
-@@ -0,0 +1,226 @@
+@@ -0,0 +1,286 @@
 +import 'package:flutter/material.dart';
 +
++import '../controllers/home_controller.dart';
++import '../controllers/subscription_controller.dart';
 +import '../services/project_links.dart';
 +import '../services/url_launcher.dart' as ul;
 +import '../services/venzo_store_api.dart';
 +import 'venzo_payment_screen.dart';
 +
 +class VenzoStoreScreen extends StatefulWidget {
-+  const VenzoStoreScreen({super.key});
++  const VenzoStoreScreen({
++    super.key,
++    required this.subController,
++    required this.homeController,
++  });
++
++  final SubscriptionController subController;
++  final HomeController homeController;
 +
 +  @override
 +  State<VenzoStoreScreen> createState() => _VenzoStoreScreenState();
@@ -1865,11 +2102,15 @@ index 0000000..91a3dc0
 +  final _customer = TextEditingController();
 +  late Future<List<VenzoPlan>> _plans;
 +  String? _buying;
++  VenzoSavedCheckout? _pending;
++  Set<VenzoPaymentMethod> _paymentMethods = {VenzoPaymentMethod.trx};
 +
 +  @override
 +  void initState() {
 +    super.initState();
 +    _plans = _api.plans();
++    _loadPending();
++    _loadPaymentMethods();
 +  }
 +
 +  @override
@@ -1894,6 +2135,18 @@ index 0000000..91a3dc0
 +          return ListView(
 +            padding: const EdgeInsets.all(16),
 +            children: [
++              if (_pending != null) ...[
++                Card(
++                  child: ListTile(
++                    leading: const Icon(Icons.receipt_long_rounded),
++                    title: const Text('یک سفارش در حال پیگیری دارید'),
++                    subtitle: Text(_pending!.planTitle),
++                    trailing: const Icon(Icons.arrow_back_rounded),
++                    onTap: () => _openPayment(_pending!),
++                  ),
++                ),
++                const SizedBox(height: 12),
++              ],
 +              Card(
 +                color: Theme.of(context).colorScheme.primaryContainer,
 +                child: const Padding(
@@ -1976,8 +2229,8 @@ index 0000000..91a3dc0
 +          content: Text('شماره موبایل یا شناسه تلگرام را وارد کنید')));
 +      return;
 +    }
-+    const method = VenzoPaymentMethod.trx;
-+    if (!mounted) return;
++    final method = await _choosePayment();
++    if (method == null || !mounted) return;
 +    setState(() => _buying = plan.id);
 +    try {
 +      final checkout = await _api.createCheckout(
@@ -1986,13 +2239,15 @@ index 0000000..91a3dc0
 +        paymentMethod: method,
 +      );
 +      if (!mounted) return;
-+      await Navigator.of(context).push(MaterialPageRoute(
-+        builder: (_) => VenzoPaymentScreen(
-+          api: _api,
-+          checkout: checkout,
-+          planTitle: plan.title,
-+        ),
-+      ));
++      final saved = VenzoSavedCheckout(
++        checkout: checkout,
++        planTitle: plan.title,
++        planDays: plan.days,
++      );
++      await VenzoCheckoutStorage.save(saved);
++      if (!mounted) return;
++      setState(() => _pending = saved);
++      await _openPayment(saved);
 +    } catch (_) {
 +      if (mounted) {
 +        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -2002,8 +2257,7 @@ index 0000000..91a3dc0
 +      if (mounted) setState(() => _buying = null);
 +    }
 +  }
-+  // Kept for backward-compatible patch structure; checkout is TRX-only.
-+  // ignore: unused_element
++
 +  Future<VenzoPaymentMethod?> _choosePayment() =>
 +      showModalBottomSheet<VenzoPaymentMethod>(
 +        context: context,
@@ -2021,32 +2275,66 @@ index 0000000..91a3dc0
 +                        .titleLarge
 +                        ?.copyWith(fontWeight: FontWeight.w800)),
 +                const SizedBox(height: 12),
-+                ListTile(
-+                  leading: const Icon(Icons.currency_exchange),
-+                  title: const Text('تتر USDT'),
-+                  subtitle: const Text('شبکه TRON (TRC20)'),
-+                  onTap: () => Navigator.pop(
-+                      context, VenzoPaymentMethod.usdtTrc20),
-+                ),
-+                ListTile(
-+                  leading: const Icon(Icons.token_rounded),
-+                  title: const Text('ترون TRX'),
-+                  subtitle: const Text('پرداخت مستقیم روی شبکه TRON'),
-+                  onTap: () =>
-+                      Navigator.pop(context, VenzoPaymentMethod.trx),
-+                ),
-+                ListTile(
-+                  leading: const Icon(Icons.credit_card),
-+                  title: const Text('کارت‌به‌کارت'),
-+                  subtitle: const Text('ثبت رسید و تأیید توسط پشتیبانی'),
-+                  onTap: () =>
-+                      Navigator.pop(context, VenzoPaymentMethod.card),
-+                ),
++                if (_paymentMethods.contains(VenzoPaymentMethod.trx))
++                  ListTile(
++                    leading: const Icon(Icons.token_rounded),
++                    title: const Text('ترون TRX'),
++                    subtitle: const Text('پرداخت مستقیم روی شبکه TRON'),
++                    onTap: () =>
++                        Navigator.pop(context, VenzoPaymentMethod.trx),
++                  ),
++                if (_paymentMethods.contains(VenzoPaymentMethod.card))
++                  ListTile(
++                    leading: const Icon(Icons.credit_card),
++                    title: const Text('کارت‌به‌کارت'),
++                    subtitle: const Text('ثبت رسید و تأیید توسط پشتیبانی'),
++                    onTap: () =>
++                        Navigator.pop(context, VenzoPaymentMethod.card),
++                  ),
++                if (_paymentMethods.contains(VenzoPaymentMethod.rialGateway))
++                  ListTile(
++                    leading: const Icon(Icons.account_balance_rounded),
++                    title: const Text('درگاه پرداخت ریالی'),
++                    subtitle: const Text('پرداخت آنلاین با کارت بانکی'),
++                    onTap: () => Navigator.pop(
++                        context, VenzoPaymentMethod.rialGateway),
++                  ),
 +              ],
 +            ),
 +          ),
 +        ),
 +      );
++
++  Future<void> _loadPending() async {
++    final saved = await VenzoCheckoutStorage.load();
++    if (mounted) setState(() => _pending = saved);
++  }
++
++  Future<void> _loadPaymentMethods() async {
++    try {
++      final methods = await _api.paymentMethods();
++      if (mounted && methods.isNotEmpty) {
++        setState(() => _paymentMethods = methods);
++      }
++    } catch (_) {
++      // TRX remains the conservative fallback for older API deployments.
++    }
++  }
++
++  Future<void> _openPayment(VenzoSavedCheckout saved) async {
++    await Navigator.of(context).push(MaterialPageRoute(
++      builder: (_) => VenzoPaymentScreen(
++        api: _api,
++        checkout: saved.checkout,
++        planTitle: saved.planTitle,
++        planDays: saved.planDays,
++        subController: widget.subController,
++        homeController: widget.homeController,
++      ),
++    ));
++    final pending = await VenzoCheckoutStorage.load();
++    if (mounted) setState(() => _pending = pending);
++  }
 +
 +  Widget _unavailable(BuildContext context) => Center(
 +        child: Padding(
@@ -2447,13 +2735,15 @@ index 0000000..5b43c06
 +}
 diff --git a/app/lib/services/venzo_store_api.dart b/app/lib/services/venzo_store_api.dart
 new file mode 100644
-index 0000000..39b30bd
+index 0000000..d9c84be
 --- /dev/null
 +++ b/app/lib/services/venzo_store_api.dart
-@@ -0,0 +1,199 @@
+@@ -0,0 +1,290 @@
 +import 'dart:convert';
 +
 +import 'package:http/http.dart' as http;
++
++import 'settings_storage.dart';
 +
 +/// Public Venzo commerce API. PasarGuard admin credentials must only exist on
 +/// this backend; they are deliberately never accepted by the Android app.
@@ -2486,6 +2776,25 @@ index 0000000..39b30bd
 +        .map((row) => VenzoPlan.fromJson(row.cast<String, dynamic>()))
 +        .where((plan) => plan.id.isNotEmpty && plan.price > 0)
 +        .toList();
++  }
++
++  Future<Set<VenzoPaymentMethod>> paymentMethods() async {
++    if (!isConfigured) throw const VenzoStoreException('API_NOT_CONFIGURED');
++    final response = await _client.get(
++      _uri('/v1/payment-methods'),
++      headers: const {'Accept': 'application/json'},
++    ).timeout(const Duration(seconds: 15));
++    if (response.statusCode != 200) {
++      throw VenzoStoreException('PAYMENT_METHODS_${response.statusCode}');
++    }
++    final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
++        .cast<String, dynamic>();
++    final rows = json['methods'];
++    if (rows is! List) return {VenzoPaymentMethod.trx};
++    return rows
++        .map((value) => VenzoPaymentMethodApi.fromApi(value.toString()))
++        .whereType<VenzoPaymentMethod>()
++        .toSet();
 +  }
 +
 +  Future<VenzoCheckout> createCheckout({
@@ -2588,13 +2897,20 @@ index 0000000..39b30bd
 +      );
 +}
 +
-+enum VenzoPaymentMethod { usdtTrc20, trx, card }
++enum VenzoPaymentMethod { trx, card, rialGateway }
 +
 +extension VenzoPaymentMethodApi on VenzoPaymentMethod {
 +  String get apiValue => switch (this) {
-+        VenzoPaymentMethod.usdtTrc20 => 'usdt_trc20',
 +        VenzoPaymentMethod.trx => 'trx',
 +        VenzoPaymentMethod.card => 'card',
++        VenzoPaymentMethod.rialGateway => 'rial_gateway',
++      };
++
++  static VenzoPaymentMethod? fromApi(String value) => switch (value) {
++        'trx' => VenzoPaymentMethod.trx,
++        'card' => VenzoPaymentMethod.card,
++        'rial_gateway' => VenzoPaymentMethod.rialGateway,
++        _ => null,
 +      };
 +}
 +
@@ -2615,6 +2931,11 @@ index 0000000..39b30bd
 +      clientSecret: secret,
 +    );
 +  }
++
++  Map<String, dynamic> toJson() => {
++        'order': order.toJson(),
++        'client_secret': clientSecret,
++      };
 +}
 +
 +class VenzoOrder {
@@ -2644,6 +2965,64 @@ index 0000000..39b30bd
 +        subscriptionUrl: json['subscription_url']?.toString(),
 +        paymentTxid: json['payment_txid']?.toString(),
 +      );
++
++  Map<String, dynamic> toJson() => {
++        'id': id,
++        'status': status,
++        'payment_method': paymentMethod,
++        'payment': payment,
++        if (subscriptionUrl != null) 'subscription_url': subscriptionUrl,
++        if (paymentTxid != null) 'payment_txid': paymentTxid,
++      };
++}
++
++class VenzoSavedCheckout {
++  const VenzoSavedCheckout({
++    required this.checkout,
++    required this.planTitle,
++    required this.planDays,
++  });
++
++  final VenzoCheckout checkout;
++  final String planTitle;
++  final int planDays;
++
++  Map<String, dynamic> toJson() => {
++        'checkout': checkout.toJson(),
++        'plan_title': planTitle,
++        'plan_days': planDays,
++      };
++
++  factory VenzoSavedCheckout.fromJson(Map<String, dynamic> json) =>
++      VenzoSavedCheckout(
++        checkout: VenzoCheckout.fromJson(
++            (json['checkout'] as Map).cast<String, dynamic>()),
++        planTitle: json['plan_title']?.toString() ?? 'سرور اختصاصی Venzo',
++        planDays: (json['plan_days'] as num?)?.toInt() ?? 30,
++      );
++}
++
++class VenzoCheckoutStorage {
++  VenzoCheckoutStorage._();
++
++  static const _key = 'venzo_pending_checkout_v1';
++
++  static Future<void> save(VenzoSavedCheckout value) =>
++      SettingsStorage.setVar(_key, jsonEncode(value.toJson()));
++
++  static Future<VenzoSavedCheckout?> load() async {
++    final raw = await SettingsStorage.getVar(_key, '');
++    if (raw.isEmpty) return null;
++    try {
++      return VenzoSavedCheckout.fromJson(
++          (jsonDecode(raw) as Map).cast<String, dynamic>());
++    } catch (_) {
++      await clear();
++      return null;
++    }
++  }
++
++  static Future<void> clear() => SettingsStorage.setVar(_key, '');
 +}
 +
 +class VenzoStoreException implements Exception {
