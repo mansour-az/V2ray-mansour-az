@@ -1476,7 +1476,7 @@ index 0000000..0178538
 +                    mainAxisSize: MainAxisSize.min,
 +                    children: [
 +                      Text(
-+                        'خرید سرورهای اختصاصی'
++                        'خرید سرورهای اختصاصی',
 +                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
 +                              fontWeight: FontWeight.w700,
 +                            ),
