@@ -1976,8 +1976,8 @@ index 0000000..91a3dc0
 +          content: Text('شماره موبایل یا شناسه تلگرام را وارد کنید')));
 +      return;
 +    }
-+    final method = await _choosePayment();
-+    if (method == null || !mounted) return;
++    const method = VenzoPaymentMethod.trx;
++    if (!mounted) return;
 +    setState(() => _buying = plan.id);
 +    try {
 +      final checkout = await _api.createCheckout(
