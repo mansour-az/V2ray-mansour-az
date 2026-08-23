@@ -1,0 +1,11 @@
+{
+  "attribution": {
+    "text": "Venzo VPN free server catalog",
+    "link": "https://t.me/venzo_vpn"
+  },
+  "lists": [
+    {
+      "source": "https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/all/configs_base64.txt"
+    }
+  ]
+}
