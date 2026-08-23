@@ -133,10 +133,14 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          if (-not (Test-Path '${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe')) {
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
             choco install innosetup -y --no-progress
           }
-          & '${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe' "/DAppVersion=$env:BUILD_VERSION" venzo-windows/installer.iss
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler not found: $iscc"
+          }
+          & $iscc "/DAppVersion=$env:BUILD_VERSION" venzo-windows/installer.iss
 
       - name: Write checksums
         shell: pwsh
