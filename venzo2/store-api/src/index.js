@@ -1265,9 +1265,10 @@ async function usernameFor(orderId) {
 }
 
 async function authorized(request, expected) {
+  const secret = String(expected || "");
   const supplied = request.headers.get("authorization") || "";
-  const wanted = `Bearer ${String(expected || "")}`;
-  if (supplied.length !== wanted.length || wanted.length < 40) return false;
+  const wanted = `Bearer ${secret}`;
+  if (secret.length < 8 || supplied.length !== wanted.length) return false;
   return (await sha256(supplied)) === (await sha256(wanted));
 }
 
