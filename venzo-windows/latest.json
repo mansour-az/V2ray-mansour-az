@@ -1,0 +1,7 @@
+{
+  "tag_name": "v1.0.0",
+  "version": "1.0.0",
+  "channel": "windows-stable",
+  "download_url": "https://github.com/mansour-az/V2ray-mansour-az/releases",
+  "minimum_windows": "10"
+}

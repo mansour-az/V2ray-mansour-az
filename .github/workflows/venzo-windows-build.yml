@@ -1,0 +1,167 @@
+name: Build Venzo VPN for Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Windows app version without v prefix
+        required: true
+        default: 1.0.0
+        type: string
+      publish_release:
+        description: Publish a GitHub prerelease after a successful build
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      UPSTREAM_TAG: v1.4.2
+      UPSTREAM_COMMIT: 7bf58b82cd5c67c1be92e556cd0cea199f479d9f
+      CORE_VERSION: 1.14.0-lx.26
+      WINTUN_VERSION: 0.14.1
+      APP_VERSION: v${{ inputs.version }}
+    steps:
+      - name: Checkout Venzo source
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned desktop base
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch $env:UPSTREAM_TAG https://github.com/Leadaxe/singbox-launcher.git desktop
+          $actual = (git -C desktop rev-parse HEAD).Trim()
+          if ($actual -ne $env:UPSTREAM_COMMIT) {
+            throw "Unexpected upstream commit: $actual"
+          }
+
+      - name: Apply Venzo product patch
+        shell: pwsh
+        run: |
+          git -C desktop apply --check ../venzo-windows/venzo-windows.patch
+          git -C desktop apply ../venzo-windows/venzo-windows.patch
+          [IO.File]::WriteAllBytes('desktop/assets/app.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-app.ico.b64' -Raw).Trim()))
+          [IO.File]::WriteAllBytes('desktop/assets/off.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-off.ico.b64' -Raw).Trim()))
+          [IO.File]::WriteAllBytes('desktop/assets/on.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-on.ico.b64' -Raw).Trim()))
+
+      - name: Reject visible upstream branding
+        shell: pwsh
+        run: |
+          $runtimeFiles = @(
+            'desktop/main.go',
+            'desktop/ui/help_tab.go',
+            'desktop/ui/core_dashboard_tab.go',
+            'desktop/core/core_version.go',
+            'desktop/core/config/configtypes/types.go',
+            'desktop/app.manifest'
+          )
+          $bad = Select-String -Path $runtimeFiles -Pattern 'LxBox|singbox_launcher|Leadaxe/singbox-launcher/releases/latest|Singbox Launcher'
+          if ($bad) { $bad | Format-Table; throw 'Visible upstream branding remains' }
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+
+      - name: Install Windows resource compiler
+        shell: pwsh
+        run: go install github.com/akavel/rsrc@latest
+
+      - name: Download Go modules
+        working-directory: desktop
+        run: go mod download
+
+      - name: Run focused tests
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          go test ./core/config/configtypes ./core/config/subscription ./core/debugapi ./internal/locale
+
+      - name: Build Venzo VPN executable
+        working-directory: desktop
+        shell: cmd
+        env:
+          CGO_ENABLED: 1
+          GOOS: windows
+          GOARCH: amd64
+        run: build\build_windows.bat nopause
+
+      - name: Create complete portable package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staging/bin | Out-Null
+          Copy-Item desktop/Venzo-VPN.exe staging/Venzo-VPN.exe
+          Copy-Item desktop/LICENSE staging/LICENSE
+          Copy-Item venzo-windows/THIRD_PARTY_NOTICES.md staging/THIRD_PARTY_NOTICES.md
+
+          $release = Invoke-RestMethod "https://api.github.com/repos/Leadaxe/sing-box-lx/releases/tags/v$env:CORE_VERSION"
+          $asset = $release.assets | Where-Object { $_.name -like '*windows-amd64.zip' } | Select-Object -First 1
+          if (-not $asset) { throw 'Pinned Windows core asset not found' }
+          Invoke-WebRequest $asset.browser_download_url -OutFile core.zip
+          Expand-Archive core.zip core-unpacked -Force
+          $core = Get-ChildItem core-unpacked -Recurse -Filter sing-box.exe | Select-Object -First 1
+          if (-not $core) { throw 'sing-box.exe missing from core archive' }
+          Copy-Item $core.FullName staging/bin/sing-box.exe
+          Get-ChildItem core-unpacked -Recurse -Filter 'libcronet*' | ForEach-Object { Copy-Item $_.FullName staging/bin/ }
+
+          Invoke-WebRequest "https://www.wintun.net/builds/wintun-$env:WINTUN_VERSION.zip" -OutFile wintun.zip
+          Expand-Archive wintun.zip wintun-unpacked -Force
+          $wintun = Get-ChildItem wintun-unpacked -Recurse -Filter wintun.dll | Where-Object { $_.FullName -match 'amd64' } | Select-Object -First 1
+          if (-not $wintun) { throw 'wintun.dll missing from archive' }
+          Copy-Item $wintun.FullName staging/bin/wintun.dll
+
+          Compress-Archive -Path staging/* -DestinationPath "Venzo-VPN-Windows-x64-${{ inputs.version }}.zip" -CompressionLevel Optimal
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path '${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe')) {
+            choco install innosetup -y --no-progress
+          }
+          & '${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe' "/DAppVersion=${{ inputs.version }}" venzo-windows/installer.iss
+
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            "Venzo-VPN-Windows-x64-${{ inputs.version }}.zip",
+            "venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version }}.exe"
+          )
+          $files | ForEach-Object {
+            $h = Get-FileHash $_ -Algorithm SHA256
+            "$($h.Hash.ToLower())  $($_ -replace '\\','/')"
+          } | Set-Content SHA256SUMS.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Venzo-VPN-Windows-${{ inputs.version }}
+          path: |
+            Venzo-VPN-Windows-x64-${{ inputs.version }}.zip
+            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version }}.exe
+            SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish Windows prerelease
+        if: ${{ inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-v${{ inputs.version }}
+          name: Venzo VPN for Windows ${{ inputs.version }}
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            اولین نسخه آزمایشی Venzo VPN برای Windows 10/11 x64.
+
+            فایل `Setup` برای نصب معمولی و فایل ZIP برای اجرای پرتابل است.
+          files: |
+            Venzo-VPN-Windows-x64-${{ inputs.version }}.zip
+            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version }}.exe
+            SHA256SUMS.txt

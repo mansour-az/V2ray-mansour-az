@@ -1,0 +1,4 @@
+repository=https://github.com/Leadaxe/singbox-launcher.git
+tag=v1.4.2
+commit=7bf58b82cd5c67c1be92e556cd0cea199f479d9f
+license=GPL-3.0-or-later

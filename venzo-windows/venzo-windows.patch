@@ -1,0 +1,569 @@
+diff --git a/app.manifest b/app.manifest
+index 76601bf..47f53b0 100644
+--- a/app.manifest
++++ b/app.manifest
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+ <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+-  <assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="singbox-launcher.exe" type="win32"/>
++  <assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="Venzo-VPN.exe" type="win32"/>
+   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+     <security>
+       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+@@ -8,4 +8,4 @@
+       </requestedPrivileges>
+     </security>
+   </trustInfo>
+-</assembly>
+\ No newline at end of file
++</assembly>
+diff --git a/build/build_windows.bat b/build/build_windows.bat
+index d9c1ae9..e2afd11 100644
+--- a/build/build_windows.bat
++++ b/build/build_windows.bat
+@@ -12,7 +12,7 @@ cd /d "%~dp0\.."
+ 
+ echo.
+ echo ========================================
+-echo   Building Sing-Box Launcher (Windows)
++echo   Building Venzo VPN (Windows)
+ echo ========================================
+ echo.
+ 
+@@ -186,7 +186,7 @@ if exist rsrc.syso (
+ :: Определяем имя выходного файла
+ echo.
+ echo === Determining output filename ===
+-set "OUTPUT_FILENAME=singbox-launcher.exe"
++set "OUTPUT_FILENAME=Venzo-VPN.exe"
+ 
+ :: Удаляем старый файл, если существует
+ if exist "%OUTPUT_FILENAME%" (
+diff --git a/core/config/configtypes/types.go b/core/config/configtypes/types.go
+index d7d1e63..e2a5b55 100644
+--- a/core/config/configtypes/types.go
++++ b/core/config/configtypes/types.go
+@@ -66,7 +66,7 @@ func BuildSubscriptionUserAgent() string {
+ 	if ver == "" {
+ 		ver = "unknown"
+ 	}
+-	return fmt.Sprintf("LxBox/%s (desktop; %s)", ver, canonicalGOOSName(runtime.GOOS))
++	return fmt.Sprintf("VenzoVPN/%s (desktop; %s)", ver, canonicalGOOSName(runtime.GOOS))
+ }
+ 
+ // MaxNodesPerSubscription limits the maximum number of nodes parsed from a single subscription
+diff --git a/core/config/configtypes/useragent_test.go b/core/config/configtypes/useragent_test.go
+index 134a595..fc2b93b 100644
+--- a/core/config/configtypes/useragent_test.go
++++ b/core/config/configtypes/useragent_test.go
+@@ -7,15 +7,15 @@ import (
+ 
+ // TestBuildSubscriptionUserAgent guards the fix for the "panel serves JSON
+ // config instead of subscription list" bug. Invariants:
+-//   - product brand token is "LxBox/" with the "desktop" variant tag;
++//   - product brand token is "VenzoVPN/" with the "desktop" variant tag;
+ //   - a bare "singbox" (no hyphen) never appears — it is the trigger that makes
+ //     substring-matching panels (Remnawave/Marzban-style) serve a full
+ //     client-config JSON instead of the base64/URI subscription list.
+ func TestBuildSubscriptionUserAgent(t *testing.T) {
+ 	ua := BuildSubscriptionUserAgent()
+ 
+-	if !strings.HasPrefix(ua, "LxBox/") {
+-		t.Errorf("UA must start with brand token LxBox/, got %q", ua)
++	if !strings.HasPrefix(ua, "VenzoVPN/") {
++		t.Errorf("UA must start with brand token VenzoVPN/, got %q", ua)
+ 	}
+ 	if !strings.Contains(ua, "desktop") {
+ 		t.Errorf("UA must carry the 'desktop' variant tag, got %q", ua)
+diff --git a/core/config/subscription/fetcher_meta_test.go b/core/config/subscription/fetcher_meta_test.go
+index bc793d6..c58f171 100644
+--- a/core/config/subscription/fetcher_meta_test.go
++++ b/core/config/subscription/fetcher_meta_test.go
+@@ -188,7 +188,7 @@ func TestFetchSubscriptionWithMeta_AnnounceError(t *testing.T) {
+ }
+ 
+ // TestFetchSubscription_UserAgentFormat — SPEC 061 Phase 2: UA должно быть
+-// `LxBox/<v> (desktop; <os>)`, не legacy `SubscriptionParserClient`. Bare
++// `VenzoVPN/<v> (desktop; <os>)`, не legacy `SubscriptionParserClient`. Bare
+ // `singbox` (без дефиса) недопустим: панели, матчащие UA по подстроке, иначе
+ // принимают его за не-sing-box клиента и отдают JSON-конфиг вместо списка
+ // подписки (см. BuildSubscriptionUserAgent).
+@@ -204,8 +204,8 @@ func TestFetchSubscription_UserAgentFormat(t *testing.T) {
+ 	if _, err := FetchSubscriptionWithMeta(srv.URL); err != nil {
+ 		t.Fatalf("fetch: %v", err)
+ 	}
+-	if !strings.HasPrefix(gotUA, "LxBox/") {
+-		t.Errorf("UA = %q, want prefix LxBox/", gotUA)
++	if !strings.HasPrefix(gotUA, "VenzoVPN/") {
++		t.Errorf("UA = %q, want prefix VenzoVPN/", gotUA)
+ 	}
+ 	if strings.Contains(gotUA, "singbox") {
+ 		t.Errorf("UA = %q, must not contain bare 'singbox' (panels mis-route it)", gotUA)
+diff --git a/core/core_downloader.go b/core/core_downloader.go
+index 5d264b0..9326154 100644
+--- a/core/core_downloader.go
++++ b/core/core_downloader.go
+@@ -168,7 +168,7 @@ func (ac *AppController) getReleaseInfoFromGitHub(ctx context.Context, version s
+ 	}
+ 
+ 	req.Header.Set("Accept", "application/vnd.github.v3+json")
+-	req.Header.Set("User-Agent", "LxBox/1.0")
++	req.Header.Set("User-Agent", "VenzoVPN/1.0")
+ 
+ 	resp, err := client.Do(req)
+ 	defer func() {
+@@ -301,7 +301,7 @@ func (ac *AppController) downloadFileFromURL(ctx context.Context, url, destPath
+ 		return fmt.Errorf("downloadFileFromURL: failed to create request: %w", err)
+ 	}
+ 
+-	req.Header.Set("User-Agent", "LxBox/1.0")
++	req.Header.Set("User-Agent", "VenzoVPN/1.0")
+ 
+ 	resp, err := client.Do(req)
+ 	defer func() {
+diff --git a/core/core_version.go b/core/core_version.go
+index 93769cb..e1e11e8 100644
+--- a/core/core_version.go
++++ b/core/core_version.go
+@@ -69,8 +69,7 @@ func (ac *AppController) GetLatestLauncherVersion() (string, error) {
+ 		name string
+ 		url  string
+ 	}{
+-		{"GitHub API", "https://api.github.com/repos/Leadaxe/singbox-launcher/releases/latest"},
+-		{"GitHub Mirror (ghproxy)", "https://ghproxy.com/https://api.github.com/repos/Leadaxe/singbox-launcher/releases/latest"},
++		{"Venzo update channel", "https://raw.githubusercontent.com/mansour-az/V2ray-mansour-az/venzo-2.0/venzo-windows/latest.json"},
+ 	}
+ 
+ 	for _, source := range sources {
+@@ -147,7 +146,7 @@ func (ac *AppController) getLatestVersionFromURLWithPrefix(url string, keepPrefi
+ 	}
+ 
+ 	req.Header.Set("Accept", "application/vnd.github.v3+json")
+-	req.Header.Set("User-Agent", "LxBox/1.0")
++	req.Header.Set("User-Agent", "VenzoVPN/1.0")
+ 
+ 	resp, err := client.Do(req)
+ 	defer func() {
+diff --git a/core/debugapi/manifest.go b/core/debugapi/manifest.go
+index f070b4e..782507e 100644
+--- a/core/debugapi/manifest.go
++++ b/core/debugapi/manifest.go
+@@ -13,7 +13,7 @@ import (
+ // surface reports the same identity and points at the same documentation.
+ const (
+ 	// APIDisplayName — human/agent-readable API name in the manifest and card.
+-	APIDisplayName = "singbox-launcher debug API"
++	APIDisplayName = "Venzo VPN debug API"
+ 	// APISpec — contract version; bump on breaking changes to the endpoint set.
+ 	APISpec = "debugapi/v1"
+ 	// APIAuthScheme — how to authenticate (shown so an agent knows the header).
+@@ -35,7 +35,7 @@ func DocsURL(launcherVer string) string {
+ 	if v := strings.TrimSpace(launcherVer); releaseVersionRe.MatchString(v) {
+ 		ref = v
+ 	}
+-	return "https://github.com/Leadaxe/singbox-launcher/blob/" + ref + "/docs/API.md"
++	return "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md"
+ }
+ 
+ // apiEndpoint is one row of the endpoint registry — the single source of truth
+diff --git a/core/debugapi/manifest_test.go b/core/debugapi/manifest_test.go
+index 3e2c65c..69a6635 100644
+--- a/core/debugapi/manifest_test.go
++++ b/core/debugapi/manifest_test.go
+@@ -11,12 +11,12 @@ import (
+ // SPEC 078: DocsURL pins the docs link to a clean release tag, else main.
+ func TestDocsURL(t *testing.T) {
+ 	cases := map[string]string{
+-		"v1.1.5":             "https://github.com/Leadaxe/singbox-launcher/blob/v1.1.5/docs/API.md",
+-		"v10.20.30":          "https://github.com/Leadaxe/singbox-launcher/blob/v10.20.30/docs/API.md",
+-		"v1.1.5-12-g9a81f17": "https://github.com/Leadaxe/singbox-launcher/blob/main/docs/API.md",
+-		"v1.1.5-dirty":       "https://github.com/Leadaxe/singbox-launcher/blob/main/docs/API.md",
+-		"v-local-test":       "https://github.com/Leadaxe/singbox-launcher/blob/main/docs/API.md",
+-		"":                   "https://github.com/Leadaxe/singbox-launcher/blob/main/docs/API.md",
++		"v1.1.5":             "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md",
++		"v10.20.30":          "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md",
++		"v1.1.5-12-g9a81f17": "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md",
++		"v1.1.5-dirty":       "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md",
++		"v-local-test":       "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md",
++		"":                   "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md",
+ 	}
+ 	for in, want := range cases {
+ 		if got := DocsURL(in); got != want {
+diff --git a/core/services/srs_downloader.go b/core/services/srs_downloader.go
+index 22e189a..fa4b6bb 100644
+--- a/core/services/srs_downloader.go
++++ b/core/services/srs_downloader.go
+@@ -94,7 +94,7 @@ func DownloadSRS(ctx context.Context, url string, destPath string) error {
+ 	if err != nil {
+ 		return fmt.Errorf("DownloadSRS: failed to create request: %w", err)
+ 	}
+-	req.Header.Set("User-Agent", "LxBox/1.0")
++	req.Header.Set("User-Agent", "VenzoVPN/1.0")
+ 
+ 	resp, err := client.Do(req)
+ 	if err != nil {
+diff --git a/core/uiservice/ui_service.go b/core/uiservice/ui_service.go
+index 35ac5e8..96e8578 100644
+--- a/core/uiservice/ui_service.go
++++ b/core/uiservice/ui_service.go
+@@ -134,17 +134,17 @@ func NewUIService(appIconData, greyIconData, greenIconData, redIconData []byte,
+ 
+ 	// Initialize Fyne application
+ 	debuglog.InfoLog("UIService: Initializing Fyne application...")
+-	ui.Application = app.NewWithID("com.singbox.launcher")
++	ui.Application = app.NewWithID("vpn.venzo.windows")
+ 	ui.Application.SetIcon(ui.AppIconData)
+ 
+ 	// Set theme based on constants
+ 	switch constants.AppTheme {
+ 	case "dark":
+-		ui.Application.Settings().SetTheme(theme.DarkTheme())
++		ui.Application.Settings().SetTheme(newVenzoTheme(theme.DarkTheme()))
+ 	case "light":
+-		ui.Application.Settings().SetTheme(theme.LightTheme())
++		ui.Application.Settings().SetTheme(newVenzoTheme(theme.LightTheme()))
+ 	default:
+-		ui.Application.Settings().SetTheme(theme.DefaultTheme())
++		ui.Application.Settings().SetTheme(newVenzoTheme(theme.DefaultTheme()))
+ 	}
+ 
+ 	// Initialize callbacks with default no-op handlers
+diff --git a/core/uiservice/venzo_theme.go b/core/uiservice/venzo_theme.go
+new file mode 100644
+index 0000000..97081ad
+--- /dev/null
++++ b/core/uiservice/venzo_theme.go
+@@ -0,0 +1,43 @@
++package uiservice
++
++import (
++	"image/color"
++
++	"fyne.io/fyne/v2"
++	"fyne.io/fyne/v2/theme"
++)
++
++// venzoTheme keeps the native Fyne platform theme while applying the Venzo
++// red accent consistently to buttons, focus rings and selected controls.
++type venzoTheme struct {
++	base fyne.Theme
++}
++
++func newVenzoTheme(base fyne.Theme) fyne.Theme {
++	return &venzoTheme{base: base}
++}
++
++func (t *venzoTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
++	switch name {
++	case theme.ColorNamePrimary:
++		return color.NRGBA{R: 215, G: 25, B: 32, A: 255}
++	case theme.ColorNameFocus:
++		return color.NRGBA{R: 239, G: 35, B: 60, A: 255}
++	case theme.ColorNameSelection:
++		return color.NRGBA{R: 215, G: 25, B: 32, A: 112}
++	default:
++		return t.base.Color(name, variant)
++	}
++}
++
++func (t *venzoTheme) Font(style fyne.TextStyle) fyne.Resource {
++	return t.base.Font(style)
++}
++
++func (t *venzoTheme) Icon(name fyne.ThemeIconName) fyne.Resource {
++	return t.base.Icon(name)
++}
++
++func (t *venzoTheme) Size(name fyne.ThemeSizeName) float32 {
++	return t.base.Size(name)
++}
+diff --git a/internal/constants/constants.go b/internal/constants/constants.go
+index 60c233b..74702ab 100644
+--- a/internal/constants/constants.go
++++ b/internal/constants/constants.go
+@@ -60,7 +60,7 @@ const (
+ 
+ // Log file names
+ const (
+-	MainLogFileName   = "singbox-launcher.log"
++	MainLogFileName   = "venzo-vpn.log"
+ 	ChildLogFileName  = "sing-box.log"
+ 	ParserLogFileName = "parser.log"
+ 	APILogFileName    = "api.log"
+diff --git a/internal/locale/fa.json b/internal/locale/fa.json
+new file mode 100644
+index 0000000..3b4e86b
+--- /dev/null
++++ b/internal/locale/fa.json
+@@ -0,0 +1,135 @@
++{
++  "_display_name": "فارسی",
++  "app.tab.servers": "🖥️ سرورها",
++  "app.tab.local": "این دستگاه",
++  "app.tab.remote": "🌐 دستگاه راه‌دور",
++  "app.tab.diagnostics": "🔍 عیب‌یابی",
++  "app.tab.help": "❓ راهنما",
++  "app.tab.settings": "⚙️ تنظیمات",
++  "core.status_checking": "در حال بررسی هسته…",
++  "core.status_error_not_found": "❌ هسته sing-box پیدا نشد",
++  "core.status_restarting": "🔄 در حال راه‌اندازی دوباره…",
++  "core.status_running": "✅ متصل",
++  "core.status_stopped": "⏸️ قطع اتصال",
++  "core.status_starting": "⏳ در حال اتصال…",
++  "core.status_stopping": "⏳ در حال قطع اتصال…",
++  "core.button_start": "اتصال",
++  "core.button_stop": "قطع اتصال",
++  "core.button_exit": "خروج",
++  "core.button_restart": "اتصال مجدد",
++  "core.label_config": "پیکربندی",
++  "core.status_checking_config": "در حال بررسی پیکربندی…",
++  "core.status_config_ok": "%s ✅ %s",
++  "core.status_config_not_found": "%s ❌ پیدا نشد",
++  "core.status_config_error": "خطای پیکربندی: %v",
++  "core.status_parser_starting": "در حال آماده‌سازی…",
++  "core.toast_refreshing_subs": "در حال به‌روزرسانی اشتراک‌ها",
++  "core.button_update": "🔄 به‌روزرسانی اشتراک",
++  "core.button_update_tooltip": "دریافت تازه‌ترین سرورها (%s+U)",
++  "core.button_restart_tooltip": "راه‌اندازی دوباره هسته (%s+R)",
++  "core.auto_update_subs_label": "به‌روزرسانی خودکار اشتراک‌ها",
++  "core.auto_ping_label": "سنجش خودکار پینگ پس از اتصال",
++  "core.button_wizard": "⚙️ مدیریت اشتراک‌ها",
++  "core.button_download_template": "دریافت قالب پیکربندی",
++  "core.label_singbox": "هسته اتصال",
++  "core.button_download": "دریافت",
++  "core.button_download_version": "دریافت نسخه %s",
++  "core.button_reinstall_version": "نصب دوباره نسخه %s",
++  "core.button_open_bin": "بازکردن پوشه داده‌ها",
++  "core.label_wintun": "درایور VPN ویندوز",
++  "core.dialog_update_available_title": "نسخه جدید آماده است",
++  "core.dialog_update_msg": "نسخه تازه‌ای از Venzo VPN منتشر شده است",
++  "core.dialog_update_current": "نسخه فعلی: %s",
++  "core.dialog_update_new": "نسخه جدید: %s",
++  "core.dialog_update_close": "بستن",
++  "core.button_download_from_github": "دریافت از صفحه رسمی Venzo",
++  "core.update_available_title": "به‌روزرسانی Venzo VPN",
++  "core.update_available_message": "نسخه جدید آماده است.\n\nنصب‌شده: %s\nجدید: %s",
++  "core.no_updates_title": "برنامه به‌روز است",
++  "core.latest_version_message": "شما از تازه‌ترین نسخه استفاده می‌کنید.\n\nنصب‌شده: %s\nجدید: %s",
++  "tray.open": "بازکردن Venzo VPN",
++  "tray.quit": "خروج",
++  "tray.start_vpn": "اتصال VPN",
++  "tray.stop_vpn": "قطع VPN",
++  "tray.select_proxy": "انتخاب سرور",
++  "tray.no_proxies_available": "سروری در دسترس نیست",
++  "help.version_label": "📦 نسخه Venzo VPN: %s",
++  "help.checking_updates": "در حال بررسی نسخه جدید…",
++  "help.unable_to_check_updates": "بررسی نسخه جدید ممکن نشد",
++  "help.update_available_format": "🆕 نسخه %s آماده است\nنسخه فعلی: %s",
++  "help.dev_build_format": "✅ نسخه آزمایشی Venzo VPN\nفعلی: %s\nعمومی: %s",
++  "help.latest_version_format": "✅ Venzo VPN به‌روز است\nنسخه: %s",
++  "help.telegram_link": "💬 کانال تلگرام Venzo",
++  "help.github_link": "🐙 صفحه رسمی دریافت برنامه",
++  "help.language_label": "زبان:",
++  "help.language_changed": "زبان تغییر کرد؛ برنامه را یک‌بار ببندید و باز کنید.",
++  "settings.window_title": "تنظیمات Venzo VPN",
++  "settings.section_subscriptions": "اشتراک‌ها",
++  "settings.subscription_ua_label": "شناسه برنامه برای اشتراک:",
++  "settings.subscription_ua_hint": "در صورت نیاز پنل، شناسه سفارشی وارد کنید. پیش‌فرض: %s",
++  "settings.subscription_ua_reset_tooltip": "بازگردانی پیش‌فرض",
++  "settings.section_subscription_identification": "شناسه دستگاه برای پنل اشتراک",
++  "settings.send_hwid_label": "ارسال شناسه دستگاه",
++  "settings.hash_device_model_label": "مخفی‌کردن مدل دقیق دستگاه",
++  "settings.hwid_label": "شناسه دستگاه (HWID):",
++  "settings.hwid_regenerate": "ساخت شناسه جدید",
++  "settings.section_language": "زبان برنامه",
++  "settings.section_connection": "نوع اتصال",
++  "servers.status_not_checked": "هنوز بررسی نشده",
++  "servers.status_click_load": "فهرست سرورها را بارگذاری کنید",
++  "servers.status_loading": "در حال بارگذاری سرورهای «%s»…",
++  "servers.status_loaded": "سرورها بارگذاری شدند؛ فعال: %s",
++  "servers.status_not_running": "VPN متصل نیست",
++  "servers.status_singbox_stopped": "برای تست سرورها ابتدا VPN را متصل کنید.",
++  "servers.status_delay_error": "خطای پینگ: %s",
++  "servers.status_delay_format": "پینگ %s: %d میلی‌ثانیه",
++  "servers.status_selected": "سرور انتخاب‌شده: %s",
++  "servers.status_selected_multi": "%d سرور انتخاب شد",
++  "servers.status_selected_none": "سروری انتخاب نشده",
++  "servers.status_switch_error": "تغییر سرور انجام نشد: %s",
++  "servers.status_switched": "سرور «%s» به %s تغییر کرد",
++  "servers.status_no_proxies": "سروری برای تست وجود ندارد",
++  "servers.status_list_counts": "کل / در دسترس: %d / %d",
++  "servers.status_pinging": "در حال سنجش پینگ %d سرور…",
++  "servers.status_pinging_progress": "در حال تست %d از %d…",
++  "servers.status_ping_completed": "تست پینگ %d سرور تمام شد",
++  "servers.label_proxy_name": "نام و لوکیشن سرور",
++  "servers.button_ping": "پینگ",
++  "servers.button_test": "تست همه",
++  "servers.tooltip_sort_by_name": "مرتب‌سازی بر اساس نام",
++  "servers.tooltip_sort_by_delay": "مرتب‌سازی بر اساس بهترین پینگ",
++  "servers.tooltip_ping_all": "تست پینگ همه سرورها",
++  "servers.placeholder_select_group": "گروه سرورها را انتخاب کنید",
++  "servers.label_selector_group": "گروه:",
++  "wizard.window_title": "مدیریت اشتراک و پیکربندی",
++  "wizard.tab_target": "مقصد",
++  "wizard.tab.sources": "منابع",
++  "wizard.tab_sources": "اشتراک‌ها",
++  "wizard.tab_outbounds": "گروه سرورها",
++  "wizard.tab_dns": "DNS",
++  "wizard.tab_rules": "قوانین",
++  "wizard.tab_settings": "نوع اتصال",
++  "wizard.tab_preview": "پیش‌نمایش",
++  "wizard.button_close": "بستن",
++  "wizard.button_prev": "قبلی",
++  "wizard.button_next": "بعدی",
++  "wizard.button_save": "ذخیره",
++  "wizard.dialog_cancel": "انصراف",
++  "wizard.source.label_url": "لینک اشتراک یا کانفیگ:",
++  "wizard.source.placeholder_url": "لینک اشتراک خود را اینجا وارد کنید",
++  "wizard.source.button_add": "افزودن",
++  "wizard.source.button_add_from_file": "افزودن از فایل",
++  "wizard.source.label_sources": "اشتراک‌های ثبت‌شده",
++  "wizard.source.button_preview_all": "نمایش همه سرورها…",
++  "wizard.source.button_refresh": "🔄 به‌روزرسانی اشتراک‌ها",
++  "wizard.source.button_refresh_one": "به‌روزرسانی",
++  "wizard.source.refreshing": "در حال دریافت…",
++  "wizard.source.refresh_failed": "دریافت ناموفق بود: %s",
++  "wizard.source.refresh_succeeded": "اشتراک با موفقیت به‌روزرسانی شد",
++  "wizard.source.button_get_free": "سرورهای رایگان جامعه",
++  "wizard.get_free.dialog_title": "منابع رایگان Venzo",
++  "wizard.get_free.loading_msg": "در حال دریافت منابع تازه…",
++  "wizard.get_free.button_insert": "انتخاب",
++  "wizard.get_free.button_close": "بستن",
++  "wizard.get_free.no_sources": "فعلاً منبع رایگانی در دسترس نیست."
++}
+diff --git a/internal/locale/locale.go b/internal/locale/locale.go
+index 7eec35b..4f6b0be 100644
+--- a/internal/locale/locale.go
++++ b/internal/locale/locale.go
+@@ -24,6 +24,9 @@ import (
+ //go:embed en.json
+ var enJSON []byte
+ 
++//go:embed fa.json
++var faJSON []byte
++
+ const displayNameKey = "_display_name"
+ 
+ // RemoteLanguages lists language codes available for download from GitHub.
+@@ -45,6 +48,7 @@ var CreateHTTPClientFunc func(timeout time.Duration) *http.Client
+ func init() {
+ 	catalogs = map[string]map[string]string{
+ 		"en": mustParse(enJSON),
++		"fa": mustParse(faJSON),
+ 	}
+ }
+ 
+diff --git a/internal/locale/settings.go b/internal/locale/settings.go
+index 4b3f492..f1b68d3 100644
+--- a/internal/locale/settings.go
++++ b/internal/locale/settings.go
+@@ -172,7 +172,7 @@ func MarkTemplateInstalled(binDir, appVersion string) error {
+ // LoadSettings reads settings from binDir/settings.json.
+ // Returns default settings if file doesn't exist or is invalid.
+ func LoadSettings(binDir string) Settings {
+-	s := Settings{Lang: "en"}
++	s := Settings{Lang: "fa"}
+ 	path := filepath.Join(binDir, "settings.json")
+ 	data, err := os.ReadFile(path)
+ 	if err != nil {
+@@ -180,10 +180,10 @@ func LoadSettings(binDir string) Settings {
+ 	}
+ 	if err := json.Unmarshal(data, &s); err != nil {
+ 		debuglog.WarnLog("locale: failed to parse settings.json: %v", err)
+-		return Settings{Lang: "en"}
++		return Settings{Lang: "fa"}
+ 	}
+ 	if s.Lang == "" {
+-		s.Lang = "en"
++		s.Lang = "fa"
+ 	}
+ 	return s
+ }
+diff --git a/main.go b/main.go
+index 6c583dd..a50117b 100644
+--- a/main.go
++++ b/main.go
+@@ -267,7 +267,7 @@ func main() {
+ 		})
+ 	}
+ 
+-	controller.UIService.MainWindow = controller.UIService.Application.NewWindow("Singbox Launcher") // Create the main application window
++	controller.UIService.MainWindow = controller.UIService.Application.NewWindow("Venzo VPN") // Create the main application window
+ 	controller.UIService.MainWindow.SetIcon(controller.UIService.AppIconData)
+ 
+ 	// Create App structure to manage UI
+diff --git a/ui/configurator/outbounds_configurator/edit_dialog.go b/ui/configurator/outbounds_configurator/edit_dialog.go
+index dc9fa2a..eae5ffd 100644
+--- a/ui/configurator/outbounds_configurator/edit_dialog.go
++++ b/ui/configurator/outbounds_configurator/edit_dialog.go
+@@ -362,7 +362,7 @@ func ShowEditDialog(
+ 
+ 	// Raw documentation button (opens ParserConfig.md "Секция outbounds")
+ 	rawDocButton := widget.NewButton(locale.T("wizard.outbound.button_docs"), func() {
+-		docURL := "https://github.com/Leadaxe/singbox-launcher/blob/main/docs/ParserConfig.md#%D1%81%D0%B5%D0%BA%D1%86%D0%B8%D1%8F-outbounds"
++		docURL := "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md"
+ 		if err := platform.OpenURL(docURL); err != nil {
+ 			dialog.ShowError(fmt.Errorf("%s: %w", locale.T("wizard.outbound.error_open_docs"), err), parent)
+ 		}
+diff --git a/ui/configurator/tabs/source_tab.go b/ui/configurator/tabs/source_tab.go
+index 4cae599..9a6bce7 100644
+--- a/ui/configurator/tabs/source_tab.go
++++ b/ui/configurator/tabs/source_tab.go
+@@ -53,7 +53,7 @@ import (
+ // CreateSourcesTab creates the Sources tab UI (URLs, URL status and preview).
+ func CreateSourcesTab(presenter *wizardpresentation.WizardPresenter) fyne.CanvasObject {
+ 	guiState := presenter.GUIState()
+-	const directLinksDocURL = "https://github.com/Leadaxe/singbox-launcher/blob/6beb136b9082823699c6509d32e62f212fd7ff90/docs/ParserConfig.md#%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%82%D1%8B-uri-%D0%B4%D0%BB%D1%8F-%D0%BF%D1%80%D1%8F%D0%BC%D1%8B%D1%85-%D1%81%D1%81%D1%8B%D0%BB%D0%BE%D0%BA"
++	const directLinksDocURL = "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md"
+ 
+ 	// Section 1: Subscription URL or Direct Links
+ 	urlLabel := widget.NewLabel(locale.T("wizard.source.label_url"))
+@@ -793,7 +793,7 @@ func CreateOutboundsAndParserConfigTab(presenter *wizardpresentation.WizardPrese
+ 
+ 	// Documentation button
+ 	docButton := widget.NewButton(locale.T("wizard.outbounds.button_docs"), func() {
+-		docURL := "https://github.com/Leadaxe/singbox-launcher/blob/main/docs/ParserConfig.md"
++		docURL := "https://github.com/mansour-az/V2ray-mansour-az/blob/venzo-2.0/README.md"
+ 		if err := platform.OpenURL(docURL); err != nil {
+ 			dialog.ShowError(fmt.Errorf("%s: %w", locale.T("wizard.outbounds.error_open_docs"), err), guiState.Window)
+ 		}
+diff --git a/ui/core_dashboard_tab.go b/ui/core_dashboard_tab.go
+index 565d592..60c5f2b 100644
+--- a/ui/core_dashboard_tab.go
++++ b/ui/core_dashboard_tab.go
+@@ -1124,7 +1124,7 @@ func (tab *CoreDashboardTab) showUpdatePopup(currentVersion, latestVersion strin
+ 
+ 	// Создаем содержимое попапа
+ 	fyne.Do(func() {
+-		downloadURL := "https://github.com/Leadaxe/singbox-launcher/releases/latest"
++		downloadURL := "https://github.com/mansour-az/V2ray-mansour-az/releases"
+ 
+ 		// Создаем ссылку на скачивание
+ 		downloadLink := widget.NewHyperlink(locale.T("core.button_download_from_github"), nil)
+diff --git a/ui/help_tab.go b/ui/help_tab.go
+index 4d380be..b8766f3 100644
+--- a/ui/help_tab.go
++++ b/ui/help_tab.go
+@@ -76,18 +76,18 @@ func CreateHelpTab(ac *core.AppController) fyne.CanvasObject {
+ 	}()
+ 
+ 	telegramLink := widget.NewHyperlink(locale.T("help.telegram_link"), nil)
+-	_ = telegramLink.SetURLFromString("https://t.me/singbox_launcher")
++	_ = telegramLink.SetURLFromString("https://t.me/venzo_vpn")
+ 	telegramLink.OnTapped = func() {
+-		if err := platform.OpenURL("https://t.me/singbox_launcher"); err != nil {
++		if err := platform.OpenURL("https://t.me/venzo_vpn"); err != nil {
+ 			debuglog.ErrorLog("toolsTab: Failed to open Telegram link: %v", err)
+ 			ShowError(ac.UIService.MainWindow, err)
+ 		}
+ 	}
+ 
+ 	githubLink := widget.NewHyperlink(locale.T("help.github_link"), nil)
+-	_ = githubLink.SetURLFromString("https://github.com/Leadaxe/singbox-launcher")
++	_ = githubLink.SetURLFromString("https://github.com/mansour-az/V2ray-mansour-az")
+ 	githubLink.OnTapped = func() {
+-		if err := platform.OpenURL("https://github.com/Leadaxe/singbox-launcher"); err != nil {
++		if err := platform.OpenURL("https://github.com/mansour-az/V2ray-mansour-az"); err != nil {
+ 			debuglog.ErrorLog("toolsTab: Failed to open GitHub link: %v", err)
+ 			ShowError(ac.UIService.MainWindow, err)
+ 		}
