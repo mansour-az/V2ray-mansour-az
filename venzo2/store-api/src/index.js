@@ -500,7 +500,8 @@ async function approveCardOrder(request, env, id) {
   if (!env.ORDERS) return json({ error: "STORE_NOT_CONFIGURED" }, 503);
   let order = await loadOrder(env, id);
   if (!order) return json({ error: "ORDER_NOT_FOUND" }, 404);
-  if (order.payment_method !== "card" || order.status !== "awaiting_manual_review") {
+  const retryable = ["awaiting_manual_review", "provisioning_failed"].includes(order.status);
+  if (order.payment_method !== "card" || !retryable) {
     return json({ error: "INVALID_ORDER_STATE" }, 409);
   }
   const parsed = await readJson(request);
@@ -522,7 +523,7 @@ async function listCardOrders(env) {
     for (const key of page.keys) {
       const order = await env.ORDERS.get(key.name, "json");
       if (order?.payment_method === "card" &&
-          order?.status === "awaiting_manual_review") {
+          ["awaiting_manual_review", "provisioning_failed"].includes(order?.status)) {
         rows.push({
           ...publicOrder(order),
           customer: order.customer,
@@ -597,11 +598,18 @@ async function provision(body, env) {
 
   const baseUrl = validHttpsOrigin(env.PASARGUARD_BASE_URL);
   const settings = await storeSettings(env);
-  const groupIds = settings.pasarguard_group_ids.length
+  let groupIds = settings.pasarguard_group_ids.length
     ? settings.pasarguard_group_ids
     : numericIds(String(env.PASARGUARD_GROUP_IDS || "").split(","));
-  if (!baseUrl || groupIds.length === 0) {
+  if (!baseUrl) {
     return { ok: false, error: "PASARGUARD_NOT_CONFIGURED" };
+  }
+  if (groupIds.length === 0) {
+    const discovered = await pasarGuardGroups(env);
+    if (discovered.ok) groupIds = discovered.groups.map((group) => group.id);
+  }
+  if (groupIds.length === 0) {
+    return { ok: false, error: "PASARGUARD_GROUPS_NOT_CONFIGURED" };
   }
   const auth = await pasarGuardAuth(baseUrl, env);
   if (!auth.ok) return auth;
@@ -610,6 +618,7 @@ async function provision(body, env) {
   const payload = {
     username,
     status: "active",
+    proxy_settings: {},
     expire: Math.floor(Date.now() / 1000) + plan.days * DAY,
     data_limit: plan.data_gb * GIB,
     data_limit_reset_strategy: "no_reset",
@@ -629,7 +638,12 @@ async function provision(body, env) {
   }
   if (!response.ok) {
     console.error("PasarGuard provisioning failed", { status: response.status, order_id: orderId });
-    return { ok: false, error: "PROVISIONING_FAILED" };
+    const error = response.status === 401 || response.status === 403
+      ? "PASARGUARD_PERMISSION_DENIED"
+      : response.status === 422
+        ? "PASARGUARD_PAYLOAD_REJECTED"
+        : `PROVISIONING_FAILED_${response.status}`;
+    return { ok: false, error };
   }
   const user = await response.json();
   if (!String(user.subscription_url || "").startsWith("https://")) {
@@ -1073,8 +1087,9 @@ function adminPage() {
       const plan=document.createElement('small');plan.textContent='پلن: '+row.plan_id+' | مبلغ: '+row.price_irr+' ریال';
       const reference=document.createElement('small');reference.textContent='پیگیری: '+(row.card_receipt?.reference||'—')+' | تلگرام: '+(row.card_receipt?.telegram_username||'—');
       const id=document.createElement('small');id.textContent='سفارش: '+row.id;
-      const approve=document.createElement('button');approve.type='button';approve.textContent='تأیید و ساخت اشتراک';approve.addEventListener('click',()=>approveOrder(row.id));
-      wrap.append(title,plan,reference,id,approve);orders.append(wrap);
+      const failure=document.createElement('small');failure.textContent=row.provisioning_error?'خطای ساخت: '+row.provisioning_error:'';
+      const approve=document.createElement('button');approve.type='button';approve.textContent=row.status==='provisioning_failed'?'تلاش مجدد برای ساخت اشتراک':'تأیید و ساخت اشتراک';approve.addEventListener('click',()=>approveOrder(row.id));
+      wrap.append(title,plan,reference,id,failure,approve);orders.append(wrap);
     }
   }
   async function loadOrders(){
@@ -1088,7 +1103,9 @@ function adminPage() {
     const bankReference=prompt('شماره مرجع بانکی را وارد کنید:','manual');if(bankReference===null)return;
     message('در حال تأیید و ساخت اشتراک...');
     const response=await fetch('/v1/internal/card-orders/'+encodeURIComponent(id)+'/approve',{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({bank_reference:bankReference})});
-    if(!response.ok){message('تأیید سفارش یا ساخت اشتراک ناموفق بود.','error');return}
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok){message('تأیید سفارش ناموفق بود: '+(body.error||response.status),'error');return}
+    if(body.order?.status!=='fulfilled'){message('ساخت اشتراک ناموفق بود: '+(body.order?.provisioning_error||body.order?.status||'unknown'),'error');await loadOrders();return}
     message('پرداخت تأیید و اشتراک ساخته شد.','ok');await loadOrders();
   }
   document.querySelector('#load').addEventListener('click',()=>load().catch(()=>message('خطای ارتباط با سرور.','error')));
