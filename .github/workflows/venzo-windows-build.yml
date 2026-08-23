@@ -55,6 +55,7 @@ jobs:
           [IO.File]::WriteAllText($patchPath, $patchText, [Text.UTF8Encoding]::new($false))
           git -C desktop apply --check ../venzo-windows/venzo-windows.patch
           git -C desktop apply ../venzo-windows/venzo-windows.patch
+          Copy-Item venzo-windows/fa.json desktop/internal/locale/fa.json
           [IO.File]::WriteAllBytes('desktop/assets/app.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-app.ico.b64' -Raw).Trim()))
           [IO.File]::WriteAllBytes('desktop/assets/off.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-off.ico.b64' -Raw).Trim()))
           [IO.File]::WriteAllBytes('desktop/assets/on.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-on.ico.b64' -Raw).Trim()))
