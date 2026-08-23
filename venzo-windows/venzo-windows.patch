@@ -331,10 +331,10 @@ index 4b3f492..f1b68d3 100644
  	return s
  }
 diff --git a/main.go b/main.go
-index 6c583dd..a50117b 100644
+index 6c583dd..23f94b1 100644
 --- a/main.go
 +++ b/main.go
-@@ -267,7 +267,7 @@ func main() {
+@@ -267,19 +267,13 @@ func main() {
  		})
  	}
  
@@ -343,6 +343,22 @@ index 6c583dd..a50117b 100644
  	controller.UIService.MainWindow.SetIcon(controller.UIService.AppIconData)
  
  	// Create App structure to manage UI
+ 	app := ui.NewApp(controller.UIService.MainWindow, controller)
+-	controller.UIService.MainWindow.SetContent(fynetooltip.AddWindowToolTipLayer(
+-		ui.WithMinWindowSize(app.GetContent()), controller.UIService.MainWindow.Canvas()))
+-	// SPEC 098 §3.2: 1000×700 — и стартовый размер, и минимум. Растянуть
+-	// можно, сжать ниже нельзя: на вкладках Local и Remote две колонки, и
+-	// ниже этого они не деградируют, а превращаются в кашу из обрезанных
+-	// подписей. Прежние 350×450 остались от одноколоночной эпохи.
+-	//
+-	// SetFixedSize здесь неприменим (он запрещает и растягивание); нижнюю
+-	// границу держит MinSize контента — Fyne не даёт окну стать меньше него.
+-	controller.UIService.MainWindow.Resize(ui.MinWindowSize)
++	venzoContent := ui.NewVenzoShell(app, controller)
++	controller.UIService.MainWindow.SetContent(fynetooltip.AddWindowToolTipLayer(
++		venzoContent, controller.UIService.MainWindow.Canvas()))
++	controller.UIService.MainWindow.Resize(ui.VenzoWindowSize)
+ 	controller.UIService.MainWindow.CenterOnScreen() // Center the window on the screen
 diff --git a/ui/configurator/outbounds_configurator/edit_dialog.go b/ui/configurator/outbounds_configurator/edit_dialog.go
 index dc9fa2a..eae5ffd 100644
 --- a/ui/configurator/outbounds_configurator/edit_dialog.go
