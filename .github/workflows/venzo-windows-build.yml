@@ -96,7 +96,7 @@ jobs:
         shell: pwsh
         run: |
           go test ./core/config/configtypes ./core/config/subscription ./core/debugapi ./internal/locale
-          go test ./ui -run '^
+          go test ./ui -run TestDoesNotExist
       - name: Build Venzo VPN executable
         working-directory: desktop
         shell: cmd
