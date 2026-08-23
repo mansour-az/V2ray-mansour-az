@@ -7,14 +7,27 @@ import (
 	"fyne.io/fyne/v2/theme"
 )
 
-// venzoTheme keeps the native Fyne platform theme while applying the Venzo
-// red accent consistently to buttons, focus rings and selected controls.
+// venzoTheme keeps native Fyne typography and icons while applying Venzo's
+// red accent to both day and night modes.
 type venzoTheme struct {
 	base fyne.Theme
 }
 
 func newVenzoTheme(base fyne.Theme) fyne.Theme {
 	return &venzoTheme{base: base}
+}
+
+// ApplyVenzoTheme switches the complete application between day and night
+// without losing Venzo's branded red controls.
+func ApplyVenzoTheme(application fyne.App, dark bool) {
+	if application == nil {
+		return
+	}
+	base := theme.LightTheme()
+	if dark {
+		base = theme.DarkTheme()
+	}
+	application.Settings().SetTheme(newVenzoTheme(base))
 }
 
 func (t *venzoTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
