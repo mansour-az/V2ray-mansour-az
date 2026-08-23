@@ -1,0 +1,297 @@
+diff --git a/app/lib/screens/app_settings_screen/widgets/subscriptions_tab.dart b/app/lib/screens/app_settings_screen/widgets/subscriptions_tab.dart
+index 2812682..04db750 100644
+--- a/app/lib/screens/app_settings_screen/widgets/subscriptions_tab.dart
++++ b/app/lib/screens/app_settings_screen/widgets/subscriptions_tab.dart
+@@ -111,7 +111,7 @@ class SubscriptionsTab extends StatelessWidget {
+         Padding(
+           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+           child: Text(
+-            getLocalText.s("Some panels return the config by a substring in the User-Agent — a custom UA without the \"LxBox\" token may yield an unsupported format and break the update. Change only if you know why."),
++            getLocalText.s("Some panels choose the subscription format from the User-Agent. The Venzo default is compatible with common panels; change it only if your provider asks you to."),
+             style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+           ),
+         ),
+diff --git a/app/lib/screens/backup_screen.dart b/app/lib/screens/backup_screen.dart
+index 4444a16..64c7c87 100644
+--- a/app/lib/screens/backup_screen.dart
++++ b/app/lib/screens/backup_screen.dart
+@@ -137,7 +137,7 @@ class _BackupScreenState extends State<BackupScreen> with SnackHelper {
+           await File(path).writeAsString(json);
+           await Share.shareXFiles(
+             [XFile(path, mimeType: 'application/json', name: filename)],
+-            subject: 'LxBox backup',
++            subject: 'Venzo VPN backup',
+           );
+           if (!mounted) return;
+           showSnack(getLocalText.s("Backup exported (%d bytes)", bytes));
+diff --git a/app/lib/screens/config_screen.dart b/app/lib/screens/config_screen.dart
+index 6d86991..b6bebc1 100644
+--- a/app/lib/screens/config_screen.dart
++++ b/app/lib/screens/config_screen.dart
+@@ -74,10 +74,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
+     if (text.isEmpty) return;
+     try {
+       final dir = await getTemporaryDirectory();
+-      final file = File('${dir.path}/lxbox_config.json');
++      final file = File('${dir.path}/venzo_vpn_config.json');
+       await file.writeAsString(text);
+       // ignore: deprecated_member_use
+-      await Share.shareXFiles([XFile(file.path)], text: 'LxBox config');
++      await Share.shareXFiles([XFile(file.path)], text: 'Venzo VPN config');
+     } catch (e) {
+       if (!mounted) return;
+       ScaffoldMessenger.of(context).showSnackBar(
+diff --git a/app/lib/screens/debug_screen.dart b/app/lib/screens/debug_screen.dart
+index 4990bbf..f309cb3 100644
+--- a/app/lib/screens/debug_screen.dart
++++ b/app/lib/screens/debug_screen.dart
+@@ -72,7 +72,7 @@ class _DebugScreenState extends State<DebugScreen> with SnackHelper {
+       // ignore: deprecated_member_use
+       await Share.shareXFiles(
+         [XFile(path, name: name, mimeType: 'application/json')],
+-        text: 'LxBox diagnostic dump',
++        text: 'Venzo VPN diagnostic dump',
+         subject: name,
+       );
+     } catch (e) {
+diff --git a/app/lib/screens/live_events_tab.dart b/app/lib/screens/live_events_tab.dart
+index 4fd7a7c..7033db5 100644
+--- a/app/lib/screens/live_events_tab.dart
++++ b/app/lib/screens/live_events_tab.dart
+@@ -121,7 +121,7 @@ class _LiveEventsTabState extends State<LiveEventsTab> {
+               title: Text(getLocalText.plural("Share %d events (JSON)", _events.length)),
+               onTap: () {
+                 Navigator.pop(sheetCtx);
+-                Share.share(json, subject: 'LxBox profiler export');
++                Share.share(json, subject: 'Venzo VPN profiler export');
+               },
+             ),
+             ListTile(
+diff --git a/app/lib/screens/routing_screen.dart b/app/lib/screens/routing_screen.dart
+index fbadc7e..dd1afdf 100644
+--- a/app/lib/screens/routing_screen.dart
++++ b/app/lib/screens/routing_screen.dart
+@@ -629,7 +629,7 @@ class _RoutingScreenState extends State<RoutingScreen>
+           await File(path).writeAsString(json);
+           await Share.shareXFiles([
+             XFile(path, mimeType: 'application/json', name: filename),
+-          ], subject: 'LxBox rules');
++          ], subject: 'Venzo VPN rules');
+           showSnack(getLocalText.s("Rules exported"));
+           return;
+       }
+diff --git a/app/lib/screens/stats_screen/overview_tab.dart b/app/lib/screens/stats_screen/overview_tab.dart
+index 7f921f6..9b697bb 100644
+--- a/app/lib/screens/stats_screen/overview_tab.dart
++++ b/app/lib/screens/stats_screen/overview_tab.dart
+@@ -79,7 +79,7 @@ class _OverviewTabState extends State<OverviewTab> {
+                 // приложения (ядро в том же процессе), не только ядра. Тап →
+                 // попап с разбивкой памяти.
+                 _totalChip(
+-                  context, 'LxBox', formatBytes(widget.memory, spaced: true), Icons.memory, cs.secondary,
++                  context, 'Venzo VPN', formatBytes(widget.memory, spaced: true), Icons.memory, cs.secondary,
+                   onTap: () => showMemoryDetailSheet(
+                     context,
+                     rss: widget.memory,
+diff --git a/app/lib/screens/subscription_detail_screen/widgets/subscription_settings_tab.dart b/app/lib/screens/subscription_detail_screen/widgets/subscription_settings_tab.dart
+index 72c9508..b4c6ee6 100644
+--- a/app/lib/screens/subscription_detail_screen/widgets/subscription_settings_tab.dart
++++ b/app/lib/screens/subscription_detail_screen/widgets/subscription_settings_tab.dart
+@@ -326,7 +326,7 @@ class SubscriptionSettingsTab extends StatelessWidget {
+         Padding(
+           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+           child: Text(
+-            getLocalText.s("Some panels return the config by a substring in the User-Agent — a custom UA without the \"LxBox\" token may yield an unsupported format and break the update. Change only if you know why."),
++            getLocalText.s("Some panels choose the subscription format from the User-Agent. The Venzo default is compatible with common panels; change it only if your provider asks you to."),
+             style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+           ),
+         ),
+diff --git a/app/lib/screens/subscriptions_screen/entry_context_menu.dart b/app/lib/screens/subscriptions_screen/entry_context_menu.dart
+index 0c74c92..4d6801e 100644
+--- a/app/lib/screens/subscriptions_screen/entry_context_menu.dart
++++ b/app/lib/screens/subscriptions_screen/entry_context_menu.dart
+@@ -62,7 +62,7 @@ void showEntryContextMenu(
+               title: Text(getLocalText.s("Share URL…")),
+               onTap: () async {
+                 Navigator.pop(ctx);
+-                await Share.share(entry.url, subject: 'LxBox subscription');
++                await Share.share(entry.url, subject: 'Venzo VPN subscription');
+               },
+             ),
+           ListTile(
+diff --git a/app/lib/services/community_servers_loader.dart b/app/lib/services/community_servers_loader.dart
+index 1c293de..ea9bd3a 100644
+--- a/app/lib/services/community_servers_loader.dart
++++ b/app/lib/services/community_servers_loader.dart
+@@ -33,7 +33,7 @@ class CommunityServersLoader {
+   CommunityServersLoader._();
+ 
+   static const manifestUrl =
+-      'https://raw.githubusercontent.com/Leadaxe/LxBox/main/public-servers-manifest.json';
++      'https://raw.githubusercontent.com/mansour-az/V2ray-mansour-az/venzo-2.0/venzo2/public-servers-manifest.json';
+   static const _timeout = Duration(seconds: 5);
+ 
+   static CommunityManifest? _cached;
+diff --git a/app/lib/services/donate_methods.dart b/app/lib/services/donate_methods.dart
+index fa5bec9..83b3098 100644
+--- a/app/lib/services/donate_methods.dart
++++ b/app/lib/services/donate_methods.dart
+@@ -75,7 +75,7 @@ class DonateMethods {
+   static const _url = String.fromEnvironment(
+     'LXBOX_DONATE_URL',
+     defaultValue:
+-        'https://raw.githubusercontent.com/Leadaxe/LxBox/main/docs/donate.json',
++        'https://raw.githubusercontent.com/mansour-az/V2ray-mansour-az/venzo-2.0/venzo2/donate.json',
+   );
+   static const _httpTimeout = Duration(seconds: 10);
+   static const _cacheKey = 'donate_cache_json';
+@@ -95,7 +95,7 @@ class DonateMethods {
+     final client = httpClientForTesting ?? http.Client();
+     try {
+       final resp = await client
+-          .get(Uri.parse(_url), headers: {'User-Agent': 'LxBox/1.x'})
++          .get(Uri.parse(_url), headers: {'User-Agent': 'VenzoVPN/1.x'})
+           .timeout(_httpTimeout);
+       if (resp.statusCode == 200) {
+         final parsed = _parse(resp.body);
+diff --git a/app/lib/services/project_links.dart b/app/lib/services/project_links.dart
+index 99fed86..d800b08 100644
+--- a/app/lib/services/project_links.dart
++++ b/app/lib/services/project_links.dart
+@@ -15,38 +15,33 @@ class ProjectLinks {
+   static const repo = 'https://github.com/mansour-az/V2ray-mansour-az';
+   static const latestRelease =
+       'https://github.com/mansour-az/V2ray-mansour-az/releases/latest';
+-  static const core = 'https://github.com/Leadaxe/sing-box-lx';
+-  static const launcher = 'https://github.com/Leadaxe/singbox-launcher';
++  static const core = repo;
++  static const launcher = repo;
+   static const singboxUpstream = 'https://github.com/SagerNet/sing-box';
+   static const telegram = 'https://t.me/venzo_vpn';
+   static const support = 'https://t.me/Venzzo_vpn';
+-  static const donate = 'https://t.me/singbox_launcher/340/3621';
++  static const donate = support;
+   static const issues = 'https://t.me/Venzzo_vpn';
+-  static const boosty = 'https://boosty.to/lxbox/donate';
+-  static const donatePage =
+-      'https://github.com/Leadaxe/LxBox/blob/main/docs/DONATE.md';
+-  static const donatePageRu =
+-      'https://github.com/Leadaxe/LxBox/blob/main/docs/DONATE.ru.md';
++  static const boosty = support;
++  static const donatePage = support;
++  static const donatePageRu = support;
+ 
+   /// Страница поддержки на языке интерфейса (пара RU/EN, как гайд).
+   static String donatePageFor(String tag) =>
+       tag == 'ru' ? donatePageRu : donatePage;
+-  static const automationDoc =
+-      'https://github.com/Leadaxe/LxBox/blob/main/docs/AUTOMATION.md';
++  static const automationDoc = repo;
+ 
+   /// §361 — руководство пользователя. Пара RU/EN держится синхронной
+   /// CI-проверкой парности (tool/docs/parity_check.dart). Ветка `main`: в APK
+   /// попадает релизный код, а релиз — это merge в main, который принесёт туда
+   /// и оба файла гайда. Незнакомый тег → английская версия, а не 404.
+-  static const guideEn =
+-      'https://github.com/Leadaxe/LxBox/blob/main/docs/USER_GUIDE.md';
+-  static const guideRu =
+-      'https://github.com/Leadaxe/LxBox/blob/main/docs/USER_GUIDE.ru.md';
++  static const guideEn = repo;
++  static const guideRu = repo;
+ 
+   static String guideFor(String tag) => tag == 'ru' ? guideRu : guideEn;
+ 
+   static String releaseTag(String tag) =>
+-      'https://github.com/Leadaxe/LxBox/releases/tag/$tag';
++      'https://github.com/mansour-az/V2ray-mansour-az/releases/tag/$tag';
+ 
+   /// §390 — страницы приложения в сторах. Куда вести за обновлением, решает
+   /// канал установки (`InstallSource.updateUrl`): APK с GitHub не встанет
+diff --git a/app/lib/services/rule_set_downloader.dart b/app/lib/services/rule_set_downloader.dart
+index bedcb78..023e798 100644
+--- a/app/lib/services/rule_set_downloader.dart
++++ b/app/lib/services/rule_set_downloader.dart
+@@ -250,7 +250,7 @@ class RuleSetDownloader {
+         final f = await _file(id);
+         final tmp = File('${f.path}.tmp');
+ 
+-        final headers = <String, String>{'User-Agent': 'LxBox'};
++        final headers = <String, String>{'User-Agent': 'VenzoVPN'};
+         // Условный GET имеет смысл только когда файл реально лежит: с
+         // etag'ом от снесённого кэша сервер ответил бы 304 на пустоту.
+         final etag = prev.etag;
+diff --git a/app/lib/services/subscription/user_agent.dart b/app/lib/services/subscription/user_agent.dart
+index c267b7e..1286f80 100644
+--- a/app/lib/services/subscription/user_agent.dart
++++ b/app/lib/services/subscription/user_agent.dart
+@@ -34,7 +34,10 @@ import '../version_info.dart';
+ ///
+ /// например `LxBox-android/2.0.4`.
+ 
+-const _kProductToken = 'LxBox-android';
++// Keep a widely recognised compatibility token so subscription panels return
++// URI/base64 lists, while exposing only the Venzo brand to users and logs.
++const _kProductToken = 'VenzoVPN-android';
++const _kCompatibilityToken = 'v2rayNG/1.10.2';
+ 
+ // §219 — module-level: раньше компилился на каждый вызов _sanitizeToken
+ // (в т.ч. при инициализации приложения).
+@@ -44,7 +47,7 @@ final _uaSanitizeRe = RegExp(r'[()\s;]+');
+ /// независимо от мусора на входе. Вынесена отдельно ради regression-теста.
+ String buildSubscriptionUserAgent({required String appVersion}) {
+   final ver = _sanitizeToken(appVersion, fallback: 'unknown');
+-  return '$_kProductToken/$ver';
++  return '$_kProductToken/$ver $_kCompatibilityToken';
+ }
+ 
+ /// Срезает ведущий `v` и символы, которые сломали бы структуру UA (скобки /
+diff --git a/app/lib/services/support/support_message.dart b/app/lib/services/support/support_message.dart
+index 2ed93a4..8ec3c32 100644
+--- a/app/lib/services/support/support_message.dart
++++ b/app/lib/services/support/support_message.dart
+@@ -199,11 +199,11 @@ class SupportMessageService {
+ 
+   /// Прод-канал — main. Для проверки кампании до публикации можно собрать
+   /// тестовый APK с override'ом:
+-  /// `--dart-define=LXBOX_SUPPORT_URL=https://raw.githubusercontent.com/Leadaxe/LxBox/develop/docs/support.test.json`
++  /// Build-time override for the Venzo support feed.
+   static const _url = String.fromEnvironment(
+     'LXBOX_SUPPORT_URL',
+     defaultValue:
+-        'https://raw.githubusercontent.com/Leadaxe/LxBox/main/docs/support.json',
++        'https://raw.githubusercontent.com/mansour-az/V2ray-mansour-az/venzo-2.0/venzo2/support.json',
+   );
+   static const _httpTimeout = Duration(seconds: 10);
+ 
+@@ -225,7 +225,7 @@ class SupportMessageService {
+     final client = httpClientForTesting ?? http.Client();
+     try {
+       final resp = await client
+-          .get(Uri.parse(_url), headers: {'User-Agent': 'LxBox/1.x'})
++          .get(Uri.parse(_url), headers: {'User-Agent': 'VenzoVPN/1.x'})
+           .timeout(_httpTimeout);
+       if (resp.statusCode == 200) {
+         final f = SupportFeed.fromJson(jsonDecode(resp.body));
+diff --git a/app/lib/services/update_checker.dart b/app/lib/services/update_checker.dart
+index 88b19c4..9572bcd 100644
+--- a/app/lib/services/update_checker.dart
++++ b/app/lib/services/update_checker.dart
+@@ -20,14 +20,14 @@ class UpdateChecker {
+   static final UpdateChecker I = UpdateChecker._();
+ 
+   static const _repoApi =
+-      'https://api.github.com/repos/Leadaxe/LxBox/releases/latest';
++      'https://api.github.com/repos/mansour-az/V2ray-mansour-az/releases/latest';
+   /// Fallback — own manifest, committed to repo on every release by CI.
+   /// Используется когда api.github.com даёт 403/429/5xx/timeout (типичный
+   /// сценарий — shared VPN exit IP исчерпал anonymous 60 req/h cap).
+   /// Schema контролируем сами; raw-endpoint cdn-cached, anti-abuse лояльнее.
+   static const _repoFallback =
+-      'https://raw.githubusercontent.com/Leadaxe/LxBox/main/docs/latest.json';
+-  static const _userAgent = 'LxBox';
++      'https://raw.githubusercontent.com/mansour-az/V2ray-mansour-az/venzo-2.0/venzo2/latest.json';
++  static const _userAgent = 'VenzoVPN';
+   static const _httpTimeout = Duration(seconds: 10);
+   static const _minCheckInterval = Duration(hours: 24);
+ 
+
