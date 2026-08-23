@@ -79,6 +79,10 @@ jobs:
               exit 1
             fi
           done
+          if [ "${#PROVISION_SECRET}" -lt 8 ]; then
+            echo "PROVISION_SECRET must be at least 8 characters" >&2
+            exit 1
+          fi
 
       - name: Deploy Worker and encrypted secrets
         id: deploy
