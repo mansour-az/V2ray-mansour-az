@@ -41,7 +41,7 @@ jobs:
       - name: Checkout pinned desktop base
         shell: pwsh
         run: |
-          git clone --depth 1 --branch $env:UPSTREAM_TAG https://github.com/Leadaxe/singbox-launcher.git desktop
+          git -c core.autocrlf=false clone --depth 1 --branch $env:UPSTREAM_TAG https://github.com/Leadaxe/singbox-launcher.git desktop
           $actual = (git -C desktop rev-parse HEAD).Trim()
           if ($actual -ne $env:UPSTREAM_COMMIT) {
             throw "Unexpected upstream commit: $actual"
