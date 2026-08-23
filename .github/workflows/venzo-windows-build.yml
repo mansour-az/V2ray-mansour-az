@@ -50,6 +50,9 @@ jobs:
       - name: Apply Venzo product patch
         shell: pwsh
         run: |
+          $patchPath = (Resolve-Path 'venzo-windows/venzo-windows.patch').Path
+          $patchText = (Get-Content $patchPath -Raw) -replace "`r`n", "`n"
+          [IO.File]::WriteAllText($patchPath, $patchText, [Text.UTF8Encoding]::new($false))
           git -C desktop apply --check ../venzo-windows/venzo-windows.patch
           git -C desktop apply ../venzo-windows/venzo-windows.patch
           [IO.File]::WriteAllBytes('desktop/assets/app.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-app.ico.b64' -Raw).Trim()))
