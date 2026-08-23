@@ -70,7 +70,7 @@ jobs:
             'desktop/core/config/configtypes/types.go',
             'desktop/app.manifest'
           )
-          $bad = Select-String -Path $runtimeFiles -Pattern 'LxBox|singbox_launcher|Leadaxe/singbox-launcher/releases/latest|Singbox Launcher' | Where-Object { $_.Line -notmatch '^\\s*//' }
+          $bad = Select-String -Path $runtimeFiles -Pattern 'LxBox|singbox_launcher|Leadaxe/singbox-launcher/releases/latest|Singbox Launcher' | Where-Object { $_.Line -notmatch '^\s*//' }
           if ($bad) { $bad | Format-Table; throw 'Visible upstream branding remains' }
 
       - name: Set up Go
