@@ -1,52 +1,146 @@
-# V2ray for Doprax
-Create By ifeng<br>
-Web Site: https://www.hicairo.com <br>
-Telegram: https://t.me/HiaiFeng <br>
+# 🚀 Venzo VPN
 
-# 简介：
-本项目用于在 Doprax.com 免费服务上部署 V2ray ，采用的方案为 Nginx + WebSocket + VMess/VLess + TLS。速度与 Replit 相比较慢，但是官方宣传不限流量，服务启动后永不停机。
+کلاینت هوشمند Android برای اتصال سریع، ساده و امن به سرورهای VPN با رابط فارسی و طراحی اختصاصی.
 
-# 注意事项：
-<p><b><li>请勿滥用，账号封禁风险自负。</li></b></p>
-<p><b><li>部署完成如发现不能上网，请检查域名是否被墙，可使用 Cloudflare CDN 解决。</li></b></p>
+Venzo VPN با هدف حذف پیچیدگی‌های فنی ساخته شده است؛ کاربران می‌توانند بدون نیاز به تنظیمات دستی، تنها با یک لمس به بهترین سرور موجود متصل شوند. برنامه با بررسی کانفیگ‌ها، ارزیابی سلامت سرورها و انتخاب هوشمند، تجربه‌ای سریع و پایدار ارائه می‌دهد.
 
-# 部署：
-<p>1、登录自己的 GitHub 账号后 Fork 该项目。</p>
-<p>2、注册 <a href="https://www.doprax.com/signup/">Doprax.com</a> 账号登录后 Import 该项目。</p>
-<p>详细使用方案请参考：https://www.hicairo.com/post/55.html</p>
+---
 
-# 使用方法：
-<p>1、服务器端配置</p>
-<p>请使用 <a href="https://www.v2fly.org/awesome/tools.html">第三方工具</a> 生成一个新的 UUID 。在 Doprax.com 登录后依次点击左侧菜单中的 Main ,窗口右侧的 Edit source code ，选择 Dockerfile 文件，编辑 UUID 及伪装地址信息保存后重启服务。</p>
-<img src="https://hicairo.com/zb_users/upload/2022/12/202212291672276227538571.webp">
-<pre class="notranslate"><code># 用新生成的 UUID 替换 de04add9-5c68-8bab-950c-08cd5320df18
-ENV UUID de04add9-5c68-8bab-950c-08cd5320df18
-# VMESS_WSPATH / VLESS_WSPATH 两个常量分别定义了 Vmess/VLess 的伪装路径，
-# 请分别修改内容中的vmess或vless。注意：伪装路径以 / 符号开始,为避免不必要的麻烦，请不要使用特殊符号.
-ENV VMESS_WSPATH /vmess
-ENV VLESS_WSPATH /vless
-</code></pre>
+## ✨ معرفی
 
-<p>2、客户端配置</p>
-<p>节点客户端配置需要手动进行，下面以 V2rayN 为例。
-<p>下图为 VMess 配置示意图，请修改标示内容，其他设置与图片中显示一致。</p>
-<img src="https://www.hicairo.com/zb_users/upload/2022/12/202212291672276258394161.webp">
-<p>下图为 VLess 配置示意图，请修改标示内容，其他设置与图片中显示一致。</p>
-<img src="https://www.hicairo.com/zb_users/upload/2022/12/202212291672276274474231.webp">
+Venzo VPN یک کلاینت Android با طراحی مدرن، رابط فارسی و هویت بصری قرمز، مشکی و نقره‌ای است که از کانفیگ‌های رایگان و اشتراک‌های اختصاصی پشتیبانی می‌کند.
 
-# 反馈与交流：
-<p>在使用过程中，如果遇到问题，请使用Telegram与我联系。（ https://t.me/HiaiFeng ）</p>
-<p>大家好，Doprax 非常关注用户使用体验。Hemen 先生及他的团队，为 Doprax 社区创建了 Discord 服务，如果您在使用过程中，遇到 Doprax 平台的相关问题或对平台有一些建议，请使用如下链接与官方联系。
+این پروژه شامل شخصی‌سازی کامل کلاینت، مدیریت اشتراک‌ها، فروشگاه سرویس، دریافت منابع رایگان، اتصال امن به API، سیستم پرداخت و زیرساخت آماده انتشار در Google Play است.
 
-Hello everyone! Doprax pays great attention to user experience. Mr. Hemen and his team have created a Discord service for the Doprax community. If you encounter any problems or have any suggestions related to the Doprax platform during use, please contact the official using the link below.
+---
 
-https://discord.gg/pFnGwTuXjk</p>
+# امکانات
 
-## TradingView Supertrend Overlay Fix
+## 🔥 اتصال و مدیریت سرورها
 
-If you are using the UT Supertrend indicator on TradingView and notice that the trend line
-is frozen far above the candles, import the helper script located at
-`tradingview/ut_supertrend_overlay_fix.pine`. The script forces the indicator to request
-data from the active chart symbol/timeframe so that the calculated levels share the same
-scale as the price candles. Once added to your chart, keep the **Use chart price** option
-enabled to eliminate the desync.
+- اتصال و قطع اتصال با یک دکمه
+- انتخاب هوشمند بهترین کانفیگ
+- تست و ارزیابی سلامت سرورها
+- تغییر خودکار سرور در صورت شکست اتصال
+- نمایش:
+  - لوکیشن سرور
+  - نوع پروتکل
+  - پینگ
+  - زمان اتصال
+  - میزان مصرف ترافیک
+- انتخاب دستی سرورها
+- مرتب‌سازی کانفیگ‌ها بر اساس کیفیت
+- ذخیره آخرین منابع سالم برای زمان اختلال
+
+---
+
+## 🌐 مدیریت کانفیگ و اشتراک
+
+- پشتیبانی از Subscription URL
+- پشتیبانی از Base64 و URI
+- دریافت منابع رایگان تحت کنترل Venzo
+- حذف خودکار کانفیگ‌های تکراری و خراب
+- بروزرسانی سابسکرایب‌ها
+- نمایش کانفیگ‌های موجود در هر اشتراک
+- انتخاب دستی یا خودکار کانفیگ
+- User-Agent اختصاصی بدون نمایش برند upstream
+
+---
+
+# 🛒 فروشگاه و سیستم حساب کاربری
+
+- دریافت آنلاین پلن‌ها و قیمت‌ها از API
+- عدم نیاز به انتشار نسخه جدید برای تغییر قیمت‌ها
+- اتصال فروشگاه به Cloudflare Worker
+- ساخت و تمدید سرویس از طریق Backend
+- پشتیبانی از پرداخت:
+
+  - USDT شبکه TRC20
+  - TRX
+  - کارت به کارت
+  - درگاه پرداخت ریالی
+
+- کیف پول داخلی
+- تاریخچه تراکنش‌ها
+- پیگیری سفارش‌ها
+- مدیریت رسیدهای پرداخت در پنل مدیریت
+
+---
+
+# 🏗 معماری پروژه
+
+Venzo VPN از معماری ماژولار استفاده می‌کند:
+
+
+Android Client
+
+|
+
+|
+
+Cloudflare Worker API
+
+|
+
+|
+
+Backend Services
+
+|
+
+|
+
+Subscription & Payment System
+
+
+
+
+---
+
+# 🔐 امنیت و حریم خصوصی
+
+- عدم ذخیره اطلاعات حساس کاربر
+- ارتباط امن API
+- مدیریت منابع از سرور کنترل‌شده Venzo
+- حذف وابستگی‌های قابل مشاهده به پروژه‌های upstream
+- آماده‌سازی برای انتشار عمومی
+
+---
+
+# 📱 نسخه‌ها
+
+| نسخه | وضعیت |
+|---|---|
+| v2.4.1 | آخرین نسخه توسعه |
+| Android | پشتیبانی شده |
+| Google Play | آماده انتشار |
+
+---
+
+# 🚀 Roadmap
+
+## نسخه‌های آینده:
+
+- [ ] سیستم اعلان داخلی
+- [ ] پنل کاربری پیشرفته
+- [ ] سیستم امتیازدهی سرورها
+- [ ] پیشنهاد خودکار بهترین مسیر اتصال
+- [ ] نسخه Windows و Desktop
+- [ ] سیستم مدیریت چند دستگاه
+
+---
+
+# 👨‍💻 توسعه‌دهنده
+
+**Venzo VPN**
+
+Designed & Customized by Mansour AZ
+
+GitHub:
+https://github.com/mansour-az
+
+---
+
+# 📄 License
+
+This project contains customized components and third-party open-source dependencies.
