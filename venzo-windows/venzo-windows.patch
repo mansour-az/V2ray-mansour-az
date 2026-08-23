@@ -212,6 +212,24 @@ index 3e2c65c..f407fe7 100644
  	}
  	for in, want := range cases {
  		if got := DocsURL(in); got != want {
+@@ -92,7 +92,7 @@ func TestManifestAndHelp(t *testing.T) {
+ 	if manifest.Core != "1.14.0-lx.1-rc.17" || manifest.Launcher != "v-test" {
+ 		t.Errorf("manifest versions wrong: launcher=%q core=%q", manifest.Launcher, manifest.Core)
+ 	}
+-	if !strings.Contains(manifest.Docs, "/docs/API.md") {
++	if !strings.Contains(manifest.Docs, "/venzo-windows/API.md") {
+ 		t.Errorf("manifest docs link wrong: %q", manifest.Docs)
+ 	}
+ 	if len(manifest.Endpoints) == 0 {
+@@ -173,7 +173,7 @@ func TestManifestAuthAndUnknownPath(t *testing.T) {
+ 	if resp.StatusCode != 404 {
+ 		t.Errorf("unknown path: status %d, want 404", resp.StatusCode)
+ 	}
+-	if !strings.Contains(string(body), "/docs/API.md") {
++	if !strings.Contains(string(body), "/venzo-windows/API.md") {
+ 		t.Errorf("404 body should point at docs: %s", body)
+ 	}
+ }
 diff --git a/core/services/srs_downloader.go b/core/services/srs_downloader.go
 index 22e189a..fa4b6bb 100644
 --- a/core/services/srs_downloader.go
@@ -400,4 +418,3 @@ index 4d380be..b8766f3 100644
  			debuglog.ErrorLog("toolsTab: Failed to open GitHub link: %v", err)
  			ShowError(ac.UIService.MainWindow, err)
  		}
-
