@@ -46,6 +46,8 @@ jobs:
           git apply --check "$GITHUB_WORKSPACE/venzo2/venzo-free-catalog.patch"
           git apply "$GITHUB_WORKSPACE/venzo2/venzo-free-catalog.patch"
           git apply --check "$GITHUB_WORKSPACE/venzo2/venzo-white-label.patch"
+          git apply "$GITHUB_WORKSPACE/venzo2/venzo-white-label.patch"
+          git apply --check "$GITHUB_WORKSPACE/venzo2/venzo-myapp-mobile.patch"
 
       - name: Advance audited upstream ref
         run: |
