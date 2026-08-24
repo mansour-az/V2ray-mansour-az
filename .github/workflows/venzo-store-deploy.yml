@@ -66,12 +66,16 @@ jobs:
           TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
           CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
           CARD_HOLDER: ${{ secrets.CARD_HOLDER }}
+          SWAPPAY_API_KEY: ${{ secrets.SWAPPAY_API_KEY }}
+          SWAPPAY_USERNAME: ${{ secrets.SWAPPAY_USERNAME }}
+          OXAPAY_MERCHANT_API_KEY: ${{ secrets.OXAPAY_MERCHANT_API_KEY }}
         run: |
           set -euo pipefail
           required=(
             CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
             PASARGUARD_BASE_URL PASARGUARD_API_KEY PROVISION_SECRET
             TRON_WALLET_ADDRESS TRONGRID_API_KEY CARD_NUMBER CARD_HOLDER
+            SWAPPAY_API_KEY SWAPPAY_USERNAME OXAPAY_MERCHANT_API_KEY
           )
           for name in "${required[@]}"; do
             if [ -z "${!name:-}" ]; then
@@ -101,6 +105,9 @@ jobs:
             TRONGRID_API_KEY
             CARD_NUMBER
             CARD_HOLDER
+            SWAPPAY_API_KEY
+            SWAPPAY_USERNAME
+            OXAPAY_MERCHANT_API_KEY
         env:
           PASARGUARD_BASE_URL: ${{ secrets.PASARGUARD_BASE_URL }}
           PASARGUARD_API_KEY: ${{ secrets.PASARGUARD_API_KEY }}
@@ -109,6 +116,9 @@ jobs:
           TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
           CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
           CARD_HOLDER: ${{ secrets.CARD_HOLDER }}
+          SWAPPAY_API_KEY: ${{ secrets.SWAPPAY_API_KEY }}
+          SWAPPAY_USERNAME: ${{ secrets.SWAPPAY_USERNAME }}
+          OXAPAY_MERCHANT_API_KEY: ${{ secrets.OXAPAY_MERCHANT_API_KEY }}
 
       - name: Show deployment URL
         env:

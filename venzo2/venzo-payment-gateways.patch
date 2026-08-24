@@ -1,0 +1,504 @@
+diff --git a/app/lib/screens/venzo_account_screen.dart b/app/lib/screens/venzo_account_screen.dart
+index 48a2738..d8ebbd5 100644
+--- a/app/lib/screens/venzo_account_screen.dart
++++ b/app/lib/screens/venzo_account_screen.dart
+@@ -351,6 +351,22 @@ class _VenzoAccountScreenState extends State<VenzoAccountScreen> {
+                   title: const Text('کارت‌به‌کارت'),
+                   onTap: () => Navigator.pop(context, VenzoPaymentMethod.card),
+                 ),
++              if (_methods.contains(VenzoPaymentMethod.swapPay))
++                ListTile(
++                  leading: const Icon(Icons.swap_horiz_rounded),
++                  title: const Text('Swap Wallet'),
++                  subtitle: const Text('پرداخت امن از طریق API سرویس SwapPay'),
++                  onTap: () =>
++                      Navigator.pop(context, VenzoPaymentMethod.swapPay),
++                ),
++              if (_methods.contains(VenzoPaymentMethod.oxaPay))
++                ListTile(
++                  leading: const Icon(Icons.currency_exchange_rounded),
++                  title: const Text('OxaPay'),
++                  subtitle: const Text('پرداخت رمزارزی با فاکتور آنلاین'),
++                  onTap: () =>
++                      Navigator.pop(context, VenzoPaymentMethod.oxaPay),
++                ),
+               if (_methods.contains(VenzoPaymentMethod.rialGateway))
+                 ListTile(
+                   leading: const Icon(Icons.account_balance_rounded),
+diff --git a/app/lib/screens/venzo_payment_screen.dart b/app/lib/screens/venzo_payment_screen.dart
+index dc5a6dd..5fc79c2 100644
+--- a/app/lib/screens/venzo_payment_screen.dart
++++ b/app/lib/screens/venzo_payment_screen.dart
+@@ -68,21 +68,14 @@ class _VenzoPaymentScreenState extends State<VenzoPaymentScreen> {
+   @override
+   Widget build(BuildContext context) {
+     return Scaffold(
+-      appBar: AppBar(title: const Text('پرداخت اشتراک')),
++      appBar: AppBar(title: const Text('وضعیت پرداخت')),
+       body: ListView(
+-        padding: const EdgeInsets.all(16),
++        padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+         children: [
+-          Text(widget.planTitle,
+-              style: Theme.of(context)
+-                  .textTheme
+-                  .titleLarge
+-                  ?.copyWith(fontWeight: FontWeight.w800)),
+-          const SizedBox(height: 6),
+-          Text('شماره سفارش: ${_order.id}',
+-              textDirection: TextDirection.ltr),
+-          const SizedBox(height: 16),
+           if (_order.isFulfilled)
+             _order.isWalletTopup ? _walletFulfilledCard() : _fulfilledCard()
++          else if (_order.isFailed)
++            _failedCard()
+           else
+             _paymentCard(),
+         ],
+@@ -93,6 +86,10 @@ class _VenzoPaymentScreenState extends State<VenzoPaymentScreen> {
+   Widget _paymentCard() {
+     if (_order.paymentMethod == 'card') return _cardTransfer();
+     if (_order.paymentMethod == 'rial_gateway') return _rialGateway();
++    if (_order.paymentMethod == 'swappay') {
++      return _hostedGateway('SwapPay');
++    }
++    if (_order.paymentMethod == 'oxapay') return _hostedGateway('OxaPay');
+     final amount = _order.payment['amount']?.toString() ?? '';
+     final currency = _order.payment['currency']?.toString() ?? '';
+     final wallet = _order.payment['wallet_address']?.toString() ?? '';
+@@ -128,6 +125,141 @@ class _VenzoPaymentScreenState extends State<VenzoPaymentScreen> {
+     );
+   }
+ 
++  Widget _hostedGateway(String provider) {
++    final checkoutUrl = _order.payment['checkout_url']?.toString() ?? '';
++    return Column(
++      crossAxisAlignment: CrossAxisAlignment.stretch,
++      children: [
++        const SizedBox(height: 28),
++        Center(
++          child: Container(
++            width: 112,
++            height: 112,
++            padding: const EdgeInsets.all(28),
++            decoration: BoxDecoration(
++              shape: BoxShape.circle,
++              color: Theme.of(context).colorScheme.surfaceContainerHighest,
++            ),
++            child: CircularProgressIndicator(
++              strokeWidth: 7,
++              color: Theme.of(context).colorScheme.primary,
++            ),
++          ),
++        ),
++        const SizedBox(height: 30),
++        Text(
++          'در انتظار تأیید پرداخت',
++          textAlign: TextAlign.center,
++          style: Theme.of(context)
++              .textTheme
++              .headlineSmall
++              ?.copyWith(fontWeight: FontWeight.w900),
++        ),
++        const SizedBox(height: 10),
++        Text(
++          'نتیجه تراکنش از $provider در حال بررسی است.',
++          textAlign: TextAlign.center,
++          style: Theme.of(context).textTheme.bodyLarge,
++        ),
++        const SizedBox(height: 28),
++        _detailsCard(provider: provider, status: 'در حال بررسی'),
++        const SizedBox(height: 20),
++        FilledButton.icon(
++          onPressed: checkoutUrl.isEmpty
++              ? null
++              : () => ul.UrlLauncher.open(checkoutUrl),
++          icon: const Icon(Icons.open_in_browser_rounded),
++          label: Text('ادامه پرداخت در $provider'),
++        ),
++        const SizedBox(height: 10),
++        OutlinedButton.icon(
++          onPressed: _busy ? null : _refresh,
++          icon: _busy
++              ? const SizedBox.square(
++                  dimension: 18,
++                  child: CircularProgressIndicator(strokeWidth: 2),
++                )
++              : const Icon(Icons.refresh_rounded),
++          label: const Text('بررسی مجدد'),
++        ),
++        const SizedBox(height: 14),
++        Text(
++          'این صفحه به‌صورت خودکار به‌روزرسانی می‌شود.',
++          textAlign: TextAlign.center,
++          style: Theme.of(context).textTheme.bodySmall,
++        ),
++      ],
++    );
++  }
++
++  Widget _detailsCard({required String provider, required String status}) =>
++      Card(
++        child: Padding(
++          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
++          child: Column(
++            children: [
++              _detailRow('درگاه', provider),
++              const Divider(height: 1),
++              _detailRow('شماره سفارش', _shortOrderId),
++              const Divider(height: 1),
++              _detailRow('مبلغ', _moneyToman(_order.priceIrr)),
++              const Divider(height: 1),
++              _detailRow('وضعیت', status,
++                  valueColor: status == 'ناموفق'
++                      ? Theme.of(context).colorScheme.error
++                      : status == 'پرداخت‌شده'
++                          ? Colors.green.shade700
++                          : Colors.orange.shade800),
++            ],
++          ),
++        ),
++      );
++
++  Widget _detailRow(String label, String value, {Color? valueColor}) => Padding(
++        padding: const EdgeInsets.symmetric(vertical: 15),
++        child: Row(
++          children: [
++            Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
++            const Spacer(),
++            Flexible(
++              child: Text(
++                value,
++                textDirection: label == 'شماره سفارش'
++                    ? TextDirection.ltr
++                    : TextDirection.rtl,
++                style: TextStyle(
++                  color: valueColor,
++                  fontWeight: FontWeight.w800,
++                ),
++              ),
++            ),
++          ],
++        ),
++      );
++
++  String get _providerName => switch (_order.paymentMethod) {
++        'swappay' => 'SwapPay',
++        'oxapay' => 'OxaPay',
++        _ => 'Venzo',
++      };
++
++  String get _shortOrderId => _order.id.length > 8
++      ? 'VZ-${_order.id.substring(0, 8).toUpperCase()}'
++      : _order.id.toUpperCase();
++
++  String _moneyToman(int value) {
++    final toman = value ~/ 10;
++    final grouped = toman.toString().replaceAllMapped(
++        RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '٬');
++    const latin = '0123456789';
++    const persian = '۰۱۲۳۴۵۶۷۸۹';
++    final localized = grouped.split('').map((char) {
++      final index = latin.indexOf(char);
++      return index < 0 ? char : persian[index];
++    }).join();
++    return '$localized تومان';
++  }
++
+   Widget _rialGateway() {
+     final amount = _order.payment['amount']?.toString() ?? '';
+     final checkoutUrl = _order.payment['checkout_url']?.toString() ?? '';
+@@ -221,61 +353,110 @@ class _VenzoPaymentScreenState extends State<VenzoPaymentScreen> {
+     );
+   }
+ 
+-  Widget _fulfilledCard() => Card(
+-        color: Theme.of(context).colorScheme.primaryContainer,
+-        child: Padding(
+-          padding: const EdgeInsets.all(16),
+-          child: Column(
+-            crossAxisAlignment: CrossAxisAlignment.stretch,
+-            children: [
+-              const Icon(Icons.verified_rounded, size: 52),
+-              const SizedBox(height: 8),
+-              const Text('پرداخت تأیید و اشتراک ساخته شد',
+-                  textAlign: TextAlign.center,
+-                  style: TextStyle(fontWeight: FontWeight.w800)),
+-              const SizedBox(height: 16),
+-              SelectableText(_order.subscriptionUrl ?? '',
+-                  textDirection: TextDirection.ltr),
+-              const SizedBox(height: 10),
+-              if (_activated) ...[
+-                const Row(
+-                  mainAxisAlignment: MainAxisAlignment.center,
+-                  children: [
+-                    Icon(Icons.vpn_lock_rounded),
+-                    SizedBox(width: 8),
+-                    Text('اشتراک اضافه شد و اتصال آغاز شد'),
+-                  ],
+-                ),
+-                const SizedBox(height: 10),
+-              ] else ...[
+-                if (_activationError != null) ...[
+-                  Text(_activationError!,
+-                      textAlign: TextAlign.center,
+-                      style: TextStyle(
+-                          color: Theme.of(context).colorScheme.error)),
+-                  const SizedBox(height: 8),
+-                ],
+-                FilledButton.icon(
+-                  onPressed: _busy ? null : _activateAndConnect,
+-                  icon: _busy
+-                      ? const SizedBox.square(
+-                          dimension: 18,
+-                          child: CircularProgressIndicator(strokeWidth: 2))
+-                      : const Icon(Icons.vpn_lock_rounded),
+-                  label: const Text('فعال‌سازی و اتصال'),
+-                ),
+-                const SizedBox(height: 10),
+-              ],
+-              FilledButton.icon(
+-                onPressed: () => _copy(_order.subscriptionUrl ?? ''),
+-                icon: const Icon(Icons.copy),
+-                label: const Text('کپی لینک اشتراک'),
++  Widget _fulfilledCard() => Column(
++        crossAxisAlignment: CrossAxisAlignment.stretch,
++        children: [
++          const SizedBox(height: 28),
++          Center(
++            child: Container(
++              width: 112,
++              height: 112,
++              decoration: BoxDecoration(
++                shape: BoxShape.circle,
++                color: Colors.green.withOpacity(.14),
+               ),
+-            ],
++              child: const Icon(Icons.check_rounded,
++                  size: 66, color: Colors.green),
++            ),
+           ),
+-        ),
++          const SizedBox(height: 30),
++          Text('پرداخت با موفقیت انجام شد',
++              textAlign: TextAlign.center,
++              style: Theme.of(context)
++                  .textTheme
++                  .headlineSmall
++                  ?.copyWith(fontWeight: FontWeight.w900)),
++          const SizedBox(height: 10),
++          const Text('سرویس Venzo شما با موفقیت فعال شد.',
++              textAlign: TextAlign.center),
++          const SizedBox(height: 28),
++          _detailsCard(provider: _providerName, status: 'پرداخت‌شده'),
++          if (_activationError != null) ...[
++            const SizedBox(height: 12),
++            Text(_activationError!,
++                textAlign: TextAlign.center,
++                style: TextStyle(color: Theme.of(context).colorScheme.error)),
++          ],
++          const SizedBox(height: 20),
++          FilledButton.icon(
++            onPressed: _busy
++                ? null
++                : _activated
++                    ? () => Navigator.pop(context)
++                    : _activateAndConnect,
++            icon: _busy
++                ? const SizedBox.square(
++                    dimension: 18,
++                    child: CircularProgressIndicator(strokeWidth: 2))
++                : const Icon(Icons.vpn_lock_rounded),
++            label: const Text('مشاهده سرویس'),
++          ),
++          const SizedBox(height: 12),
++          TextButton.icon(
++            onPressed: () => _copy(_order.subscriptionUrl ?? ''),
++            icon: const Icon(Icons.copy_rounded),
++            label: const Text('کپی لینک اشتراک'),
++          ),
++        ],
++      );
++
++  Widget _failedCard() => Column(
++        crossAxisAlignment: CrossAxisAlignment.stretch,
++        children: [
++          const SizedBox(height: 28),
++          Center(
++            child: Container(
++              width: 112,
++              height: 112,
++              decoration: BoxDecoration(
++                shape: BoxShape.circle,
++                color: Theme.of(context).colorScheme.errorContainer,
++                border: Border.all(
++                    color: Theme.of(context).colorScheme.error, width: 2),
++              ),
++              child: Icon(Icons.close_rounded,
++                  size: 66, color: Theme.of(context).colorScheme.error),
++            ),
++          ),
++          const SizedBox(height: 30),
++          Text('پرداخت ناموفق بود',
++              textAlign: TextAlign.center,
++              style: Theme.of(context)
++                  .textTheme
++                  .headlineSmall
++                  ?.copyWith(fontWeight: FontWeight.w900)),
++          const SizedBox(height: 10),
++          Text('فاکتور $_providerName منقضی شده یا پرداخت تکمیل نشده است.',
++              textAlign: TextAlign.center),
++          const SizedBox(height: 28),
++          _detailsCard(provider: _providerName, status: 'ناموفق'),
++          const SizedBox(height: 20),
++          FilledButton(
++            onPressed: _returnToStore,
++            child: const Text('تلاش مجدد'),
++          ),
++          TextButton(
++            onPressed: _returnToStore,
++            child: const Text('انتخاب روش پرداخت دیگر'),
++          ),
++        ],
+       );
+ 
++  Future<void> _returnToStore() async {
++    await VenzoCheckoutStorage.clear();
++    if (mounted) Navigator.pop(context);
++  }
++
+   Widget _walletFulfilledCard() => Card(
+         color: Theme.of(context).colorScheme.primaryContainer,
+         child: Padding(
+diff --git a/app/lib/screens/venzo_store_screen.dart b/app/lib/screens/venzo_store_screen.dart
+index 155f22e..122cb35 100644
+--- a/app/lib/screens/venzo_store_screen.dart
++++ b/app/lib/screens/venzo_store_screen.dart
+@@ -248,6 +248,22 @@ class _VenzoStoreScreenState extends State<VenzoStoreScreen> {
+                     onTap: () =>
+                         Navigator.pop(context, VenzoPaymentMethod.card),
+                   ),
++                if (_paymentMethods.contains(VenzoPaymentMethod.swapPay))
++                  ListTile(
++                    leading: const Icon(Icons.swap_horiz_rounded),
++                    title: const Text('Swap Wallet'),
++                    subtitle: const Text('پرداخت امن از طریق API سرویس SwapPay'),
++                    onTap: () =>
++                        Navigator.pop(context, VenzoPaymentMethod.swapPay),
++                  ),
++                if (_paymentMethods.contains(VenzoPaymentMethod.oxaPay))
++                  ListTile(
++                    leading: const Icon(Icons.currency_exchange_rounded),
++                    title: const Text('OxaPay'),
++                    subtitle: const Text('پرداخت رمزارزی با فاکتور آنلاین'),
++                    onTap: () =>
++                        Navigator.pop(context, VenzoPaymentMethod.oxaPay),
++                  ),
+                 if (_paymentMethods.contains(VenzoPaymentMethod.rialGateway))
+                   ListTile(
+                     leading: const Icon(Icons.account_balance_rounded),
+diff --git a/app/lib/services/venzo_store_api.dart b/app/lib/services/venzo_store_api.dart
+index 974d7ee..75b61b6 100644
+--- a/app/lib/services/venzo_store_api.dart
++++ b/app/lib/services/venzo_store_api.dart
+@@ -217,13 +217,15 @@ class VenzoPlan {
+       );
+ }
+ 
+-enum VenzoPaymentMethod { wallet, trx, card, rialGateway }
++enum VenzoPaymentMethod { wallet, trx, card, swapPay, oxaPay, rialGateway }
+ 
+ extension VenzoPaymentMethodApi on VenzoPaymentMethod {
+   String get apiValue => switch (this) {
+         VenzoPaymentMethod.wallet => 'wallet',
+         VenzoPaymentMethod.trx => 'trx',
+         VenzoPaymentMethod.card => 'card',
++        VenzoPaymentMethod.swapPay => 'swappay',
++        VenzoPaymentMethod.oxaPay => 'oxapay',
+         VenzoPaymentMethod.rialGateway => 'rial_gateway',
+       };
+ 
+@@ -231,6 +233,8 @@ extension VenzoPaymentMethodApi on VenzoPaymentMethod {
+         'wallet' => VenzoPaymentMethod.wallet,
+         'trx' => VenzoPaymentMethod.trx,
+         'card' => VenzoPaymentMethod.card,
++        'swappay' => VenzoPaymentMethod.swapPay,
++        'oxapay' => VenzoPaymentMethod.oxaPay,
+         'rial_gateway' => VenzoPaymentMethod.rialGateway,
+         _ => null,
+       };
+@@ -266,6 +270,7 @@ class VenzoOrder {
+     required this.status,
+     required this.paymentMethod,
+     required this.payment,
++    required this.priceIrr,
+     this.subscriptionUrl,
+     this.paymentTxid,
+     this.purpose = 'subscription',
+@@ -276,6 +281,7 @@ class VenzoOrder {
+   final String status;
+   final String paymentMethod;
+   final Map<String, dynamic> payment;
++  final int priceIrr;
+   final String? subscriptionUrl;
+   final String? paymentTxid;
+   final String purpose;
+@@ -283,12 +289,18 @@ class VenzoOrder {
+ 
+   bool get isFulfilled => status == 'fulfilled';
+   bool get isWalletTopup => purpose == 'wallet_topup';
++  bool get isFailed => const {
++        'expired',
++        'payment_failed',
++        'provisioning_failed',
++      }.contains(status);
+ 
+   factory VenzoOrder.fromJson(Map<String, dynamic> json) => VenzoOrder(
+         id: json['id']?.toString() ?? '',
+         status: json['status']?.toString() ?? '',
+         paymentMethod: json['payment_method']?.toString() ?? '',
+         payment: (json['payment'] as Map?)?.cast<String, dynamic>() ?? const {},
++        priceIrr: (json['price_irr'] as num?)?.toInt() ?? 0,
+         subscriptionUrl: json['subscription_url']?.toString(),
+         paymentTxid: json['payment_txid']?.toString(),
+         purpose: json['purpose']?.toString() ?? 'subscription',
+@@ -300,6 +312,7 @@ class VenzoOrder {
+         'status': status,
+         'payment_method': paymentMethod,
+         'payment': payment,
++        'price_irr': priceIrr,
+         if (subscriptionUrl != null) 'subscription_url': subscriptionUrl,
+         if (paymentTxid != null) 'payment_txid': paymentTxid,
+         'purpose': purpose,
+diff --git a/work/upstream/app/test/services/venzo_payment_gateways_test.dart b/app/test/services/venzo_payment_gateways_test.dart
+new file mode 100644
+index 0000000..d7e7998
+--- /dev/null
++++ b/app/test/services/venzo_payment_gateways_test.dart
+@@ -0,0 +1,26 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/services/venzo_store_api.dart';
++
++void main() {
++  test('hosted payment methods map to API values', () {
++    expect(VenzoPaymentMethod.swapPay.apiValue, 'swappay');
++    expect(VenzoPaymentMethod.oxaPay.apiValue, 'oxapay');
++    expect(VenzoPaymentMethodApi.fromApi('swappay'),
++        VenzoPaymentMethod.swapPay);
++    expect(
++        VenzoPaymentMethodApi.fromApi('oxapay'), VenzoPaymentMethod.oxaPay);
++  });
++
++  test('provider failure status is represented as a failed order', () {
++    final order = VenzoOrder.fromJson({
++      'id': 'test-order',
++      'status': 'payment_failed',
++      'payment_method': 'oxapay',
++      'payment': {'track_id': '123'},
++      'price_irr': 8500000,
++    });
++
++    expect(order.isFailed, isTrue);
++    expect(order.priceIrr, 8500000);
++  });
++}

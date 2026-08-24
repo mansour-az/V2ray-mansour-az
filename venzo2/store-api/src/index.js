@@ -8,6 +8,9 @@ const TRX_RATE_CACHE_KEY = "rate:trx-irr";
 const TRX_RATE_MAX_AGE_MS = 5 * 60 * 1000;
 const TRX_RATE_STALE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const TRX_RATE_SAFETY_FACTOR = 0.98;
+const USD_RATE_CACHE_KEY = "rate:usd-irr";
+const USD_RATE_MAX_AGE_MS = 5 * 60 * 1000;
+const USD_RATE_STALE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_PRICE_PER_GB_IRR = 30_000;
 const VOLUMES = [5, 10, 20, 50, 100];
 const DURATIONS = [
@@ -304,17 +307,20 @@ async function createWalletTopup(request, env) {
   if (!parsed.ok) return parsed.response;
   const amount = positiveInteger(parsed.value.amount_irr);
   const method = String(parsed.value.payment_method || "");
-  if (amount < 50_000 || amount > 100_000_000 || !["trx", "card", "rial_gateway"].includes(method)) {
+  if (amount < 50_000 || amount > 100_000_000 || !["trx", "card", "rial_gateway", "swappay", "oxapay"].includes(method)) {
     return json({ error: "INVALID_TOPUP" }, 400, noStoreHeaders());
   }
-  const payment = await paymentFor(method, { price: amount }, env);
+  const id = crypto.randomUUID().toLowerCase();
+  const clientSecret = randomToken(32);
+  const now = Date.now();
+  const payment = await paymentFor(method, { price: amount }, env, {
+    orderId: id,
+    description: "شارژ کیف پول Venzo",
+  });
   if (!payment.ok) return json({ error: payment.error }, 503, noStoreHeaders());
   const storedPayment = method === "card"
     ? { amount: payment.value.amount, currency: payment.value.currency, card_last4: payment.value.card_number.slice(-4) }
     : payment.value;
-  const id = crypto.randomUUID().toLowerCase();
-  const clientSecret = randomToken(32);
-  const now = Date.now();
   const order = {
     id,
     plan_id: "wallet-topup",
@@ -346,15 +352,21 @@ async function createOrder(request, env) {
   const accountAuth = await optionalAccountAuth(request, env);
   const effectiveCustomer = accountAuth.ok ? accountAuth.account.customer : customer;
   const renewUsername = clean(parsed.value.renew_username, 64);
-  if (!plan || !effectiveCustomer || !["trx", "card", "rial_gateway", "wallet"].includes(method)) {
+  if (!plan || !effectiveCustomer || !["trx", "card", "rial_gateway", "wallet", "swappay", "oxapay"].includes(method)) {
     return json({ error: "INVALID_ORDER" }, 400);
   }
   if ((method === "wallet" || renewUsername) && !accountAuth.ok) {
     return json({ error: "ACCOUNT_REQUIRED" }, 401, noStoreHeaders());
   }
+  const id = crypto.randomUUID().toLowerCase();
+  const clientSecret = randomToken(32);
+  const now = Date.now();
   const payment = method === "wallet"
     ? { ok: true, value: { amount: String(plan.price), currency: "IRR" } }
-    : await paymentFor(method, plan, env);
+    : await paymentFor(method, plan, env, {
+        orderId: id,
+        description: `${renewUsername ? "تمدید" : "خرید"} ${plan.title}`,
+      });
   if (!payment.ok) return json({ error: payment.error }, 503);
   const storedPayment = method === "card"
     ? {
@@ -364,9 +376,6 @@ async function createOrder(request, env) {
       }
     : payment.value;
 
-  const id = crypto.randomUUID().toLowerCase();
-  const clientSecret = randomToken(32);
-  const now = Date.now();
   const order = {
     id,
     plan_id: plan.id,
@@ -425,8 +434,13 @@ async function getOrder(request, env, id) {
     Date.now() - Number(order.last_checked_at || 0) >= 15_000
   ) {
     order.last_checked_at = Date.now();
-    const match = await findCryptoPayment(order, env);
-    if (match) {
+    const match = ["swappay", "oxapay"].includes(order.payment_method)
+      ? await findHostedPayment(order, env)
+      : await findCryptoPayment(order, env);
+    if (match?.status === "failed") {
+      order.status = "payment_failed";
+      order.payment_error = match.error || "PAYMENT_FAILED";
+    } else if (match) {
       order.status = "paid";
       order.payment_txid = match.txid;
       order.paid_at = match.paid_at;
@@ -773,7 +787,7 @@ async function pasarGuardGroups(env) {
     : { ok: false, error: "PASARGUARD_GROUPS_INVALID" };
 }
 
-async function paymentFor(method, plan, env) {
+async function paymentFor(method, plan, env, context = {}) {
   if (method === "card") {
     const cardNumber = digits(env.CARD_NUMBER, 16);
     const cardHolder = clean(env.CARD_HOLDER, 120);
@@ -792,6 +806,12 @@ async function paymentFor(method, plan, env) {
   }
   if (method === "rial_gateway") {
     return { ok: false, error: "RIAL_GATEWAY_NOT_CONFIGURED" };
+  }
+  if (method === "swappay") {
+    return createSwapPayInvoice(plan, env, context);
+  }
+  if (method === "oxapay") {
+    return createOxaPayInvoice(plan, env, context);
   }
   if (method !== "trx") return { ok: false, error: "INVALID_PAYMENT_METHOD" };
   const wallet = clean(env.TRON_WALLET_ADDRESS, 64);
@@ -816,6 +836,224 @@ async function paymentFor(method, plan, env) {
       rate_updated_at: rate.updated_at,
     },
   };
+}
+
+async function hostedAmountUsd(priceIrr, env) {
+  const rate = await usdRate(env);
+  if (!rate.ok) return null;
+  const amount = Number((Number(priceIrr) / rate.rate_irr).toFixed(2));
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+async function createSwapPayInvoice(plan, env, context) {
+  const apiKey = clean(env.SWAPPAY_API_KEY, 240);
+  const username = clean(env.SWAPPAY_USERNAME, 120);
+  const amount = await hostedAmountUsd(plan.price, env);
+  if (!apiKey || !username || !amount) {
+    return { ok: false, error: "SWAPPAY_NOT_CONFIGURED" };
+  }
+  const base = validHttpsOrigin(env.SWAPPAY_API_BASE) || "https://swapwallet.app/api";
+  const body = {
+    amount: { number: amount, unit: "USD" },
+    ttl: Math.floor(ORDER_TTL_MS / 1000),
+    externalId: clean(context.orderId, 80),
+    description: clean(context.description, 160) || "Venzo VPN",
+    customData: { order_id: clean(context.orderId, 80) },
+  };
+  const returnUrl = validHttpsUrl(env.PAYMENT_RETURN_URL);
+  if (returnUrl) body.returnUrl = returnUrl;
+  const conversionToken = clean(env.SWAPPAY_AUTO_CONVERSION_TOKEN, 120);
+  if (conversionToken) body.autoConversionToken = conversionToken;
+  try {
+    const response = await fetch(
+      `${base}/v1/payment/${encodeURIComponent(username)}/invoice`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Apikey ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(12_000),
+      },
+    );
+    const payload = await safeResponseJson(response);
+    const invoice = payload?.data || payload?.invoice || payload;
+    const invoiceId = clean(invoice?.invoiceId || invoice?.id, 120);
+    const links = Array.isArray(invoice?.paymentLinks) ? invoice.paymentLinks : [];
+    const checkoutUrl = validHttpsUrl(
+      links.find((item) => String(item?.type || "").toUpperCase() === "WEBSITE")?.url ||
+        links[0]?.url || invoice?.paymentUrl || invoice?.payment_url,
+    );
+    if (!response.ok || !invoiceId || !checkoutUrl) {
+      console.error("SwapPay invoice failed", { status: response.status });
+      return { ok: false, error: "SWAPPAY_INVOICE_FAILED" };
+    }
+    return {
+      ok: true,
+      value: {
+        provider: "SwapPay",
+        amount: amount.toFixed(2),
+        currency: "USD",
+        invoice_id: invoiceId,
+        checkout_url: checkoutUrl,
+      },
+    };
+  } catch (error) {
+    console.error("SwapPay invoice failed", {
+      message: String(error?.message || "unknown").slice(0, 80),
+    });
+    return { ok: false, error: "SWAPPAY_UNAVAILABLE" };
+  }
+}
+
+async function createOxaPayInvoice(plan, env, context) {
+  const apiKey = clean(env.OXAPAY_MERCHANT_API_KEY, 240);
+  const amount = await hostedAmountUsd(plan.price, env);
+  if (!apiKey || !amount) return { ok: false, error: "OXAPAY_NOT_CONFIGURED" };
+  const body = {
+    amount,
+    currency: "USD",
+    lifetime: Math.ceil(ORDER_TTL_MS / 60_000),
+    order_id: clean(context.orderId, 80),
+    description: clean(context.description, 160) || "Venzo VPN",
+  };
+  const returnUrl = validHttpsUrl(env.PAYMENT_RETURN_URL);
+  if (returnUrl) body.return_url = returnUrl;
+  try {
+    const response = await fetch("https://api.oxapay.com/v1/payment/invoice", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        merchant_api_key: apiKey,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(12_000),
+    });
+    const payload = await safeResponseJson(response);
+    const data = payload?.data || payload;
+    const trackId = clean(data?.track_id || data?.trackId, 120);
+    const checkoutUrl = validHttpsUrl(data?.payment_url || data?.payLink);
+    if (!response.ok || !trackId || !checkoutUrl) {
+      console.error("OxaPay invoice failed", { status: response.status });
+      return { ok: false, error: "OXAPAY_INVOICE_FAILED" };
+    }
+    return {
+      ok: true,
+      value: {
+        provider: "OxaPay",
+        amount: amount.toFixed(2),
+        currency: "USD",
+        track_id: trackId,
+        checkout_url: checkoutUrl,
+      },
+    };
+  } catch (error) {
+    console.error("OxaPay invoice failed", {
+      message: String(error?.message || "unknown").slice(0, 80),
+    });
+    return { ok: false, error: "OXAPAY_UNAVAILABLE" };
+  }
+}
+
+async function findHostedPayment(order, env) {
+  if (order.payment_method === "swappay") return findSwapPayPayment(order, env);
+  if (order.payment_method === "oxapay") return findOxaPayPayment(order, env);
+  return null;
+}
+
+async function findSwapPayPayment(order, env) {
+  const apiKey = clean(env.SWAPPAY_API_KEY, 240);
+  const username = clean(env.SWAPPAY_USERNAME, 120);
+  const invoiceId = clean(order.payment?.invoice_id, 120);
+  if (!apiKey || !username || !invoiceId) return null;
+  const base = validHttpsOrigin(env.SWAPPAY_API_BASE) || "https://swapwallet.app/api";
+  try {
+    const response = await fetch(
+      `${base}/v1/payment/${encodeURIComponent(username)}/invoice/${encodeURIComponent(invoiceId)}`,
+      {
+        headers: { Accept: "application/json", Authorization: `Apikey ${apiKey}` },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!response.ok) return null;
+    const payload = await safeResponseJson(response);
+    const invoice = payload?.data || payload?.invoice || payload;
+    const status = String(invoice?.status || "").toUpperCase();
+    if (["PAID", "COMPLETE", "COMPLETED"].includes(status)) {
+      return {
+        status: "paid",
+        txid: clean(invoice?.transactionId || invoice?.txid, 160) || invoiceId,
+        paid_at: providerTimestamp(invoice?.paidAt || invoice?.updatedAt),
+      };
+    }
+    if (["EXPIRED", "CANCELLED", "CANCELED", "FAILED"].includes(status)) {
+      return { status: "failed", error: `SWAPPAY_${status}` };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function findOxaPayPayment(order, env) {
+  const apiKey = clean(env.OXAPAY_MERCHANT_API_KEY, 240);
+  const trackId = clean(order.payment?.track_id, 120);
+  if (!apiKey || !trackId) return null;
+  try {
+    const response = await fetch(
+      `https://api.oxapay.com/v1/payment/${encodeURIComponent(trackId)}`,
+      {
+        headers: { Accept: "application/json", merchant_api_key: apiKey },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!response.ok) return null;
+    const payload = await safeResponseJson(response);
+    const data = payload?.data || payload;
+    const status = String(data?.status || "").toLowerCase();
+    if (["paid", "manual_accept"].includes(status)) {
+      return {
+        status: "paid",
+        txid: clean(data?.txid || data?.transaction_id, 160) || trackId,
+        paid_at: providerTimestamp(data?.date || data?.paid_at || data?.updated_at),
+      };
+    }
+    if (["expired", "refunded", "failed", "canceled", "cancelled"].includes(status)) {
+      return { status: "failed", error: `OXAPAY_${status.toUpperCase()}` };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function safeResponseJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function providerTimestamp(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+  }
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function validHttpsUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
 }
 
 async function findCryptoPayment(order, env) {
@@ -938,6 +1176,55 @@ async function trxRate(env) {
   return { ok: false, error: "TRX_RATE_UNAVAILABLE" };
 }
 
+async function usdRate(env) {
+  const override = positiveInteger(env.USD_IRR);
+  if (override) {
+    return { ok: true, rate_irr: override, updated_at: Date.now(), source: "env" };
+  }
+  const now = Date.now();
+  let cached = null;
+  if (env.ORDERS) {
+    try {
+      cached = await env.ORDERS.get(USD_RATE_CACHE_KEY, "json");
+    } catch {
+      cached = null;
+    }
+  }
+  const cachedRate = positiveInteger(cached?.rate_irr);
+  const cachedAt = Number(cached?.updated_at || 0);
+  if (cachedRate && now - cachedAt <= USD_RATE_MAX_AGE_MS) {
+    return { ok: true, rate_irr: cachedRate, updated_at: cachedAt, source: "nobitex-cache" };
+  }
+  try {
+    const response = await fetch(
+      "https://apiv2.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls",
+      {
+        headers: { Accept: "application/json", "User-Agent": "Venzo-Store/1.0" },
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!response.ok) throw new Error(`HTTP_${response.status}`);
+    const payload = await response.json();
+    const rate = positiveInteger(payload?.stats?.["usdt-rls"]?.bestBuy);
+    if (!rate) throw new Error("INVALID_USD_RATE");
+    const value = { rate_irr: rate, updated_at: now };
+    if (env.ORDERS) {
+      await env.ORDERS.put(USD_RATE_CACHE_KEY, JSON.stringify(value), {
+        expirationTtl: 24 * 60 * 60,
+      });
+    }
+    return { ok: true, ...value, source: "nobitex-usdt" };
+  } catch (error) {
+    console.error("USD rate fetch failed", {
+      message: String(error?.message || "unknown").slice(0, 80),
+    });
+  }
+  if (cachedRate && now - cachedAt <= USD_RATE_STALE_MAX_AGE_MS) {
+    return { ok: true, rate_irr: cachedRate, updated_at: cachedAt, source: "nobitex-stale-cache" };
+  }
+  return { ok: false, error: "USD_RATE_UNAVAILABLE" };
+}
+
 async function storeSettings(env) {
   let saved = null;
   if (env.ORDERS) {
@@ -996,7 +1283,8 @@ async function updateStoreSettings(request, env) {
 }
 
 async function paymentAvailability(env) {
-  const rate = await trxRate(env);
+  const [rate, hostedRate] = await Promise.all([trxRate(env), usdRate(env)]);
+  const hostedRateReady = hostedRate.ok;
   return {
     trx: Boolean(
       env.TRON_WALLET_ADDRESS &&
@@ -1004,6 +1292,12 @@ async function paymentAvailability(env) {
         env.TRONGRID_API_KEY,
     ),
     card: digits(env.CARD_NUMBER, 16).length === 16 && Boolean(clean(env.CARD_HOLDER, 120)),
+    swappay: Boolean(
+      hostedRateReady &&
+        clean(env.SWAPPAY_API_KEY, 240) &&
+        clean(env.SWAPPAY_USERNAME, 120),
+    ),
+    oxapay: Boolean(hostedRateReady && clean(env.OXAPAY_MERCHANT_API_KEY, 240)),
     rial_gateway: false,
   };
 }
