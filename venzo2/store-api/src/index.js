@@ -885,7 +885,16 @@ async function createSwapPayInvoice(plan, env, context) {
     );
     if (!response.ok || !invoiceId || !checkoutUrl) {
       console.error("SwapPay invoice failed", { status: response.status });
-      return { ok: false, error: "SWAPPAY_INVOICE_FAILED" };
+      if ([401, 403].includes(response.status)) {
+        return { ok: false, error: "SWAPPAY_AUTH_FAILED" };
+      }
+      if ([400, 409, 422].includes(response.status)) {
+        return { ok: false, error: "SWAPPAY_REQUEST_REJECTED" };
+      }
+      return {
+        ok: false,
+        error: response.ok ? "SWAPPAY_RESPONSE_INVALID" : "SWAPPAY_INVOICE_FAILED",
+      };
     }
     return {
       ok: true,
@@ -938,7 +947,16 @@ async function createOxaPayInvoice(plan, env, context) {
     const checkoutUrl = validHttpsUrl(data?.payment_url || data?.payLink);
     if (!response.ok || !trackId || !checkoutUrl) {
       console.error("OxaPay invoice failed", { status: response.status });
-      return { ok: false, error: "OXAPAY_INVOICE_FAILED" };
+      if ([401, 403].includes(response.status)) {
+        return { ok: false, error: "OXAPAY_AUTH_FAILED" };
+      }
+      if ([400, 409, 422].includes(response.status)) {
+        return { ok: false, error: "OXAPAY_REQUEST_REJECTED" };
+      }
+      return {
+        ok: false,
+        error: response.ok ? "OXAPAY_RESPONSE_INVALID" : "OXAPAY_INVOICE_FAILED",
+      };
     }
     return {
       ok: true,
