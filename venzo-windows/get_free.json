@@ -7,6 +7,13 @@
     "https://venzo-store-api.mascot-gt.workers.dev/v1/free/subscription",
     "https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/all/configs_base64.txt",
     "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs_base64.txt",
+    "https://raw.githubusercontent.com/indelingDanil/MyAppVPN/proxylist/output/filtered.txt",
+    "https://raw.githubusercontent.com/indelingDanil/MyAppVPN/proxylist/output/filtered_b64.txt",
+    "https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt",
+    "https://codeberg.org/zieng2/wl/raw/branch/main/vless_universal.txt",
+    "https://gitlab.com/zieng2/wl/raw/main/vless_universal.txt",
+    "https://raw.githack.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt",
+    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt",
     "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt",
     "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/Vless-Reality-White-Lists-Rus-Mobile.txt"
   ]
