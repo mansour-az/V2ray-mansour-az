@@ -2,8 +2,8 @@ const CATALOG_KEY = "free:catalog:v3";
 const REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const SOURCE_TIMEOUT_MS = 10_000;
 const MAX_SOURCE_BYTES = 2_500_000;
-const MAX_CONFIGS_PER_SOURCE = 350;
-const MAX_CONFIGS = 1_000;
+const MAX_CONFIGS_PER_SOURCE = 120;
+const MAX_CONFIGS = 240;
 const SUPPORTED_SCHEMES = new Set([
   "vless:",
   "vmess:",
