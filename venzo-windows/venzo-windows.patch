@@ -131,7 +131,7 @@ index 93769cb..e1e11e8 100644
  	}{
 -		{"GitHub API", "https://api.github.com/repos/Leadaxe/singbox-launcher/releases/latest"},
 -		{"GitHub Mirror (ghproxy)", "https://ghproxy.com/https://api.github.com/repos/Leadaxe/singbox-launcher/releases/latest"},
-+		{"Venzo update channel", "https://raw.githubusercontent.com/mansour-az/V2ray-mansour-az/venzo-2.0/venzo-windows/latest.json"},
++		{"Venzo update channel", "https://raw.githubusercontent.com/mansour-az/V2ray-mansour-az/venzo-2.0/venzo-windows/latest-windows.json"},
  	}
  
  	for _, source := range sources {
