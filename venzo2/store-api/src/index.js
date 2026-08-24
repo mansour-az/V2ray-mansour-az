@@ -891,6 +891,9 @@ async function createSwapPayInvoice(plan, env, context) {
       if ([400, 409, 422].includes(response.status)) {
         return { ok: false, error: "SWAPPAY_REQUEST_REJECTED" };
       }
+      if (response.status >= 500) {
+        return { ok: false, error: "SWAPPAY_PROVIDER_ERROR" };
+      }
       return {
         ok: false,
         error: response.ok ? "SWAPPAY_RESPONSE_INVALID" : "SWAPPAY_INVOICE_FAILED",
@@ -921,6 +924,7 @@ async function createOxaPayInvoice(plan, env, context) {
   const apiKey = clean(env.OXAPAY_MERCHANT_API_KEY, 240);
   const amount = await hostedAmountUsd(plan.price, env);
   if (!apiKey || !amount) return { ok: false, error: "OXAPAY_NOT_CONFIGURED" };
+  if (amount < 0.1) return { ok: false, error: "OXAPAY_AMOUNT_TOO_LOW" };
   const body = {
     amount,
     currency: "USD",
