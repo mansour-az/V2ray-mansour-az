@@ -5,7 +5,7 @@ index b476dbc..e92c8a9 100644
 @@ -81,6 +81,16 @@ android {
          // умолчанию остаётся универсальной, как раньше).
      }
- 
+
 +    flavorDimensions += "distribution"
 +    productFlavors {
 +        create("github") {
@@ -58,9 +58,9 @@ index d12ff17..d222bf5 100644
  import io.flutter.plugin.common.MethodChannel
 +import androidx.core.content.FileProvider
 +import java.io.File
- 
+
  class MainActivity : FlutterActivity() {
- 
+
 @@ -123,6 +126,14 @@ class MainActivity : FlutterActivity() {
                          // канал живёт на Dart-стороне, одним местом).
                          result.success(installerPackageName())
@@ -79,7 +79,7 @@ index d12ff17..d222bf5 100644
 @@ -462,6 +473,31 @@ class MainActivity : FlutterActivity() {
          null
      }
- 
+
 +    private fun openApkInstaller(path: String): Boolean {
 +        val apk = File(path)
 +        if (!apk.exists() || !apk.isFile) return false
@@ -118,11 +118,264 @@ index 0000000..8ec8c09
 +<paths xmlns:android="http://schemas.android.com/apk/res/android">
 +    <cache-path name="venzo_updates" path="." />
 +</paths>
+diff --git a/app/lib/controllers/home_controller/ping_orchestration.dart b/app/lib/controllers/home_controller/ping_orchestration.dart
+index 93a8cd3..554db9a 100644
+--- a/app/lib/controllers/home_controller/ping_orchestration.dart
++++ b/app/lib/controllers/home_controller/ping_orchestration.dart
+@@ -19,6 +19,37 @@ CcGroup? chooseVenzoSmartAutoGroup({
+   return fallback;
+ }
+
++/// Returns a small deterministic probe set instead of waking every outbound.
++/// The currently selected node comes first, then previously healthy nodes by
++/// cached delay, followed by unmeasured candidates in config order.
++List<String> venzoSmartProbeOrder({
++  required Iterable<CcOutbound> items,
++  String selected = '',
++  int limit = 24,
++}) {
++  if (limit <= 0) return const [];
++  final unique = <String, CcOutbound>{};
++  final positions = <String, int>{};
++  var position = 0;
++  for (final item in items) {
++    if (item.tag.isEmpty || item.type == 'block') continue;
++    unique.putIfAbsent(item.tag, () => item);
++    positions.putIfAbsent(item.tag, () => position);
++    position++;
++  }
++  final ordered = unique.values.toList()
++    ..sort((a, b) {
++      if (a.tag == selected) return b.tag == selected ? 0 : -1;
++      if (b.tag == selected) return 1;
++      final aHealthy = a.urlTestTime > 0 && a.urlTestDelay >= 0;
++      final bHealthy = b.urlTestTime > 0 && b.urlTestDelay >= 0;
++      if (aHealthy != bHealthy) return aHealthy ? -1 : 1;
++      if (aHealthy) return a.urlTestDelay.compareTo(b.urlTestDelay);
++      return positions[a.tag]!.compareTo(positions[b.tag]!);
++    });
++  return ordered.take(limit).map((item) => item.tag).toList();
++}
++
+ /// Ping / URLTest оркестрация (§040 resolve-chain, §070 cache-gen,
+ /// §078 explicit order). Вынесено `part`'ом из `home_controller.dart` — та же
+ /// библиотека и тот же `HomeController`, поведение (concurrency, epoch-cancel,
+@@ -35,6 +66,7 @@ mixin _PingMixin on ChangeNotifier {
+   Future<void> reloadProxies();
+   Future<void> pullToRefresh();
+   Future<void> switchNode(String nodeTag);
++  Future<void> selectVenzoServer(String nodeTag);
+
+   /// §355 — пересчёт графа detour-зависимостей после свежих замеров.
+   /// Реализация — HomeController; ping-пути дёргают после записи delay.
+@@ -235,12 +267,17 @@ mixin _PingMixin on ChangeNotifier {
+     _pingOptions = await SettingsStorage.getPingOptions();
+   }
+
+-  static const _pingConcurrency = 10;
++  static const _pingConcurrency = 6;
+
+   /// §286 — интервал батч-флаша mass-ping результатов в UI. ~120мс = ~8 ребилдов
+   /// в секунду вместо ребилда на каждую из ~150 нод. Достаточно плавно для глаза,
+   /// но не грузит главный поток бёрстом notifyListeners.
+-  static const _massPingFlushMs = 120;
++  static const _massPingFlushMs = 300;
++
++  static const _smartProbeBatchSize = 24;
++  static const _smartProbeSuccessTarget = 4;
++  static const _smartProbeConcurrency = 6;
++  static const _smartProbeTimeoutMs = 4500;
+
+   /// Start the Venzo smart selection as soon as CommandClient is ready.
+   /// A short delay lets the native service expose its groups, while
+@@ -277,10 +314,10 @@ mixin _PingMixin on ChangeNotifier {
+     try {
+       // Groups can arrive shortly after the connected event. Pull with a
+       // small bounded retry instead of waiting a fixed five seconds.
+-      for (var i = 0; i < 12 && _state.tunnelUp; i++) {
++      for (var i = 0; i < 6 && _state.tunnelUp; i++) {
+         await pullToRefresh();
+         if (_state.ccGroups.isNotEmpty && _state.selectedGroup != null) break;
+-        await Future<void>.delayed(const Duration(milliseconds: 180));
++        await Future<void>.delayed(const Duration(milliseconds: 250));
+       }
+       if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
+
+@@ -294,66 +331,50 @@ mixin _PingMixin on ChangeNotifier {
+       );
+
+       if (autoGroup == null) {
+-        // Imported/custom configs may not expose a URLTest group. Measure all
+-        // candidates and pick the lowest successful latency as a safe fallback.
++        // Imported/custom configs may not expose a URLTest group. Probe a
++        // bounded sample; testing every node is the main source of UI stalls.
+         if (_state.nodes.isEmpty) return;
+-        await runMassUrltest();
++        final best = await _probeBestVenzoNodes(
++          _state.nodes.take(_smartProbeBatchSize).toList(),
++          epoch: epoch,
++          groupTag: selectorTag,
++        );
+         if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
+-        final candidates = _state.nodes
+-            .where((tag) => !_state.isControlTag(tag))
+-            .map((tag) => MapEntry(tag, _state.delayOf(tag)))
+-            .where((entry) => entry.value != null && entry.value! >= 0)
+-            .toList()
+-          ..sort((a, b) => a.value!.compareTo(b.value!));
+-        if (candidates.isNotEmpty) {
+-          await switchNode(candidates.first.key);
+-          _smartConnectNode = candidates.first.key;
++        if (best != null) {
++          await selectVenzoServer(best);
++          _smartConnectNode = best;
+         }
+         return;
+       }
+
+-      // The selector must route through AUTO; otherwise a manually selected
+-      // dead node would keep receiving traffic while AUTO is being tested.
+       final autoTag = autoGroup.tag;
+-      final selectorContainsAuto =
+-          selector?.items.any((item) => item.tag == autoTag) ?? false;
+-      if (selectorContainsAuto && _state.activeInGroup != autoTag) {
+-        await switchNode(autoTag);
+-      }
+-      if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
+-
+-      final previousTestStamp = autoGroup.items.fold<int>(
+-        0,
+-        (maxStamp, item) =>
+-            item.urlTestTime > maxStamp ? item.urlTestTime : maxStamp,
++      final firstBatch = venzoSmartProbeOrder(
++        items: autoGroup.items,
++        selected: autoGroup.selected,
++        limit: _smartProbeBatchSize,
+       );
+-      await runGroupUrltest(autoTag);
+-
+-      // The group RPC starts asynchronously. Poll the lightweight group tree
+-      // until the core reports a newly tested selected node, capped at 12s.
+-      for (var i = 0; i < 30 && _state.tunnelUp; i++) {
+-        await Future<void>.delayed(const Duration(milliseconds: 400));
+-        if (epoch != _smartConnectEpoch) return;
+-        await pullToRefresh();
+-        final fresh = _state.groupOf(autoTag);
+-        if (fresh == null || fresh.selected.isEmpty) continue;
+-        CcOutbound? selected;
+-        for (final item in fresh.items) {
+-          if (item.tag == fresh.selected) {
+-            selected = item;
+-            break;
+-          }
+-        }
+-        if (selected == null) continue;
+-        final hasFreshResult = selected.urlTestTime > previousTestStamp;
+-        final hasUsableCachedResult =
+-            i >= 6 && selected.urlTestTime > 0 && selected.urlTestDelay >= 0;
+-        if (hasFreshResult || hasUsableCachedResult) {
+-          _smartConnectNode = selected.tag;
+-          _addDebug(DebugSource.app,
+-              'Smart Connect selected ${selected.tag} (${selected.urlTestDelay}ms)');
+-          break;
+-        }
++      var best = await _probeBestVenzoNodes(
++        firstBatch,
++        epoch: epoch,
++        groupTag: autoTag,
++      );
++      if (best == null && autoGroup.items.length > firstBatch.length) {
++        final firstTags = firstBatch.toSet();
++        final secondBatch = venzoSmartProbeOrder(
++          items: autoGroup.items.where((item) => !firstTags.contains(item.tag)),
++          selected: '',
++          limit: _smartProbeBatchSize,
++        );
++        best = await _probeBestVenzoNodes(
++          secondBatch,
++          epoch: epoch,
++          groupTag: autoTag,
++        );
++      }
++      if (best != null && _state.tunnelUp && epoch == _smartConnectEpoch) {
++        await selectVenzoServer(best);
++        _smartConnectNode = best;
++        _addDebug(DebugSource.app, 'Smart Connect selected $best');
+       }
+     } finally {
+       if (epoch == _smartConnectEpoch) {
+@@ -363,6 +384,66 @@ mixin _PingMixin on ChangeNotifier {
+     }
+   }
+
++  Future<String?> _probeBestVenzoNodes(
++    List<String> candidates, {
++    required int epoch,
++    required String groupTag,
++  }) async {
++    final tags = candidates
++        .where((tag) =>
++            !_state.isControlTag(tag) &&
++            _state.activeModel[tag]?.type != 'block')
++        .toSet()
++        .toList();
++    if (tags.isEmpty) return null;
++
++    final delays = <String, int>{};
++    var index = 0;
++    var successCount = 0;
++    final link = pingUrlFor(groupTag);
++    final timeoutMs =
++        pingTimeoutFor(groupTag).clamp(1000, _smartProbeTimeoutMs).toInt();
++
++    Future<void> worker() async {
++      while (_state.tunnelUp && epoch == _smartConnectEpoch) {
++        if (successCount >= _smartProbeSuccessTarget) return;
++        final current = index++;
++        if (current >= tags.length) return;
++        final tag = tags[current];
++        try {
++          final result = await _cc.urlTestOutbound(
++            tag,
++            link: link,
++            timeoutMs: timeoutMs,
++          );
++          if (epoch != _smartConnectEpoch) return;
++          delays[tag] = result.lastDelayValue;
++          if (result.ok && result.lastDelayValue >= 0) successCount++;
++        } catch (_) {
++          if (epoch != _smartConnectEpoch) return;
++          delays[tag] = -1;
++        }
++      }
++    }
++
++    await Future.wait(List.generate(
++      _smartProbeConcurrency.clamp(1, tags.length),
++      (_) => worker(),
++    ));
++    if (!_state.tunnelUp || epoch != _smartConnectEpoch) return null;
++
++    // One state emission per batch keeps the whole HomeScreen from rebuilding
++    // for every individual ping result.
++    _emit(_state.copyWith(
++      delayByChannel: _delaysWith(delays),
++      pingBatchGen: _state.pingBatchGen + 1,
++    ));
++    _recomputeDependencyHealth();
++    final working = delays.entries.where((entry) => entry.value >= 0).toList()
++      ..sort((a, b) => a.value.compareTo(b.value));
++    return working.isEmpty ? null : working.first.key;
++  }
++
+   void cancelSmartConnect() {
+     _smartConnectEpoch++;
+     if (!_smartConnectRunning) return;
 diff --git a/app/lib/controllers/subscription_controller.dart b/app/lib/controllers/subscription_controller.dart
-index 92cd746..0045bad 100644
+index 92cd746..7939943 100644
 --- a/app/lib/controllers/subscription_controller.dart
 +++ b/app/lib/controllers/subscription_controller.dart
-@@ -164,6 +164,29 @@ class SubscriptionController extends ChangeNotifier {
+@@ -164,6 +164,51 @@ class SubscriptionController extends ChangeNotifier {
        }
        await SettingsStorage.setVar('venzo_live_catalog_seeded_v2', 'true');
      }
@@ -149,9 +402,41 @@ index 92cd746..0045bad 100644
 +        'true',
 +      );
 +    }
++    final performanceMigrated = await SettingsStorage.getVar(
++          'venzo_performance_sources_v4',
++          'false',
++        ) ==
++        'true';
++    if (!performanceMigrated) {
++      var changed = false;
++      lists = lists.map((list) {
++        if (list is SubscriptionServers &&
++            VenzoManagedSubscriptions.fallbackIds.contains(list.id) &&
++            list.enabled) {
++          changed = true;
++          return list.copyWith(enabled: false);
++        }
++        return list;
++      }).toList();
++      if (changed) {
++        await SettingsStorage.saveServerLists(lists);
++        AppLog.I.info('Moved duplicate Venzo mirrors to standby mode');
++      }
++      await SettingsStorage.setVar('venzo_performance_sources_v4', 'true');
++    }
      _entries = lists.map((l) => SubscriptionEntry(list: l)).toList();
      // §076: bootstrap mtime compare — restore in-memory configDirty после
      // possible kill mid-session. Если settings новее чем saved config →
+@@ -208,6 +253,9 @@ class SubscriptionController extends ChangeNotifier {
+       for (final entry in entries) {
+         final list = entry.list;
+         if (list is! SubscriptionServers) continue;
++        // Disabled mirrors are standby sources. Parsing their large cached
++        // bodies at every launch caused the same startup cost as active lists.
++        if (!list.enabled) continue;
+         if (list.nodes.isNotEmpty) continue;
+         final body = await HttpCache.loadBody(list.url);
+         if (body == null || body.isEmpty) continue;
 diff --git a/app/lib/main.dart b/app/lib/main.dart
 index f0be374..00c40ff 100644
 --- a/app/lib/main.dart
@@ -159,7 +444,7 @@ index f0be374..00c40ff 100644
 @@ -243,9 +243,48 @@ final themeNotifier = ThemeNotifier();
  class LxBoxApp extends StatelessWidget {
    const LxBoxApp({super.key});
- 
+
 -  // Venzo brand crimson: vivid enough for primary actions while Material 3
 -  // derives accessible light/dark containers and contrast automatically.
 -  static const _seed = Color(0xFFD6001C);
@@ -205,7 +490,7 @@ index f0be374..00c40ff 100644
 +      ),
 +    );
 +  }
- 
+
    @override
    Widget build(BuildContext context) {
 @@ -259,17 +298,8 @@ class LxBoxApp extends StatelessWidget {
@@ -262,7 +547,7 @@ index ff0d092..1fbc092 100644
 @@ -166,6 +171,85 @@ Future<void> maybeShowUpdateSnackbar(
    );
  }
- 
+
 +Future<void> _downloadVenzoUpdate(
 +  BuildContext context,
 +  UpdateInfo info,
@@ -363,7 +648,7 @@ index ef510f8..0493106 100644
 +    }
      // Venzo's default home is intentionally one-tap. The advanced channel and
      // manual ping controls stay implemented for a future expert-mode switch.
- 
+
 @@ -99,89 +107,99 @@ class HomeControls extends StatelessWidget {
            Card(
              margin: EdgeInsets.zero,
@@ -548,7 +833,7 @@ index 7ad8d52..bc6426f 100644
 --- a/app/lib/screens/home/widgets/venzo_connection_panel.dart
 +++ b/app/lib/screens/home/widgets/venzo_connection_panel.dart
 @@ -18,7 +18,6 @@ class VenzoConnectionPanel extends StatelessWidget {
- 
+
    @override
    Widget build(BuildContext context) {
 -    if (!state.tunnelUp) return const SizedBox.shrink();
@@ -567,7 +852,7 @@ index 7ad8d52..bc6426f 100644
 @@ -55,7 +54,10 @@ class VenzoConnectionPanel extends StatelessWidget {
      );
    }
- 
+
 -  Future<void> _showServers(BuildContext context) async {
 +  static Future<void> showServerPicker(
 +    BuildContext context,
@@ -591,7 +876,7 @@ index 414947e..3d7ee05 100644
 @@ -710,6 +711,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
      if (mounted) setState(() {});
    }
- 
+
 +  void _openVenzoDestination(int index) {
 +    switch (index) {
 +      case 1:
@@ -684,7 +969,7 @@ index 9572bcd..57c85d6 100644
 +      apkUrl: _releaseApkUrl(tag),
      );
    }
- 
+
 @@ -160,11 +161,24 @@ class UpdateChecker {
        final publishedRaw = json['published_at'] as String?;
        final publishedAt =
@@ -726,7 +1011,7 @@ index 9572bcd..57c85d6 100644
 +    this.apkUrl,
 +    this.apkSha256,
    });
- 
+
    final String tag;
    final String name;
    final String htmlUrl;
@@ -740,13 +1025,27 @@ index 9572bcd..57c85d6 100644
 +  return 'https://github.com/mansour-az/V2ray-mansour-az/'
 +      'releases/download/$tag/Venzo-VPN-$version-arm64.apk';
  }
- 
+
  /// Outcome of a check — для UI кнопки "Check now" чтобы показать toast'ом.
 diff --git a/app/lib/services/venzo_managed_subscriptions.dart b/app/lib/services/venzo_managed_subscriptions.dart
-index 8bc9eca..eb43473 100644
+index 8bc9eca..08a47d8 100644
 --- a/app/lib/services/venzo_managed_subscriptions.dart
 +++ b/app/lib/services/venzo_managed_subscriptions.dart
-@@ -13,6 +13,16 @@ class VenzoManagedSubscriptions {
+@@ -9,10 +9,30 @@ import '../models/server_list.dart';
+ class VenzoManagedSubscriptions {
+   VenzoManagedSubscriptions._();
+
++  /// Kept on-device for emergency/manual failover, but disabled during normal
++  /// operation so duplicate mirror bodies are not parsed and rebuilt together.
++  static const fallbackIds = <String>{
++    'venzo-managed-backup-v1',
++    'venzo-universal-v1',
++    'venzo-universal-codeberg-v1',
++    'venzo-reality-v1',
++    'venzo-reality-gitlab-v1',
++  };
++
+   static const _primaryUrl =
        'https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt';
    static const _backupUrl =
        'https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/main/configs/vless_sub.txt';
@@ -763,7 +1062,15 @@ index 8bc9eca..eb43473 100644
    static const _defaultApiBase =
        'https://venzo-store-api.mascot-gt.workers.dev';
    static const _apiBase = String.fromEnvironment(
-@@ -54,5 +64,55 @@ class VenzoManagedSubscriptions {
+@@ -47,12 +67,62 @@ class VenzoManagedSubscriptions {
+         SubscriptionServers(
+           id: 'venzo-managed-backup-v1',
+           name: 'Venzo Backup Servers',
+-          enabled: true,
++          enabled: false,
+           tagPrefix: 'VZ2-',
+           detourPolicy: DetourPolicy.defaults,
+           url: _backupUrl,
            updateIntervalHours: 2,
            onUpdateAction: SubscriptionOnUpdateAction.rebuild,
          ),
@@ -780,7 +1087,7 @@ index 8bc9eca..eb43473 100644
 +        SubscriptionServers(
 +          id: 'venzo-universal-v1',
 +          name: 'Venzo Universal',
-+          enabled: true,
++          enabled: false,
 +          tagPrefix: 'VZU-',
 +          detourPolicy: DetourPolicy.defaults,
 +          url: _universalUrl,
@@ -790,7 +1097,7 @@ index 8bc9eca..eb43473 100644
 +        SubscriptionServers(
 +          id: 'venzo-universal-codeberg-v1',
 +          name: 'Venzo Universal Mirror',
-+          enabled: true,
++          enabled: false,
 +          tagPrefix: 'VZC-',
 +          detourPolicy: DetourPolicy.defaults,
 +          url: _universalCodebergUrl,
@@ -800,7 +1107,7 @@ index 8bc9eca..eb43473 100644
 +        SubscriptionServers(
 +          id: 'venzo-reality-v1',
 +          name: 'Venzo Reality',
-+          enabled: true,
++          enabled: false,
 +          tagPrefix: 'VZR-',
 +          detourPolicy: DetourPolicy.defaults,
 +          url: _realityUrl,
@@ -810,7 +1117,7 @@ index 8bc9eca..eb43473 100644
 +        SubscriptionServers(
 +          id: 'venzo-reality-gitlab-v1',
 +          name: 'Venzo Reality Mirror',
-+          enabled: true,
++          enabled: false,
 +          tagPrefix: 'VZG-',
 +          detourPolicy: DetourPolicy.defaults,
 +          url: _realityGitLabUrl,
@@ -819,6 +1126,39 @@ index 8bc9eca..eb43473 100644
 +        ),
        ];
  }
+diff --git a/app/lib/services/venzo_server_info.dart b/app/lib/services/venzo_server_info.dart
+index 5b43c06..f99bbcc 100644
+--- a/app/lib/services/venzo_server_info.dart
++++ b/app/lib/services/venzo_server_info.dart
+@@ -20,6 +20,9 @@ class VenzoServerInfo {
+   final int pingMs;
+   final bool selected;
+
++  static HomeState? _cachedState;
++  static List<VenzoServerInfo> _cachedAvailable = const [];
++
+   static String? activePayloadTag(HomeState state) {
+     var tag = state.activeInGroup;
+     final seen = <String>{};
+@@ -32,6 +35,7 @@ class VenzoServerInfo {
+   }
+
+   static List<VenzoServerInfo> available(HomeState state) {
++    if (identical(_cachedState, state)) return _cachedAvailable;
+     final selector = state.selectedGroup == null
+         ? null
+         : state.groupOf(state.selectedGroup!);
+@@ -69,7 +73,9 @@ class VenzoServerInfo {
+       ));
+     }
+     result.sort((a, b) => a.pingMs.compareTo(b.pingMs));
+-    return result;
++    _cachedState = state;
++    _cachedAvailable = List.unmodifiable(result.take(100));
++    return _cachedAvailable;
+   }
+
+   static VenzoServerInfo? active(HomeState state) {
 diff --git a/app/lib/services/venzo_update_installer.dart b/app/lib/services/venzo_update_installer.dart
 new file mode 100644
 index 0000000..5d2634f
@@ -906,6 +1246,58 @@ index 0000000..5d2634f
 +        'releases/download/$tag/Venzo-VPN-$version-arm64.apk';
 +  }
 +}
+diff --git a/app/test/controllers/venzo_smart_connect_test.dart b/app/test/controllers/venzo_smart_connect_test.dart
+index 96d20f9..29af731 100644
+--- a/app/test/controllers/venzo_smart_connect_test.dart
++++ b/app/test/controllers/venzo_smart_connect_test.dart
+@@ -2,8 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
+ import 'package:lxbox/controllers/home_controller.dart';
+ import 'package:lxbox/vpn/cc_channel.dart';
+
+-CcOutbound outbound(String tag) =>
+-    CcOutbound(tag: tag, type: 'vless', urlTestDelay: 0, urlTestTime: 0);
++CcOutbound outbound(
++  String tag, {
++  String type = 'vless',
++  int delay = 0,
++  int testedAt = 0,
++}) =>
++    CcOutbound(
++      tag: tag,
++      type: type,
++      urlTestDelay: delay,
++      urlTestTime: testedAt,
++    );
+
+ CcGroup group({
+   required String tag,
+@@ -72,4 +82,26 @@ void main() {
+       isNull,
+     );
+   });
++
++  test('Smart Connect probes a bounded, cached-health-first sample', () {
++    final items = <CcOutbound>[
++      outbound('untested-1'),
++      outbound('fast', delay: 40, testedAt: 2),
++      outbound('selected', delay: 90, testedAt: 1),
++      outbound('slow', delay: 400, testedAt: 3),
++      outbound('blocked', type: 'block'),
++      outbound('fast', delay: 40, testedAt: 2),
++      outbound('untested-2'),
++    ];
++
++    expect(
++      venzoSmartProbeOrder(items: items, selected: 'selected', limit: 4),
++      ['selected', 'fast', 'slow', 'untested-1'],
++    );
++  });
++
++  test('Smart Connect sample limit prevents full-list ping storms', () {
++    final items = List.generate(200, (i) => outbound('node-$i'));
++    expect(venzoSmartProbeOrder(items: items), hasLength(24));
++  });
+ }
 diff --git a/app/test/screens/update_snackbar_test.dart b/app/test/screens/update_snackbar_test.dart
 index 9c6c9c5..e450d52 100644
 --- a/app/test/screens/update_snackbar_test.dart
@@ -922,20 +1314,28 @@ index 9c6c9c5..e450d52 100644
 +    expect(find.text('دانلود و نصب'), findsOneWidget);
 +    await tapAndPump(tester, find.text('بعداً'));
    });
- 
+
    testWidgets('f-droid ведёт на страницу пакета', (tester) async {
 diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
-index 4155155..fbdf3e1 100644
+index 4155155..3ec875b 100644
 --- a/app/test/services/venzo_managed_subscriptions_test.dart
 +++ b/app/test/services/venzo_managed_subscriptions_test.dart
-@@ -5,11 +5,12 @@ void main() {
+@@ -5,11 +5,19 @@ void main() {
    test('managed subscriptions are independent, enabled and bounded', () {
      final subscriptions = VenzoManagedSubscriptions.defaults();
- 
+
 -    expect(subscriptions, hasLength(3));
-+    expect(subscriptions, hasLength(8));
-     expect(subscriptions.every((s) => s.enabled), isTrue);
+-    expect(subscriptions.every((s) => s.enabled), isTrue);
 -    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(), hasLength(3));
++    expect(subscriptions, hasLength(8));
++    expect(subscriptions.where((s) => s.enabled), hasLength(3));
++    expect(
++      subscriptions
++          .where((s) => !s.enabled)
++          .map((s) => s.id)
++          .toSet(),
++      VenzoManagedSubscriptions.fallbackIds,
++    );
 +    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(),
 +        hasLength(greaterThanOrEqualTo(5)));
      expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
