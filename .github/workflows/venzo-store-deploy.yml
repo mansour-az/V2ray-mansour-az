@@ -1,6 +1,6 @@
 name: Deploy Venzo Store API
 
-# Secret refresh: PROVISION_SECRET
+# Secret refresh: payment credentials 2026-08-24
 
 on:
   workflow_dispatch:
