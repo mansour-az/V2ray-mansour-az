@@ -1,10 +1,10 @@
 {
-  "version": "1.0.0",
-  "tag_name": "v1.0.0",
-  "tag": "windows-v1.0.0",
-  "name": "Venzo VPN for Windows 1.0.0",
-  "installer_url": "",
-  "portable_url": "",
-  "sha256": "",
-  "release_url": "https://github.com/mansour-az/V2ray-mansour-az/releases"
+  "version": "1.1.0",
+  "tag_name": "v1.1.0",
+  "tag": "windows-v1.1.0",
+  "name": "Venzo VPN for Windows 1.1.0",
+  "installer_url": "https://github.com/mansour-az/V2ray-mansour-az/releases/download/windows-v1.1.0/Venzo-VPN-Setup-1.1.0.exe",
+  "portable_url": "https://github.com/mansour-az/V2ray-mansour-az/releases/download/windows-v1.1.0/Venzo-VPN-Windows-x64-1.1.0.zip",
+  "sha256": "e725c87fa00c08eb9b82ccd65836986b5f12301d3cd3416d7bd2575126957a7c",
+  "release_url": "https://github.com/mansour-az/V2ray-mansour-az/releases/tag/windows-v1.1.0"
 }
