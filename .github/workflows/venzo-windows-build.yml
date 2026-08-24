@@ -11,7 +11,7 @@ on:
       version:
         description: Windows app version without v prefix
         required: true
-        default: 1.0.0
+        default: 1.1.0
         type: string
       publish_release:
         description: Publish a GitHub prerelease after a successful build
@@ -58,6 +58,7 @@ jobs:
           Copy-Item venzo-windows/fa.json desktop/internal/locale/fa.json
           Copy-Item venzo-windows/venzo_theme.go desktop/core/uiservice/venzo_theme.go
           Copy-Item venzo-windows/venzo_shell.go desktop/ui/venzo_shell.go
+          Copy-Item venzo-windows/venzo_updater.go desktop/ui/venzo_updater.go
           Copy-Item venzo-windows/get_free.json desktop/bin/get_free.json
           [IO.File]::WriteAllBytes('desktop/assets/app.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-app.ico.b64' -Raw).Trim()))
           [IO.File]::WriteAllBytes('desktop/assets/off.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-off.ico.b64' -Raw).Trim()))
@@ -184,3 +185,28 @@ jobs:
             Venzo-VPN-Windows-x64-${{ inputs.version || '1.0.0' }}.zip
             venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '1.0.0' }}.exe
             SHA256SUMS.txt
+
+      - name: Publish update manifest
+        if: ${{ inputs.publish_release }}
+        shell: pwsh
+        run: |
+          $installer = "venzo-windows/dist/Venzo-VPN-Setup-$env:BUILD_VERSION.exe"
+          $sha256 = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+          $tag = "windows-v$env:BUILD_VERSION"
+          $base = "https://github.com/mansour-az/V2ray-mansour-az/releases/download/$tag"
+          $manifest = [ordered]@{
+            version = $env:BUILD_VERSION
+            tag_name = "v$env:BUILD_VERSION"
+            tag = $tag
+            name = "Venzo VPN for Windows $env:BUILD_VERSION"
+            installer_url = "$base/Venzo-VPN-Setup-$env:BUILD_VERSION.exe"
+            portable_url = "$base/Venzo-VPN-Windows-x64-$env:BUILD_VERSION.zip"
+            sha256 = $sha256
+            release_url = "https://github.com/mansour-az/V2ray-mansour-az/releases/tag/$tag"
+          }
+          $manifest | ConvertTo-Json | Set-Content venzo-windows/latest-windows.json -Encoding utf8
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add venzo-windows/latest-windows.json
+          git commit -m "Update Windows release channel to $env:BUILD_VERSION [skip ci]"
+          git push origin HEAD:venzo-2.0
