@@ -55,12 +55,12 @@ CARD_HOLDER=...
 SWAPPAY_API_KEY=...
 SWAPPAY_USERNAME=...
 OXAPAY_MERCHANT_API_KEY=...
-USD_IRR=... # IRR value of one USD, used to create USD invoices
 ```
 
 Optional hosted-payment settings are `SWAPPAY_API_BASE` (defaults to
 `https://swapwallet.app/api`), `SWAPPAY_AUTO_CONVERSION_TOKEN`, and
-`PAYMENT_RETURN_URL`. The Android app receives only the hosted checkout URL;
+`PAYMENT_RETURN_URL`. `USD_IRR` is an optional emergency rate override; by
+default the Worker caches the live USDT/IRR market rate. The Android app receives only the hosted checkout URL;
 provider API keys stay in encrypted Worker secrets.
 
 Never commit `.dev.vars`, API keys, panel credentials, wallet details, card
@@ -92,7 +92,6 @@ CARD_HOLDER
 SWAPPAY_API_KEY
 SWAPPAY_USERNAME
 OXAPAY_MERCHANT_API_KEY
-USD_IRR
 ```
 
 Add `PASARGUARD_GROUP_IDS` and `USDT_TRC20_CONTRACT` as repository variables.
