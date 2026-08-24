@@ -847,44 +847,41 @@ async function hostedAmountUsd(priceIrr, env) {
 
 async function createSwapPayInvoice(plan, env, context) {
   const apiKey = clean(env.SWAPPAY_API_KEY, 240);
-  const username = clean(env.SWAPPAY_USERNAME, 120);
-  const amount = await hostedAmountUsd(plan.price, env);
-  if (!apiKey || !username || !amount) {
-    return { ok: false, error: "SWAPPAY_NOT_CONFIGURED" };
-  }
+  if (!apiKey) return { ok: false, error: "SWAPPAY_NOT_CONFIGURED" };
   const base = validHttpsOrigin(env.SWAPPAY_API_BASE) || "https://swapwallet.app/api";
+  const orderId = clean(context.orderId, 80);
   const body = {
-    amount: { number: amount, unit: "USD" },
+    amount: {
+      number: String(Math.max(1, Math.ceil(Number(plan.price) / 10))),
+      unit: "IRT",
+    },
+    allowedToken: "USDT",
+    network: "TRON",
     ttl: Math.floor(ORDER_TTL_MS / 1000),
-    externalId: clean(context.orderId, 80),
+    orderId,
     description: clean(context.description, 160) || "Venzo VPN",
-    customData: { order_id: clean(context.orderId, 80) },
+    customData: JSON.stringify({ order_id: orderId }),
   };
   const returnUrl = validHttpsUrl(env.PAYMENT_RETURN_URL);
   if (returnUrl) body.returnUrl = returnUrl;
-  const conversionToken = clean(env.SWAPPAY_AUTO_CONVERSION_TOKEN, 120);
-  if (conversionToken) body.autoConversionToken = conversionToken;
   try {
-    const response = await fetch(
-      `${base}/v1/payment/${encodeURIComponent(username)}/invoice`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Authorization: `Apikey ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(12_000),
+    const response = await fetch(`${base}/v1/merchants/invoices/temporary-wallet`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-    );
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(12_000),
+    });
     const payload = await safeResponseJson(response);
-    const invoice = payload?.data || payload?.invoice || payload;
-    const invoiceId = clean(invoice?.invoiceId || invoice?.id, 120);
-    const links = Array.isArray(invoice?.paymentLinks) ? invoice.paymentLinks : [];
+    const invoice = payload?.result || payload?.data || payload;
+    const invoiceId = clean(invoice?.id || invoice?.invoiceId, 120);
+    const links = Array.isArray(invoice?.links) ? invoice.links : [];
     const checkoutUrl = validHttpsUrl(
-      links.find((item) => String(item?.type || "").toUpperCase() === "WEBSITE")?.url ||
-        links[0]?.url || invoice?.paymentUrl || invoice?.payment_url,
+      links.find((item) => String(item?.name || "").toUpperCase() === "SWAP_WALLET")?.url ||
+        links.find((item) => validHttpsUrl(item?.url))?.url,
     );
     if (!response.ok || !invoiceId || !checkoutUrl) {
       console.error("SwapPay invoice failed", { status: response.status });
@@ -894,9 +891,12 @@ async function createSwapPayInvoice(plan, env, context) {
       ok: true,
       value: {
         provider: "SwapPay",
-        amount: amount.toFixed(2),
-        currency: "USD",
+        amount: String(plan.price),
+        currency: "IRR",
+        network: "TRON",
+        token: "USDT",
         invoice_id: invoiceId,
+        wallet_address: clean(invoice?.walletAddress, 160) || undefined,
         checkout_url: checkoutUrl,
       },
     };
@@ -966,21 +966,20 @@ async function findHostedPayment(order, env) {
 
 async function findSwapPayPayment(order, env) {
   const apiKey = clean(env.SWAPPAY_API_KEY, 240);
-  const username = clean(env.SWAPPAY_USERNAME, 120);
   const invoiceId = clean(order.payment?.invoice_id, 120);
-  if (!apiKey || !username || !invoiceId) return null;
+  if (!apiKey || !invoiceId) return null;
   const base = validHttpsOrigin(env.SWAPPAY_API_BASE) || "https://swapwallet.app/api";
   try {
     const response = await fetch(
-      `${base}/v1/payment/${encodeURIComponent(username)}/invoice/${encodeURIComponent(invoiceId)}`,
+      `${base}/v1/merchants/invoices/${encodeURIComponent(invoiceId)}`,
       {
-        headers: { Accept: "application/json", Authorization: `Apikey ${apiKey}` },
+        headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}` },
         signal: AbortSignal.timeout(10_000),
       },
     );
     if (!response.ok) return null;
     const payload = await safeResponseJson(response);
-    const invoice = payload?.data || payload?.invoice || payload;
+    const invoice = payload?.result || payload?.data || payload;
     const status = String(invoice?.status || "").toUpperCase();
     if (["PAID", "COMPLETE", "COMPLETED"].includes(status)) {
       return {
@@ -1292,11 +1291,7 @@ async function paymentAvailability(env) {
         env.TRONGRID_API_KEY,
     ),
     card: digits(env.CARD_NUMBER, 16).length === 16 && Boolean(clean(env.CARD_HOLDER, 120)),
-    swappay: Boolean(
-      hostedRateReady &&
-        clean(env.SWAPPAY_API_KEY, 240) &&
-        clean(env.SWAPPAY_USERNAME, 120),
-    ),
+    swappay: Boolean(clean(env.SWAPPAY_API_KEY, 240)),
     oxapay: Boolean(hostedRateReady && clean(env.OXAPAY_MERCHANT_API_KEY, 240)),
     rial_gateway: false,
   };
