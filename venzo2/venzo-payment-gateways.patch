@@ -271,7 +271,7 @@ index dc5a6dd..5fc79c2 100644
 +              height: 112,
 +              decoration: BoxDecoration(
 +                shape: BoxShape.circle,
-+                color: Colors.green.withOpacity(.14),
++                color: Colors.green.withValues(alpha: .14),
                ),
 -            ],
 +              child: const Icon(Icons.check_rounded,
