@@ -41,6 +41,7 @@ jobs:
           git apply ../venzo2/venzo-free-catalog.patch
           git apply ../venzo2/venzo-white-label.patch
           git apply ../venzo2/venzo-myapp-mobile.patch
+          git apply ../venzo2/venzo-payment-gateways.patch
           base64 --decode ../venzo2/icon.jpg.b64 > app/assets/icons/app_icon.png
 
       - name: Read Flutter version
@@ -72,6 +73,7 @@ jobs:
           flutter analyze
           flutter test test/services/venzo_managed_subscriptions_test.dart
           flutter test test/services/venzo_premium_test.dart
+          flutter test test/services/venzo_payment_gateways_test.dart
           flutter test test/controllers/venzo_smart_connect_test.dart
           flutter test test/services/l10n/persian_locale_test.dart
           flutter test test/services/update_checker_test.dart
