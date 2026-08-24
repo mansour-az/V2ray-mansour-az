@@ -1,0 +1,897 @@
+diff --git a/app/android/app/build.gradle.kts b/app/android/app/build.gradle.kts
+index b476dbc..e92c8a9 100644
+--- a/app/android/app/build.gradle.kts
++++ b/app/android/app/build.gradle.kts
+@@ -81,6 +81,16 @@ android {
+         // умолчанию остаётся универсальной, как раньше).
+     }
+ 
++    flavorDimensions += "distribution"
++    productFlavors {
++        create("github") {
++            dimension = "distribution"
++        }
++        create("play") {
++            dimension = "distribution"
++        }
++    }
++
+     // ABI filter (build-size optimization). Flutter gradle plugin по
+     // умолчанию выставляет `ndk.abiFilters` для всех 3 ABI
+     // (armeabi-v7a, arm64-v8a, x86_64) — даже если передан
+diff --git a/app/android/app/src/github/AndroidManifest.xml b/app/android/app/src/github/AndroidManifest.xml
+new file mode 100644
+index 0000000..6fc5241
+--- /dev/null
++++ b/app/android/app/src/github/AndroidManifest.xml
+@@ -0,0 +1,15 @@
++<manifest xmlns:android="http://schemas.android.com/apk/res/android">
++    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
++
++    <application>
++        <provider
++            android:name="androidx.core.content.FileProvider"
++            android:authorities="${applicationId}.venzo-updates"
++            android:exported="false"
++            android:grantUriPermissions="true">
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/venzo_update_paths" />
++        </provider>
++    </application>
++</manifest>
+diff --git a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/MainActivity.kt b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/MainActivity.kt
+index d12ff17..d222bf5 100644
+--- a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/MainActivity.kt
++++ b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/MainActivity.kt
+@@ -9,6 +9,7 @@ import android.os.Build
+ import android.os.Bundle
+ import android.os.Environment
+ import android.provider.MediaStore
++import android.provider.Settings
+ import android.util.Log
+ import android.widget.Toast
+ import com.leadaxe.lxbox.vpn.BootReceiver
+@@ -25,6 +26,8 @@ import io.flutter.embedding.android.FlutterActivity
+ import io.flutter.embedding.engine.FlutterEngine
+ import io.flutter.embedding.engine.FlutterShellArgs
+ import io.flutter.plugin.common.MethodChannel
++import androidx.core.content.FileProvider
++import java.io.File
+ 
+ class MainActivity : FlutterActivity() {
+ 
+@@ -123,6 +126,14 @@ class MainActivity : FlutterActivity() {
+                         // канал живёт на Dart-стороне, одним местом).
+                         result.success(installerPackageName())
+                     }
++                    "installApk" -> {
++                        val path = call.argument<String>("path")
++                        if (path.isNullOrBlank()) {
++                            result.error("INVALID_APK", "APK path is empty", null)
++                        } else {
++                            result.success(openApkInstaller(path))
++                        }
++                    }
+                     "openAppSettings" -> {
+                         // §050 — open Android Settings directly to App permissions.
+                         val opened = openAppPermissions()
+@@ -462,6 +473,31 @@ class MainActivity : FlutterActivity() {
+         null
+     }
+ 
++    private fun openApkInstaller(path: String): Boolean {
++        val apk = File(path)
++        if (!apk.exists() || !apk.isFile) return false
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
++            !packageManager.canRequestPackageInstalls()) {
++            startActivity(Intent(
++                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
++                Uri.parse("package:$packageName"),
++            ))
++            return false
++        }
++        val uri = FileProvider.getUriForFile(
++            this,
++            "$packageName.venzo-updates",
++            apk,
++        )
++        val intent = Intent(Intent.ACTION_VIEW).apply {
++            setDataAndType(uri, "application/vnd.android.package-archive")
++            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
++            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
++        }
++        startActivity(intent)
++        return true
++    }
++
+     /// §390 — открывает [url], при отсутствии обработчика пробует
+     /// [fallbackUrl]. Нужно для `market://`: на устройствах без Play intent не
+     /// резолвится и `startActivity` бросает ActivityNotFoundException.
+diff --git a/app/android/app/src/main/res/xml/venzo_update_paths.xml b/app/android/app/src/main/res/xml/venzo_update_paths.xml
+new file mode 100644
+index 0000000..8ec8c09
+--- /dev/null
++++ b/app/android/app/src/main/res/xml/venzo_update_paths.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<paths xmlns:android="http://schemas.android.com/apk/res/android">
++    <cache-path name="venzo_updates" path="." />
++</paths>
+diff --git a/app/lib/controllers/subscription_controller.dart b/app/lib/controllers/subscription_controller.dart
+index 92cd746..0045bad 100644
+--- a/app/lib/controllers/subscription_controller.dart
++++ b/app/lib/controllers/subscription_controller.dart
+@@ -164,6 +164,29 @@ class SubscriptionController extends ChangeNotifier {
+       }
+       await SettingsStorage.setVar('venzo_live_catalog_seeded_v2', 'true');
+     }
++    final resilientSeeded = await SettingsStorage.getVar(
++          'venzo_resilient_sources_seeded_v3',
++          'false',
++        ) ==
++        'true';
++    if (!resilientSeeded) {
++      final additions = VenzoManagedSubscriptions.defaults().skip(3).where(
++            (source) => !lists.whereType<SubscriptionServers>().any(
++                  (list) => list.id == source.id || list.url == source.url,
++                ),
++          );
++      final installed = additions.toList();
++      if (installed.isNotEmpty) {
++        lists = [...installed, ...lists];
++        await SettingsStorage.saveServerLists(lists);
++        AppLog.I.info(
++            'Installed ${installed.length} resilient Venzo sources');
++      }
++      await SettingsStorage.setVar(
++        'venzo_resilient_sources_seeded_v3',
++        'true',
++      );
++    }
+     _entries = lists.map((l) => SubscriptionEntry(list: l)).toList();
+     // §076: bootstrap mtime compare — restore in-memory configDirty после
+     // possible kill mid-session. Если settings новее чем saved config →
+diff --git a/app/lib/main.dart b/app/lib/main.dart
+index f0be374..00c40ff 100644
+--- a/app/lib/main.dart
++++ b/app/lib/main.dart
+@@ -243,9 +243,48 @@ final themeNotifier = ThemeNotifier();
+ class LxBoxApp extends StatelessWidget {
+   const LxBoxApp({super.key});
+ 
+-  // Venzo brand crimson: vivid enough for primary actions while Material 3
+-  // derives accessible light/dark containers and contrast automatically.
+-  static const _seed = Color(0xFFD6001C);
++  static const _seed = Color(0xFFFF1F35);
++
++  ThemeData _theme(Brightness brightness) {
++    final dark = brightness == Brightness.dark;
++    final scheme = ColorScheme.fromSeed(
++      seedColor: _seed,
++      brightness: brightness,
++    ).copyWith(
++      primary: _seed,
++      surface: dark ? const Color(0xFF111827) : const Color(0xFFFFF8F8),
++      surfaceContainer: dark ? const Color(0xFF162032) : const Color(0xFFFFEEEE),
++      surfaceContainerLow:
++          dark ? const Color(0xFF0E1625) : const Color(0xFFFFF4F4),
++      outline: dark ? const Color(0xFF3A2530) : const Color(0xFFE7C7CC),
++    );
++    return ThemeData(
++      colorScheme: scheme,
++      useMaterial3: true,
++      scaffoldBackgroundColor:
++          dark ? const Color(0xFF090E1A) : const Color(0xFFFFFAFA),
++      appBarTheme: AppBarTheme(
++        centerTitle: true,
++        elevation: 0,
++        backgroundColor:
++            dark ? const Color(0xFF090E1A) : const Color(0xFFFFFAFA),
++      ),
++      cardTheme: CardThemeData(
++        elevation: 0,
++        color: dark ? const Color(0xFF111827) : const Color(0xFFFFF4F4),
++        shape: RoundedRectangleBorder(
++          borderRadius: BorderRadius.circular(24),
++          side: BorderSide(color: scheme.outline.withValues(alpha: .7)),
++        ),
++      ),
++      navigationBarTheme: NavigationBarThemeData(
++        elevation: 0,
++        backgroundColor:
++            dark ? const Color(0xFF0D1421) : const Color(0xFFFFF6F6),
++        indicatorColor: _seed.withValues(alpha: .18),
++      ),
++    );
++  }
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -259,17 +298,8 @@ class LxBoxApp extends StatelessWidget {
+         // per-build присваивания активного локализатора не требуется.
+         return MaterialApp(
+           title: 'Venzo VPN',
+-          theme: ThemeData(
+-            colorScheme: ColorScheme.fromSeed(seedColor: _seed),
+-            useMaterial3: true,
+-          ),
+-          darkTheme: ThemeData(
+-            colorScheme: ColorScheme.fromSeed(
+-              seedColor: _seed,
+-              brightness: Brightness.dark,
+-            ),
+-            useMaterial3: true,
+-          ),
++          theme: _theme(Brightness.light),
++          darkTheme: _theme(Brightness.dark),
+           themeMode: themeNotifier.mode,
+           // §279 — ВСЕГДА подаём явную локаль (effective уже резолвит
+           // 'system' по языку устройства через PlatformDispatcher). Ранее
+diff --git a/app/lib/screens/home/home_dialogs.dart b/app/lib/screens/home/home_dialogs.dart
+index ff0d092..1fbc092 100644
+--- a/app/lib/screens/home/home_dialogs.dart
++++ b/app/lib/screens/home/home_dialogs.dart
+@@ -9,6 +9,7 @@ import '../../services/settings_storage.dart';
+ import '../../services/update_checker.dart';
+ import '../../services/url_launcher.dart' as ul;
+ import '../../services/version_info.dart';
++import '../../services/venzo_update_installer.dart';
+ import '../../vpn/box_vpn_client.dart';
+ import '../../widgets/wifi_permission_dialog.dart';
+ import '../../services/l10n/locale_controller.dart';
+@@ -148,10 +149,14 @@ Future<void> maybeShowUpdateSnackbar(
+         // напомним при следующем запуске.
+         onTapBody: () {
+           messenger.hideCurrentSnackBar();
+-          unawaited(ul.UrlLauncher.open(
+-            source.updateUrl(info.tag),
+-            fallbackUrl: source.updateUrlFallback,
+-          ));
++          if (source == InstallSource.github) {
++            unawaited(_downloadVenzoUpdate(context, info));
++          } else {
++            unawaited(ul.UrlLauncher.open(
++              source.updateUrl(info.tag),
++              fallbackUrl: source.updateUrlFallback,
++            ));
++          }
+         },
+         onLater: () => messenger.hideCurrentSnackBar(),
+         // §090 G1 — «Ignore» persist'ит dismissed-версию → этот релиз больше
+@@ -166,6 +171,85 @@ Future<void> maybeShowUpdateSnackbar(
+   );
+ }
+ 
++Future<void> _downloadVenzoUpdate(
++  BuildContext context,
++  UpdateInfo info,
++) async {
++  final confirmed = await showDialog<bool>(
++    context: context,
++    builder: (ctx) => AlertDialog.adaptive(
++      title: const Text('بروزرسانی Venzo VPN'),
++      content: Text(
++        'نسخه ${info.tag} دانلود و پس از تأیید شما نصب شود؟',
++      ),
++      actions: [
++        TextButton(
++          onPressed: () => Navigator.of(ctx).pop(false),
++          child: const Text('بعداً'),
++        ),
++        FilledButton.icon(
++          onPressed: () => Navigator.of(ctx).pop(true),
++          icon: const Icon(Icons.download_rounded),
++          label: const Text('دانلود و نصب'),
++        ),
++      ],
++    ),
++  );
++  if (confirmed != true || !context.mounted) return;
++
++  final progress = ValueNotifier<double>(0);
++  unawaited(showDialog<void>(
++    context: context,
++    barrierDismissible: false,
++    builder: (_) => PopScope(
++      canPop: false,
++      child: AlertDialog(
++        title: const Text('در حال دریافت بروزرسانی'),
++        content: ValueListenableBuilder<double>(
++          valueListenable: progress,
++          builder: (context, value, _) => Column(
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              LinearProgressIndicator(value: value == 0 ? null : value),
++              const SizedBox(height: 14),
++              Text(value == 0
++                  ? 'در حال اتصال به سرور…'
++                  : '${(value * 100).clamp(0, 100).round()}٪'),
++            ],
++          ),
++        ),
++      ),
++    ),
++  ));
++
++  try {
++    await VenzoUpdateInstaller.downloadAndInstall(
++      info,
++      onProgress: (value) => progress.value = value,
++    );
++    if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
++  } catch (error) {
++    if (context.mounted) {
++      Navigator.of(context, rootNavigator: true).pop();
++      await showDialog<void>(
++        context: context,
++        builder: (ctx) => AlertDialog.adaptive(
++          title: const Text('بروزرسانی انجام نشد'),
++          content: Text(error.toString()),
++          actions: [
++            FilledButton(
++              onPressed: () => Navigator.of(ctx).pop(),
++              child: const Text('متوجه شدم'),
++            ),
++          ],
++        ),
++      );
++    }
++  } finally {
++    progress.dispose();
++  }
++}
++
+ /// Тело update-снека: кликабельный текст + две кнопки.
+ ///
+ /// Раскладка адаптивная — на узких экранах (360dp и меньше) текст и две кнопки
+diff --git a/app/lib/screens/home/widgets/home_controls.dart b/app/lib/screens/home/widgets/home_controls.dart
+index ef510f8..0493106 100644
+--- a/app/lib/screens/home/widgets/home_controls.dart
++++ b/app/lib/screens/home/widgets/home_controls.dart
+@@ -88,6 +88,14 @@ class HomeControls extends StatelessWidget {
+     final isSearching = controller.smartConnectRunning;
+     final canToggle = !state.busy && !isConnecting && !isStopping;
+     final toggleEnabled = canToggle && (state.tunnelUp || state.configRaw.isNotEmpty);
++    void toggle() {
++      HapticService.I.onConnectTap();
++      if (state.tunnelUp) {
++        confirmStop(context, controller, state);
++      } else {
++        onStartWithAutoRefresh();
++      }
++    }
+     // Venzo's default home is intentionally one-tap. The advanced channel and
+     // manual ping controls stay implemented for a future expert-mode switch.
+ 
+@@ -99,89 +107,99 @@ class HomeControls extends StatelessWidget {
+           Card(
+             margin: EdgeInsets.zero,
+             clipBehavior: Clip.antiAlias,
+-            child: InkWell(
+-              // §372 — D-pad: фокус при открытии экрана на главном действии.
+-              autofocus: true,
+-              onTap: toggleEnabled
+-                  ? () {
+-                      HapticService.I.onConnectTap();
+-                      if (state.tunnelUp) {
+-                        confirmStop(context, controller, state);
+-                      } else {
+-                        // The controller starts an immediate network-specific
+-                        // URLTest and selects a working node automatically.
+-                        onStartWithAutoRefresh();
+-                      }
+-                    }
+-                  : null,
+-              child: Padding(
+-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+-                child: Column(
+-                  children: [
+-                    AnimatedContainer(
+-                      duration: const Duration(milliseconds: 250),
+-                      width: 144,
+-                      height: 144,
+-                      decoration: BoxDecoration(
+-                        borderRadius: BorderRadius.circular(34),
+-                        boxShadow: [
+-                          BoxShadow(
+-                            color: Theme.of(context)
+-                                .colorScheme
+-                                .primary
+-                                .withValues(alpha: state.tunnelUp ? .35 : .18),
+-                            blurRadius: 28,
+-                            spreadRadius: 2,
+-                          ),
+-                        ],
++            child: Padding(
++              padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
++              child: Column(
++                children: [
++                  Row(
++                    children: [
++                      Text('اتصال هوشمند',
++                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
++                                fontWeight: FontWeight.w800,
++                              )),
++                      const Spacer(),
++                      _buildReloadButton(context),
++                    ],
++                  ),
++                  const SizedBox(height: 24),
++                  AnimatedContainer(
++                    duration: const Duration(milliseconds: 280),
++                    width: 174,
++                    height: 174,
++                    decoration: BoxDecoration(
++                      shape: BoxShape.circle,
++                      color: state.tunnelUp
++                          ? const Color(0xFF00C96B)
++                          : Theme.of(context).colorScheme.primary,
++                      border: Border.all(
++                        color: Colors.white.withValues(alpha: .62),
++                        width: 2,
+                       ),
+-                      child: ClipRRect(
+-                        borderRadius: BorderRadius.circular(34),
+-                        child: Image.asset(
+-                          'assets/icons/app_icon.png',
+-                          fit: BoxFit.cover,
+-                          semanticLabel: 'Venzo VPN', // l10n-exempt: brand
++                      boxShadow: [
++                        BoxShadow(
++                          color: (state.tunnelUp
++                                  ? const Color(0xFF00E676)
++                                  : Theme.of(context).colorScheme.primary)
++                              .withValues(alpha: .30),
++                          blurRadius: 34,
++                          spreadRadius: 5,
+                         ),
+-                      ),
+-                    ),
+-                    const SizedBox(height: 18),
+-                    Text(
+-                      isSearching
+-                          ? getLocalText.s("Finding a working server…")
+-                          : state.tunnelUp
+-                              ? getLocalText.s("Disconnect")
+-                              : getLocalText.s("Smart Connect"),
+-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+-                            fontWeight: FontWeight.w800,
+-                          ),
+-                    ),
+-                    const SizedBox(height: 6),
+-                    Text(
+-                      isSearching
+-                          ? getLocalText.s(
+-                              "Testing configs on your current internet")
+-                          : state.tunnelUp
+-                              ? controller.smartConnectNode == null
+-                                  ? getLocalText.s("Your connection is protected")
+-                                  : getLocalText.s("Connected to a working server")
+-                              : getLocalText.s(
+-                                  "Tap once — Venzo finds and connects automatically"),
+-                      textAlign: TextAlign.center,
+-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+-                          ),
+-                    ),
+-                    const SizedBox(height: 14),
+-                    Row(
+-                      mainAxisAlignment: MainAxisAlignment.center,
+-                      children: [
+-                        Flexible(child: connectingAnimChild),
+-                        const SizedBox(width: 8),
+-                        _buildReloadButton(context),
+                       ],
+                     ),
+-                  ],
+-                ),
++                    child: Material(
++                      color: Colors.transparent,
++                      shape: const CircleBorder(),
++                      child: InkWell(
++                        autofocus: true,
++                        customBorder: const CircleBorder(),
++                        onTap: toggleEnabled ? toggle : null,
++                        child: Center(
++                          child: isSearching
++                              ? const SizedBox.square(
++                                  dimension: 44,
++                                  child: CircularProgressIndicator(
++                                    color: Colors.white,
++                                    strokeWidth: 4,
++                                  ),
++                                )
++                              : const Icon(
++                                  Icons.power_settings_new_rounded,
++                                  size: 76,
++                                  color: Colors.white,
++                                ),
++                        ),
++                      ),
++                    ),
++                  ),
++                  const SizedBox(height: 22),
++                  Text(
++                    isSearching
++                        ? getLocalText.s("Finding a working server…")
++                        : state.tunnelUp
++                            ? getLocalText.s("Your connection is protected")
++                            : getLocalText.s("Smart Connect"),
++                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
++                          fontWeight: FontWeight.w800,
++                        ),
++                  ),
++                  const SizedBox(height: 8),
++                  Text(
++                    isSearching
++                        ? getLocalText.s(
++                            "Testing configs on your current internet")
++                        : state.tunnelUp
++                            ? getLocalText.s("Connected to a working server")
++                            : 'یک لمس؛ ونزو بهترین سرور سالم را انتخاب می‌کند',
++                    textAlign: TextAlign.center,
++                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
++                          color: Theme.of(context)
++                              .colorScheme
++                              .onSurfaceVariant,
++                        ),
++                  ),
++                  const SizedBox(height: 14),
++                  connectingAnimChild,
++                ],
+               ),
+             ),
+           ),
+diff --git a/app/lib/screens/home/widgets/venzo_connection_panel.dart b/app/lib/screens/home/widgets/venzo_connection_panel.dart
+index 7ad8d52..bc6426f 100644
+--- a/app/lib/screens/home/widgets/venzo_connection_panel.dart
++++ b/app/lib/screens/home/widgets/venzo_connection_panel.dart
+@@ -18,7 +18,6 @@ class VenzoConnectionPanel extends StatelessWidget {
+ 
+   @override
+   Widget build(BuildContext context) {
+-    if (!state.tunnelUp) return const SizedBox.shrink();
+     final active = VenzoServerInfo.active(state);
+     final servers = VenzoServerInfo.available(state);
+     final cs = Theme.of(context).colorScheme;
+@@ -47,7 +46,7 @@ class VenzoConnectionPanel extends StatelessWidget {
+                   ? 'برای یافتن سرور سالم، تست پینگ را اجرا کنید'
+                   : '${servers.length} سرور سالم پیدا شد'),
+               trailing: const Icon(Icons.chevron_left),
+-              onTap: () => _showServers(context),
++              onTap: () => showServerPicker(context, controller),
+             ),
+           ],
+         ),
+@@ -55,7 +54,10 @@ class VenzoConnectionPanel extends StatelessWidget {
+     );
+   }
+ 
+-  Future<void> _showServers(BuildContext context) async {
++  static Future<void> showServerPicker(
++    BuildContext context,
++    HomeController controller,
++  ) async {
+     await showModalBottomSheet<void>(
+       context: context,
+       isScrollControlled: true,
+diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
+index 414947e..1bae690 100644
+--- a/app/lib/screens/home_screen.dart
++++ b/app/lib/screens/home_screen.dart
+@@ -710,6 +710,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+     if (mounted) setState(() {});
+   }
+ 
++  void _openVenzoDestination(int index) {
++    switch (index) {
++      case 1:
++        unawaited(VenzoConnectionPanel.showServerPicker(context, _controller));
++        return;
++      case 2:
++        Navigator.of(context).push(MaterialPageRoute<void>(
++          builder: (_) => StatsScreen(
++            configRaw: _controller.state.configRaw,
++            subController: _subController,
++            homeController: _controller,
++          ),
++        ));
++        return;
++      case 3:
++        Navigator.of(context).push(MaterialPageRoute<void>(
++          builder: (_) => const AppSettingsScreen(),
++        ));
++        return;
++    }
++  }
++
+   @override
+   Widget build(BuildContext context) {
+     return AnimatedBuilder(
+@@ -739,12 +761,54 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+         );
+         return Scaffold(
+           // l10n-exempt: brand name, идентичен во всех локалях
+-          appBar: AppBar(title: const Text('Venzo VPN')),
++          appBar: AppBar(
++            title: Row(
++              mainAxisSize: MainAxisSize.min,
++              children: [
++                ClipRRect(
++                  borderRadius: BorderRadius.circular(8),
++                  child: Image.asset(
++                    'assets/icons/app_icon.png',
++                    width: 30,
++                    height: 30,
++                  ),
++                ),
++                const SizedBox(width: 9),
++                const Text('Venzo VPN'),
++              ],
++            ),
++          ),
+           drawer: HomeDrawer(
+             controller: _controller,
+             subController: _subController,
+             autoUpdater: _autoUpdater,
+           ),
++          bottomNavigationBar: NavigationBar(
++            selectedIndex: 0,
++            onDestinationSelected: _openVenzoDestination,
++            destinations: const [
++              NavigationDestination(
++                icon: Icon(Icons.home_outlined),
++                selectedIcon: Icon(Icons.home_rounded),
++                label: 'خانه',
++              ),
++              NavigationDestination(
++                icon: Icon(Icons.dns_outlined),
++                selectedIcon: Icon(Icons.dns_rounded),
++                label: 'سرورها',
++              ),
++              NavigationDestination(
++                icon: Icon(Icons.query_stats_outlined),
++                selectedIcon: Icon(Icons.query_stats_rounded),
++                label: 'آمار',
++              ),
++              NavigationDestination(
++                icon: Icon(Icons.settings_outlined),
++                selectedIcon: Icon(Icons.settings_rounded),
++                label: 'تنظیمات',
++              ),
++            ],
++          ),
+           body: Column(
+             crossAxisAlignment: CrossAxisAlignment.stretch,
+             children: [
+diff --git a/app/lib/services/update_checker.dart b/app/lib/services/update_checker.dart
+index 9572bcd..57c85d6 100644
+--- a/app/lib/services/update_checker.dart
++++ b/app/lib/services/update_checker.dart
+@@ -61,6 +61,7 @@ class UpdateChecker {
+       name: tag,
+       htmlUrl: ProjectLinks.releaseTag(tag),
+       publishedAt: null,
++      apkUrl: _releaseApkUrl(tag),
+     );
+   }
+ 
+@@ -160,11 +161,24 @@ class UpdateChecker {
+       final publishedRaw = json['published_at'] as String?;
+       final publishedAt =
+           publishedRaw != null ? DateTime.tryParse(publishedRaw) : null;
++      final assets = json['assets'] is List ? json['assets'] as List : const [];
++      Map<String, dynamic>? apkAsset;
++      for (final asset in assets.whereType<Map>()) {
++        final row = asset.cast<String, dynamic>();
++        if ((row['name'] as String? ?? '').toLowerCase().endsWith('.apk')) {
++          apkAsset = row;
++          break;
++        }
++      }
++      final digest = (apkAsset?['digest'] as String?)
++          ?.replaceFirst(RegExp(r'^sha256:'), '');
+       return UpdateInfo(
+         tag: tag,
+         name: name,
+         htmlUrl: htmlUrl,
+         publishedAt: publishedAt,
++        apkUrl: apkAsset?['browser_download_url'] as String?,
++        apkSha256: digest,
+       );
+     } catch (e) {
+       AppLog.I.warning('UpdateChecker[$source]: api.github.com $e');
+@@ -206,6 +220,8 @@ class UpdateChecker {
+         name: name,
+         htmlUrl: htmlUrl,
+         publishedAt: publishedAt,
++        apkUrl: (json['apk_url'] as String?) ?? _releaseApkUrl(tag),
++        apkSha256: json['sha256'] as String?,
+       );
+     } catch (e) {
+       AppLog.I.warning('UpdateChecker[$source]: fallback $e');
+@@ -239,12 +255,22 @@ class UpdateInfo {
+     required this.name,
+     required this.htmlUrl,
+     this.publishedAt,
++    this.apkUrl,
++    this.apkSha256,
+   });
+ 
+   final String tag;
+   final String name;
+   final String htmlUrl;
+   final DateTime? publishedAt;
++  final String? apkUrl;
++  final String? apkSha256;
++}
++
++String _releaseApkUrl(String tag) {
++  final version = tag.replaceFirst(RegExp(r'^[vV]'), '');
++  return 'https://github.com/mansour-az/V2ray-mansour-az/'
++      'releases/download/$tag/Venzo-VPN-$version-arm64.apk';
+ }
+ 
+ /// Outcome of a check — для UI кнопки "Check now" чтобы показать toast'ом.
+diff --git a/app/lib/services/venzo_managed_subscriptions.dart b/app/lib/services/venzo_managed_subscriptions.dart
+index 8bc9eca..5166ad6 100644
+--- a/app/lib/services/venzo_managed_subscriptions.dart
++++ b/app/lib/services/venzo_managed_subscriptions.dart
+@@ -13,6 +13,12 @@ class VenzoManagedSubscriptions {
+       'https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt';
+   static const _backupUrl =
+       'https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/main/configs/vless_sub.txt';
++  static const _verifiedUrl =
++      'https://raw.githubusercontent.com/indelingDanil/MyAppVPN/proxylist/output/filtered.txt';
++  static const _universalUrl =
++      'https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt';
++  static const _realityUrl =
++      'https://raw.githack.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt';
+   static const _defaultApiBase =
+       'https://venzo-store-api.mascot-gt.workers.dev';
+   static const _apiBase = String.fromEnvironment(
+@@ -54,5 +60,35 @@ class VenzoManagedSubscriptions {
+           updateIntervalHours: 2,
+           onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+         ),
++        SubscriptionServers(
++          id: 'venzo-myapp-verified-v1',
++          name: 'Venzo Verified',
++          enabled: true,
++          tagPrefix: 'VZV-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _verifiedUrl,
++          updateIntervalHours: 1,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
++        SubscriptionServers(
++          id: 'venzo-universal-v1',
++          name: 'Venzo Universal',
++          enabled: true,
++          tagPrefix: 'VZU-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _universalUrl,
++          updateIntervalHours: 1,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
++        SubscriptionServers(
++          id: 'venzo-reality-v1',
++          name: 'Venzo Reality',
++          enabled: true,
++          tagPrefix: 'VZR-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _realityUrl,
++          updateIntervalHours: 1,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
+       ];
+ }
+diff --git a/app/lib/services/venzo_update_installer.dart b/app/lib/services/venzo_update_installer.dart
+new file mode 100644
+index 0000000..5d2634f
+--- /dev/null
++++ b/app/lib/services/venzo_update_installer.dart
+@@ -0,0 +1,81 @@
++import 'dart:io';
++
++import 'package:crypto/crypto.dart';
++import 'package:flutter/services.dart';
++import 'package:http/http.dart' as http;
++import 'package:path_provider/path_provider.dart';
++
++import 'platform_channels.dart';
++import 'update_checker.dart';
++
++class VenzoUpdateInstaller {
++  VenzoUpdateInstaller._();
++
++  static const _channel = MethodChannel(PlatformChannels.utils);
++  static const _maxBytes = 250 * 1024 * 1024;
++
++  static Future<void> downloadAndInstall(
++    UpdateInfo info, {
++    required void Function(double value) onProgress,
++  }) async {
++    final url = info.apkUrl ?? _releaseApkUrl(info.tag);
++    final uri = Uri.parse(url);
++    if (uri.scheme != 'https' || uri.host != 'github.com') {
++      throw const FormatException('نشانی بروزرسانی معتبر نیست');
++    }
++
++    final request = http.Request('GET', uri)
++      ..headers['User-Agent'] = 'VenzoVPN/Android';
++    final response = await request.send().timeout(const Duration(seconds: 25));
++    if (response.statusCode != 200) {
++      throw HttpException('خطای دانلود: HTTP ${response.statusCode}');
++    }
++    final advertised = response.contentLength ?? 0;
++    if (advertised > _maxBytes) {
++      throw const FileSystemException('فایل بروزرسانی بیش از حد بزرگ است');
++    }
++
++    final directory = await getTemporaryDirectory();
++    final version = info.tag.replaceFirst(RegExp(r'^[vV]'), '');
++    final file = File('${directory.path}/Venzo-VPN-$version-arm64.apk');
++    final sink = file.openWrite();
++    var received = 0;
++    try {
++      await for (final chunk in response.stream) {
++        received += chunk.length;
++        if (received > _maxBytes) {
++          throw const FileSystemException('فایل بروزرسانی بیش از حد بزرگ است');
++        }
++        sink.add(chunk);
++        if (advertised > 0) onProgress(received / advertised);
++      }
++    } finally {
++      await sink.close();
++    }
++
++    final actual =
++        sha256.convert(await file.readAsBytes()).toString().toLowerCase();
++    final expected = info.apkSha256?.trim().toLowerCase();
++    if (expected != null && expected.isNotEmpty && actual != expected) {
++      await file.delete();
++      throw const FormatException('اعتبار فایل بروزرسانی تأیید نشد');
++    }
++    onProgress(1);
++    final opened = await _channel.invokeMethod<bool>(
++          'installApk',
++          {'path': file.path},
++        ) ??
++        false;
++    if (!opened) {
++      throw const FileSystemException(
++        'اجازه نصب برنامه داده نشده؛ مجوز نصب از این منبع را فعال و دوباره تلاش کنید',
++      );
++    }
++  }
++
++  static String _releaseApkUrl(String tag) {
++    final version = tag.replaceFirst(RegExp(r'^[vV]'), '');
++    return 'https://github.com/mansour-az/V2ray-mansour-az/'
++        'releases/download/$tag/Venzo-VPN-$version-arm64.apk';
++  }
++}
+diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
+index 4155155..2af08fc 100644
+--- a/app/test/services/venzo_managed_subscriptions_test.dart
++++ b/app/test/services/venzo_managed_subscriptions_test.dart
+@@ -5,11 +5,12 @@ void main() {
+   test('managed subscriptions are independent, enabled and bounded', () {
+     final subscriptions = VenzoManagedSubscriptions.defaults();
+ 
+-    expect(subscriptions, hasLength(3));
++    expect(subscriptions, hasLength(6));
+     expect(subscriptions.every((s) => s.enabled), isTrue);
+-    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(), hasLength(3));
++    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(),
++        hasLength(greaterThanOrEqualTo(5)));
+     expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
+-    expect(subscriptions.map((s) => s.id).toSet(), hasLength(3));
+-    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(3));
++    expect(subscriptions.map((s) => s.id).toSet(), hasLength(6));
++    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(6));
+   });
+ }
