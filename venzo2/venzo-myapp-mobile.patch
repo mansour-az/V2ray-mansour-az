@@ -743,10 +743,10 @@ index 9572bcd..57c85d6 100644
  
  /// Outcome of a check — для UI кнопки "Check now" чтобы показать toast'ом.
 diff --git a/app/lib/services/venzo_managed_subscriptions.dart b/app/lib/services/venzo_managed_subscriptions.dart
-index 8bc9eca..5166ad6 100644
+index 8bc9eca..eb43473 100644
 --- a/app/lib/services/venzo_managed_subscriptions.dart
 +++ b/app/lib/services/venzo_managed_subscriptions.dart
-@@ -13,6 +13,12 @@ class VenzoManagedSubscriptions {
+@@ -13,6 +13,16 @@ class VenzoManagedSubscriptions {
        'https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt';
    static const _backupUrl =
        'https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/main/configs/vless_sub.txt';
@@ -754,12 +754,16 @@ index 8bc9eca..5166ad6 100644
 +      'https://raw.githubusercontent.com/indelingDanil/MyAppVPN/proxylist/output/filtered.txt';
 +  static const _universalUrl =
 +      'https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt';
++  static const _universalCodebergUrl =
++      'https://codeberg.org/zieng2/wl/raw/branch/main/vless_universal.txt';
 +  static const _realityUrl =
 +      'https://raw.githack.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt';
++  static const _realityGitLabUrl =
++      'https://gitlab.com/igareck/vpn-configs-for-russia/raw/main/BLACK_VLESS_RUS.txt';
    static const _defaultApiBase =
        'https://venzo-store-api.mascot-gt.workers.dev';
    static const _apiBase = String.fromEnvironment(
-@@ -54,5 +60,35 @@ class VenzoManagedSubscriptions {
+@@ -54,5 +64,55 @@ class VenzoManagedSubscriptions {
            updateIntervalHours: 2,
            onUpdateAction: SubscriptionOnUpdateAction.rebuild,
          ),
@@ -784,6 +788,16 @@ index 8bc9eca..5166ad6 100644
 +          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
 +        ),
 +        SubscriptionServers(
++          id: 'venzo-universal-codeberg-v1',
++          name: 'Venzo Universal Mirror',
++          enabled: true,
++          tagPrefix: 'VZC-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _universalCodebergUrl,
++          updateIntervalHours: 2,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
++        SubscriptionServers(
 +          id: 'venzo-reality-v1',
 +          name: 'Venzo Reality',
 +          enabled: true,
@@ -791,6 +805,16 @@ index 8bc9eca..5166ad6 100644
 +          detourPolicy: DetourPolicy.defaults,
 +          url: _realityUrl,
 +          updateIntervalHours: 1,
++          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
++        ),
++        SubscriptionServers(
++          id: 'venzo-reality-gitlab-v1',
++          name: 'Venzo Reality Mirror',
++          enabled: true,
++          tagPrefix: 'VZG-',
++          detourPolicy: DetourPolicy.defaults,
++          url: _realityGitLabUrl,
++          updateIntervalHours: 2,
 +          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
 +        ),
        ];
@@ -883,7 +907,7 @@ index 0000000..5d2634f
 +  }
 +}
 diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
-index 4155155..2af08fc 100644
+index 4155155..fbdf3e1 100644
 --- a/app/test/services/venzo_managed_subscriptions_test.dart
 +++ b/app/test/services/venzo_managed_subscriptions_test.dart
 @@ -5,11 +5,12 @@ void main() {
@@ -891,7 +915,7 @@ index 4155155..2af08fc 100644
      final subscriptions = VenzoManagedSubscriptions.defaults();
  
 -    expect(subscriptions, hasLength(3));
-+    expect(subscriptions, hasLength(6));
++    expect(subscriptions, hasLength(8));
      expect(subscriptions.every((s) => s.enabled), isTrue);
 -    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(), hasLength(3));
 +    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(),
@@ -899,7 +923,7 @@ index 4155155..2af08fc 100644
      expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
 -    expect(subscriptions.map((s) => s.id).toSet(), hasLength(3));
 -    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(3));
-+    expect(subscriptions.map((s) => s.id).toSet(), hasLength(6));
-+    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(6));
++    expect(subscriptions.map((s) => s.id).toSet(), hasLength(8));
++    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(8));
    });
  }
