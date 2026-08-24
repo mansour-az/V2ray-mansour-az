@@ -1,4 +1,4 @@
-const CATALOG_KEY = "free:catalog:v2";
+const CATALOG_KEY = "free:catalog:v3";
 const REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const SOURCE_TIMEOUT_MS = 10_000;
 const MAX_SOURCE_BYTES = 2_500_000;
@@ -28,6 +28,48 @@ const CURATED_SOURCES = [
     name: "Freedom V2Ray",
     repository: "MahanKenway/Freedom-V2Ray",
     url: "https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/main/configs/vless_sub.txt",
+    discovered: false,
+  },
+  {
+    id: "myappvpn-filtered",
+    name: "MyAppVPN Verified",
+    repository: "indelingDanil/MyAppVPN",
+    url: "https://raw.githubusercontent.com/indelingDanil/MyAppVPN/proxylist/output/filtered.txt",
+    discovered: false,
+  },
+  {
+    id: "zieng2-universal-github",
+    name: "Zieng Universal",
+    repository: "zieng2/wl",
+    url: "https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt",
+    discovered: false,
+  },
+  {
+    id: "zieng2-universal-codeberg",
+    name: "Zieng Universal Codeberg",
+    repository: "zieng2/wl",
+    url: "https://codeberg.org/zieng2/wl/raw/branch/main/vless_universal.txt",
+    discovered: false,
+  },
+  {
+    id: "zieng2-universal-gitlab",
+    name: "Zieng Universal GitLab",
+    repository: "zieng2/wl",
+    url: "https://gitlab.com/zieng2/wl/raw/main/vless_universal.txt",
+    discovered: false,
+  },
+  {
+    id: "igareck-black-vless",
+    name: "Igareck Reality",
+    repository: "igareck/vpn-configs-for-russia",
+    url: "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt",
+    discovered: false,
+  },
+  {
+    id: "igareck-black-vless-codeberg",
+    name: "Igareck Reality Codeberg",
+    repository: "igareck/vpn-configs-for-russia",
+    url: "https://codeberg.org/igareck/vpn-configs-for-russia/raw/branch/main/BLACK_VLESS_RUS.txt",
     discovered: false,
   },
 ];
@@ -135,7 +177,7 @@ export async function refreshFreeCatalog(env, { discover = true } = {}) {
     return previous;
   }
   const catalog = {
-    version: 2,
+    version: 3,
     updated_at: Date.now(),
     configs,
     sources: sourceStats,
@@ -299,7 +341,13 @@ function uniqueSources(sources) {
 function allowedSourceUrl(value) {
   try {
     const url = new URL(String(value || ""));
-    return url.protocol === "https:" && ["raw.githubusercontent.com", "cdn.jsdelivr.net"].includes(url.hostname);
+    return url.protocol === "https:" && [
+      "raw.githubusercontent.com",
+      "cdn.jsdelivr.net",
+      "codeberg.org",
+      "gitlab.com",
+      "raw.githack.com",
+    ].includes(url.hostname);
   } catch {
     return false;
   }
