@@ -906,6 +906,24 @@ index 0000000..5d2634f
 +        'releases/download/$tag/Venzo-VPN-$version-arm64.apk';
 +  }
 +}
+diff --git a/app/test/screens/update_snackbar_test.dart b/app/test/screens/update_snackbar_test.dart
+index 9c6c9c5..e450d52 100644
+--- a/app/test/screens/update_snackbar_test.dart
++++ b/app/test/screens/update_snackbar_test.dart
+@@ -183,9 +183,10 @@ void main() {
+     InstallSourceResolver.setForTest(InstallSource.github);
+     await pumpSnack(tester);
+     await tapBody(tester);
+-    final call = lastOpenUrl();
+-    expect(call!.arguments['url'], ProjectLinks.releaseTag('v2.18.0'));
+-    expect(call.arguments['fallbackUrl'], isNull);
++    expect(lastOpenUrl(), isNull);
++    expect(find.text('بروزرسانی Venzo VPN'), findsOneWidget);
++    expect(find.text('دانلود و نصب'), findsOneWidget);
++    await tapAndPump(tester, find.text('بعداً'));
+   });
+ 
+   testWidgets('f-droid ведёт на страницу пакета', (tester) async {
 diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
 index 4155155..fbdf3e1 100644
 --- a/app/test/services/venzo_managed_subscriptions_test.dart
