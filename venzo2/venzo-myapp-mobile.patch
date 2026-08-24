@@ -118,6 +118,18 @@ index 0000000..8ec8c09
 +<paths xmlns:android="http://schemas.android.com/apk/res/android">
 +    <cache-path name="venzo_updates" path="." />
 +</paths>
+diff --git a/app/lib/controllers/home_controller.dart b/app/lib/controllers/home_controller.dart
+index a8a1663..a9d2198 100644
+--- a/app/lib/controllers/home_controller.dart
++++ b/app/lib/controllers/home_controller.dart
+@@ -1384,6 +1384,7 @@ class HomeController extends ChangeNotifier
+   /// Selects a payload server even when it is nested inside an URLTest group.
+   /// The outer selector keeps pointing at that URLTest group while its chosen
+   /// child changes, so manual selection and Smart Connect share one path.
++  @override
+   Future<void> selectVenzoServer(String nodeTag) async {
+     final selectorTag = _state.selectedGroup;
+     if (selectorTag == null || !_state.tunnelUp || _state.busy) return;
 diff --git a/app/lib/controllers/home_controller/ping_orchestration.dart b/app/lib/controllers/home_controller/ping_orchestration.dart
 index 93a8cd3..554db9a 100644
 --- a/app/lib/controllers/home_controller/ping_orchestration.dart
