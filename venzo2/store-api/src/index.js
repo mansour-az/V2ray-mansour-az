@@ -8,6 +8,9 @@ const TRX_RATE_CACHE_KEY = "rate:trx-irr";
 const TRX_RATE_MAX_AGE_MS = 5 * 60 * 1000;
 const TRX_RATE_STALE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const TRX_RATE_SAFETY_FACTOR = 0.98;
+const USD_RATE_CACHE_KEY = "rate:usd-irr";
+const USD_RATE_MAX_AGE_MS = 5 * 60 * 1000;
+const USD_RATE_STALE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_PRICE_PER_GB_IRR = 30_000;
 const VOLUMES = [5, 10, 20, 50, 100];
 const DURATIONS = [
@@ -835,17 +838,17 @@ async function paymentFor(method, plan, env, context = {}) {
   };
 }
 
-function hostedAmountUsd(priceIrr, env) {
-  const usdIrr = positiveInteger(env.USD_IRR);
-  if (!usdIrr) return null;
-  const amount = Number((Number(priceIrr) / usdIrr).toFixed(2));
+async function hostedAmountUsd(priceIrr, env) {
+  const rate = await usdRate(env);
+  if (!rate.ok) return null;
+  const amount = Number((Number(priceIrr) / rate.rate_irr).toFixed(2));
   return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
 async function createSwapPayInvoice(plan, env, context) {
   const apiKey = clean(env.SWAPPAY_API_KEY, 240);
   const username = clean(env.SWAPPAY_USERNAME, 120);
-  const amount = hostedAmountUsd(plan.price, env);
+  const amount = await hostedAmountUsd(plan.price, env);
   if (!apiKey || !username || !amount) {
     return { ok: false, error: "SWAPPAY_NOT_CONFIGURED" };
   }
@@ -907,7 +910,7 @@ async function createSwapPayInvoice(plan, env, context) {
 
 async function createOxaPayInvoice(plan, env, context) {
   const apiKey = clean(env.OXAPAY_MERCHANT_API_KEY, 240);
-  const amount = hostedAmountUsd(plan.price, env);
+  const amount = await hostedAmountUsd(plan.price, env);
   if (!apiKey || !amount) return { ok: false, error: "OXAPAY_NOT_CONFIGURED" };
   const body = {
     amount,
@@ -1173,6 +1176,55 @@ async function trxRate(env) {
   return { ok: false, error: "TRX_RATE_UNAVAILABLE" };
 }
 
+async function usdRate(env) {
+  const override = positiveInteger(env.USD_IRR);
+  if (override) {
+    return { ok: true, rate_irr: override, updated_at: Date.now(), source: "env" };
+  }
+  const now = Date.now();
+  let cached = null;
+  if (env.ORDERS) {
+    try {
+      cached = await env.ORDERS.get(USD_RATE_CACHE_KEY, "json");
+    } catch {
+      cached = null;
+    }
+  }
+  const cachedRate = positiveInteger(cached?.rate_irr);
+  const cachedAt = Number(cached?.updated_at || 0);
+  if (cachedRate && now - cachedAt <= USD_RATE_MAX_AGE_MS) {
+    return { ok: true, rate_irr: cachedRate, updated_at: cachedAt, source: "nobitex-cache" };
+  }
+  try {
+    const response = await fetch(
+      "https://apiv2.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls",
+      {
+        headers: { Accept: "application/json", "User-Agent": "Venzo-Store/1.0" },
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!response.ok) throw new Error(`HTTP_${response.status}`);
+    const payload = await response.json();
+    const rate = positiveInteger(payload?.stats?.["usdt-rls"]?.bestBuy);
+    if (!rate) throw new Error("INVALID_USD_RATE");
+    const value = { rate_irr: rate, updated_at: now };
+    if (env.ORDERS) {
+      await env.ORDERS.put(USD_RATE_CACHE_KEY, JSON.stringify(value), {
+        expirationTtl: 24 * 60 * 60,
+      });
+    }
+    return { ok: true, ...value, source: "nobitex-usdt" };
+  } catch (error) {
+    console.error("USD rate fetch failed", {
+      message: String(error?.message || "unknown").slice(0, 80),
+    });
+  }
+  if (cachedRate && now - cachedAt <= USD_RATE_STALE_MAX_AGE_MS) {
+    return { ok: true, rate_irr: cachedRate, updated_at: cachedAt, source: "nobitex-stale-cache" };
+  }
+  return { ok: false, error: "USD_RATE_UNAVAILABLE" };
+}
+
 async function storeSettings(env) {
   let saved = null;
   if (env.ORDERS) {
@@ -1231,8 +1283,8 @@ async function updateStoreSettings(request, env) {
 }
 
 async function paymentAvailability(env) {
-  const rate = await trxRate(env);
-  const hostedRateReady = positiveInteger(env.USD_IRR) > 0;
+  const [rate, hostedRate] = await Promise.all([trxRate(env), usdRate(env)]);
+  const hostedRateReady = hostedRate.ok;
   return {
     trx: Boolean(
       env.TRON_WALLET_ADDRESS &&
