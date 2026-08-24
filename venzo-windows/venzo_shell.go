@@ -33,6 +33,9 @@ var VenzoWindowSize = fyne.NewSize(920, 610)
 const (
 	venzoFreeCatalogURL = "https://venzo-store-api.mascot-gt.workers.dev/v1/free/subscription"
 	venzoFallbackURL    = "https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/all/configs_base64.txt"
+	venzoFilteredURL    = "https://raw.githubusercontent.com/indelingDanil/MyAppVPN/proxylist/output/filtered.txt"
+	venzoUniversalURL   = "https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt"
+	venzoIgareckURL     = "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt"
 	venzoStoreURL       = "https://t.me/venzo_vpn"
 )
 
@@ -68,6 +71,10 @@ func NewVenzoShell(app *App, controller *core.AppController) fyne.CanvasObject {
 
 	go v.bootstrap()
 	go v.refreshLoop()
+	go func() {
+		<-time.After(4 * time.Second)
+		v.checkForAppUpdate(false)
+	}()
 	return v.root
 }
 
@@ -95,8 +102,11 @@ func (v *venzoHome) buildHeader() fyne.CanvasObject {
 		uiservice.ApplyVenzoTheme(v.controller.UIService.Application, on)
 	})
 	darkMode.SetChecked(true)
+	updateButton := widget.NewButtonWithIcon("آپدیت", theme.DownloadIcon(), func() {
+		go v.checkForAppUpdate(true)
+	})
 
-	header := container.NewBorder(nil, nil, container.NewHBox(logo, brandBlock), darkMode)
+	header := container.NewBorder(nil, nil, container.NewHBox(logo, brandBlock), container.NewHBox(updateButton, darkMode))
 	return container.NewPadded(header)
 }
 
@@ -282,9 +292,16 @@ func ensureVenzoFreeSources(controller *core.AppController) error {
 	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
 		return err
 	}
-	s, err := state.Load(statePath)
-	if err != nil {
+	var s *state.State
+	if _, err := os.Stat(statePath); os.IsNotExist(err) {
 		s = state.New()
+	} else if err != nil {
+		return err
+	} else {
+		s, err = state.Load(statePath)
+		if err != nil {
+			return fmt.Errorf("load existing Venzo state: %w", err)
+		}
 	}
 	if s == nil {
 		s = state.New()
@@ -293,7 +310,18 @@ func ensureVenzoFreeSources(controller *core.AppController) error {
 	for _, source := range s.Connections.Sources {
 		known[source.URL] = true
 	}
-	for _, sourceURL := range []string{venzoFreeCatalogURL, venzoFallbackURL} {
+	freeSources := []struct {
+		label string
+		url   string
+	}{
+		{"Venzo Free", venzoFreeCatalogURL},
+		{"Venzo Radikal", venzoFallbackURL},
+		{"Venzo Verified", venzoFilteredURL},
+		{"Venzo Universal", venzoUniversalURL},
+		{"Venzo Reality", venzoIgareckURL},
+	}
+	for _, freeSource := range freeSources {
+		sourceURL := freeSource.url
 		if known[sourceURL] {
 			continue
 		}
@@ -301,7 +329,7 @@ func ensureVenzoFreeSources(controller *core.AppController) error {
 			ID:      state.MakeULID(),
 			Type:    state.SourceTypeSubscription,
 			Enabled: true,
-			Label:   "Venzo Free",
+			Label:   freeSource.label,
 			URL:     sourceURL,
 		})
 	}
