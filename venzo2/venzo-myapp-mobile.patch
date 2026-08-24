@@ -577,10 +577,18 @@ index 7ad8d52..bc6426f 100644
        context: context,
        isScrollControlled: true,
 diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
-index 414947e..1bae690 100644
+index 414947e..3d7ee05 100644
 --- a/app/lib/screens/home_screen.dart
 +++ b/app/lib/screens/home_screen.dart
-@@ -710,6 +710,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+@@ -33,6 +33,7 @@ import 'home/widgets/home_controls.dart';
+ import 'home/widgets/node_list.dart';
+ import 'home/widgets/status_chip.dart';
+ import 'home/widgets/venzo_premium_card.dart';
++import 'home/widgets/venzo_connection_panel.dart';
+ import '../widgets/pool_view_dialog.dart';
+ import 'home/home_menus.dart';
+ import 'home/home_dialogs.dart';
+@@ -710,6 +711,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
      if (mounted) setState(() {});
    }
  
@@ -609,7 +617,7 @@ index 414947e..1bae690 100644
    @override
    Widget build(BuildContext context) {
      return AnimatedBuilder(
-@@ -739,12 +761,54 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+@@ -739,12 +762,54 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
          );
          return Scaffold(
            // l10n-exempt: brand name, идентичен во всех локалях
