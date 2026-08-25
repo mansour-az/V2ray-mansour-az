@@ -206,14 +206,16 @@ func (v *venzoHome) buildHome() fyne.CanvasObject {
 	v.ringOuter = canvas.NewCircle(venzoGraphite)
 	v.ringOuter.StrokeColor = venzoSilver
 	v.ringOuter.StrokeWidth = 16
-	v.ringOuter.SetMinSize(fyne.NewSize(360, 360))
 	v.ringInner = canvas.NewCircle(color.NRGBA{R: 28, G: 19, B: 22, A: 255})
 	v.ringInner.StrokeColor = venzoRedBright
 	v.ringInner.StrokeWidth = 2
-	v.ringInner.SetMinSize(fyne.NewSize(310, 310))
+	outerSize := canvas.NewRectangle(color.Transparent)
+	outerSize.SetMinSize(fyne.NewSize(360, 360))
+	innerSize := canvas.NewRectangle(color.Transparent)
+	innerSize.SetMinSize(fyne.NewSize(310, 310))
 
 	centerContent := container.NewVBox(layout.NewSpacer(), container.NewCenter(widget.NewIcon(theme.ConfirmIcon())), v.status, v.duration, container.NewCenter(v.power), layout.NewSpacer())
-	ring := container.NewStack(v.ringOuter, container.NewCenter(v.ringInner), container.NewCenter(centerContent))
+	ring := container.NewStack(outerSize, v.ringOuter, container.NewCenter(container.NewStack(innerSize, v.ringInner)), container.NewCenter(centerContent))
 	infoPanel := container.NewGridWithColumns(3,
 		widget.NewCard("زمان اتصال", "", container.NewCenter(v.durationSummary)),
 		widget.NewCard("حالت", "", container.NewCenter(widget.NewLabel("VPN (TUN)"))),
