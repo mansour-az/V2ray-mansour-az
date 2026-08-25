@@ -1,6 +1,8 @@
 {
-  "tag": "v2.4.1",
-  "name": "Venzo VPN 2.4.1",
-  "html_url": "https://github.com/mansour-az/V2ray-mansour-az/releases/tag/v2.4.1",
-  "published_at": "2026-08-23T07:00:00Z"
+  "tag": "v2.5.1",
+  "name": "Venzo VPN 2.5.1",
+  "html_url": "https://github.com/mansour-az/V2ray-mansour-az/releases/tag/v2.5.1",
+  "published_at": "2026-08-25T06:34:14Z",
+  "apk_url": "https://github.com/mansour-az/V2ray-mansour-az/releases/download/v2.5.1/Venzo-VPN-2.5.1-arm64.apk",
+  "sha256": "ce3f5f6859d9c1e391a6d71c4c9036ea2c564bd9fd843056e45e0f09799c9702"
 }
