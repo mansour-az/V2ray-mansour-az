@@ -31,8 +31,8 @@ import (
 	"singbox-launcher/internal/platform"
 )
 
-// VenzoWindowSize matches the approved desktop composition: server rail on
-// the left, one-click connection in the middle and Persian navigation right.
+// VenzoWindowSize keeps the single-focus Persian experience comfortable on
+// common Windows laptops without forcing a dense multi-column composition.
 var VenzoWindowSize = fyne.NewSize(1080, 720)
 
 const (
