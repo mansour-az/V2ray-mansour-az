@@ -2,7 +2,7 @@ name: Build Venzo VPN for Windows
 
 on:
   push:
-    branches: [venzo-2.0]
+    branches: [venzo-2.0, codex/venzo-windows-2.6.0-ux]
     paths:
       - "venzo-windows/**"
       - ".github/workflows/venzo-windows-build.yml"
@@ -11,7 +11,7 @@ on:
       version:
         description: Windows app version without v prefix
         required: true
-        default: 2.5.1
+        default: 2.6.0
         type: string
       publish_release:
         description: Publish a GitHub prerelease after a successful build
@@ -32,8 +32,8 @@ jobs:
       UPSTREAM_COMMIT: 7bf58b82cd5c67c1be92e556cd0cea199f479d9f
       CORE_VERSION: 1.14.0-lx.26
       WINTUN_VERSION: 0.14.1
-      BUILD_VERSION: ${{ inputs.version || '2.5.1' }}
-      APP_VERSION: v${{ inputs.version || '2.5.1' }}
+      BUILD_VERSION: ${{ inputs.version || '2.6.0' }}
+      APP_VERSION: v${{ inputs.version || '2.6.0' }}
     steps:
       - name: Checkout Venzo source
         uses: actions/checkout@v4
@@ -163,10 +163,10 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Venzo-VPN-Windows-${{ inputs.version || '2.5.1' }}
+          name: Venzo-VPN-Windows-${{ inputs.version || '2.6.0' }}
           path: |
-            Venzo-VPN-Windows-x64-${{ inputs.version || '2.5.1' }}.zip
-            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '2.5.1' }}.exe
+            Venzo-VPN-Windows-x64-${{ inputs.version || '2.6.0' }}.zip
+            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '2.6.0' }}.exe
             SHA256SUMS.txt
           if-no-files-found: error
 
@@ -174,17 +174,17 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: windows-v${{ inputs.version || '2.5.1' }}
-          name: Venzo VPN for Windows ${{ inputs.version || '2.5.1' }}
+          tag_name: windows-v${{ inputs.version || '2.6.0' }}
+          name: Venzo VPN for Windows ${{ inputs.version || '2.6.0' }}
           prerelease: true
           generate_release_notes: false
           body: |
-            نسخه دسکتاپ Venzo VPN 2.5.1 برای Windows 10/11 x64 با رابط جدید، اتصال هوشمند و فروشگاه داخلی.
+            نسخه دسکتاپ Venzo VPN 2.6.0 برای Windows 10/11 x64 با رابط ساده، اتصال تأییدشده و راهنمای حریم خصوصی.
 
             فایل `Setup` برای نصب معمولی و فایل ZIP برای اجرای پرتابل است.
           files: |
-            Venzo-VPN-Windows-x64-${{ inputs.version || '2.5.1' }}.zip
-            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '2.5.1' }}.exe
+            Venzo-VPN-Windows-x64-${{ inputs.version || '2.6.0' }}.zip
+            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '2.6.0' }}.exe
             SHA256SUMS.txt
 
       - name: Publish update manifest
