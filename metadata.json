@@ -1,0 +1,8 @@
+{
+  "name": "V2Ray Manager",
+  "description": "V2Ray proxy node manager, VMess and VLess configuration generator, latency diagnostics, and subscription manager",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
