@@ -1,0 +1,13 @@
+name = "venzo-api-v3"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+workers_dev = true
+
+[vars]
+PASARGUARD_SUB_PATH = "sub"
+
+# Required secrets (never commit real values):
+# wrangler secret put PASARGUARD_BASE_URL
+# wrangler secret put PASARGUARD_TOKEN
+# wrangler secret put VENZO_APP_TOKEN
+# wrangler secret put VENZO_ADMIN_TOKEN
