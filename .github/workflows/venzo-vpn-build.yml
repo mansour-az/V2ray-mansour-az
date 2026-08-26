@@ -44,7 +44,9 @@ jobs:
           git apply ../venzo2/venzo-white-label.patch
           git apply ../venzo2/venzo-myapp-mobile.patch
           git apply ../venzo2/venzo-payment-gateways.patch
-          git apply ../venzo2/venzo-connectivity-privacy.patch
+          # This generated incremental patch is maintained independently from
+          # the upstream files; recount makes edited hunk sizes deterministic.
+          git apply --recount ../venzo2/venzo-connectivity-privacy.patch
           base64 --decode ../venzo2/icon.jpg.b64 > app/assets/icons/app_icon.png
 
       - name: Read Flutter version
