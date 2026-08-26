@@ -12,11 +12,6 @@ function bearer(request) {
   return value.startsWith("Bearer ") ? value.slice(7).trim() : "";
 }
 
-function appAuthorized(request, env) {
-  const token = bearer(request);
-  return Boolean(token && (token === env.VENZO_APP_TOKEN || token === env.VENZO_ADMIN_TOKEN));
-}
-
 function adminAuthorized(request, env) {
   const token = bearer(request);
   return Boolean(token && token === env.VENZO_ADMIN_TOKEN);
@@ -34,10 +29,7 @@ async function pgFetch(env, path, init = {}) {
   headers.set("authorization", `Bearer ${env.PASARGUARD_TOKEN}`);
   if (init.body && !headers.has("content-type")) headers.set("content-type", "application/json");
 
-  return fetch(`${normalizeBase(env.PASARGUARD_BASE_URL)}${path}`, {
-    ...init,
-    headers,
-  });
+  return fetch(`${normalizeBase(env.PASARGUARD_BASE_URL)}${path}`, { ...init, headers });
 }
 
 async function forwardPasarGuard(response) {
@@ -57,13 +49,17 @@ function safeNodeQuery(url) {
   return encoded ? `?${encoded}` : "";
 }
 
+/**
+ * Client-safe subscription endpoint. The PasarGuard admin token is never sent
+ * to Android. The user's opaque subscription token is the capability required
+ * to resolve only that subscription's links.
+ */
 async function subscriptionLinks(request, env) {
-  if (!appAuthorized(request, env)) return json({ error: "unauthorized" }, 401);
-
   const subscriptionToken = (request.headers.get("x-subscription-token") || "").trim();
   if (!subscriptionToken || !/^[A-Za-z0-9._~-]{8,256}$/.test(subscriptionToken)) {
     return json({ error: "invalid_subscription_token" }, 400);
   }
+  if (!env.PASARGUARD_BASE_URL) return json({ error: "pasarguard_not_configured" }, 503);
 
   const subPath = `/${String(env.PASARGUARD_SUB_PATH || "sub").replace(/^\/+|\/+$/g, "")}`;
   const upstream = `${normalizeBase(env.PASARGUARD_BASE_URL)}${subPath}/${encodeURIComponent(subscriptionToken)}/links`;
@@ -85,15 +81,12 @@ async function subscriptionLinks(request, env) {
     .map((line) => line.trim())
     .filter((line) => /^(vmess|vless|trojan|ss):\/\//i.test(line));
 
-  return json({
-    ok: true,
-    count: links.length,
-    links,
-    fetched_at: new Date().toISOString(),
-  }, 200, { "cache-control": "no-store" });
+  return json({ ok: true, count: links.length, links, fetched_at: new Date().toISOString() }, 200, {
+    "cache-control": "no-store",
+  });
 }
 
-async function health(request, env) {
+async function health(_request, env) {
   const started = Date.now();
   try {
     const response = await pgFetch(env, "/api/nodes?size=1");
@@ -120,12 +113,8 @@ async function adminNodes(request, env, url, segments) {
   if (segments.length === 4 && request.method === "GET") {
     return forwardPasarGuard(await pgFetch(env, `/api/nodes${safeNodeQuery(url)}`));
   }
-
   if (segments.length === 4 && request.method === "POST") {
-    return forwardPasarGuard(await pgFetch(env, "/api/node", {
-      method: "POST",
-      body: await request.text(),
-    }));
+    return forwardPasarGuard(await pgFetch(env, "/api/node", { method: "POST", body: await request.text() }));
   }
 
   const id = segments[4];
@@ -135,10 +124,7 @@ async function adminNodes(request, env, url, segments) {
     return forwardPasarGuard(await pgFetch(env, `/api/node/${id}`));
   }
   if (segments.length === 5 && request.method === "PUT") {
-    return forwardPasarGuard(await pgFetch(env, `/api/node/${id}`, {
-      method: "PUT",
-      body: await request.text(),
-    }));
+    return forwardPasarGuard(await pgFetch(env, `/api/node/${id}`, { method: "PUT", body: await request.text() }));
   }
   if (segments.length === 5 && request.method === "DELETE") {
     return forwardPasarGuard(await pgFetch(env, `/api/node/${id}`, { method: "DELETE" }));
@@ -160,10 +146,7 @@ async function adminUsers(request, env, segments) {
   if (!adminAuthorized(request, env)) return json({ error: "admin_unauthorized" }, 401);
 
   if (segments.length === 4 && request.method === "POST") {
-    return forwardPasarGuard(await pgFetch(env, "/api/user", {
-      method: "POST",
-      body: await request.text(),
-    }));
+    return forwardPasarGuard(await pgFetch(env, "/api/user", { method: "POST", body: await request.text() }));
   }
 
   const id = segments[4];
@@ -173,10 +156,7 @@ async function adminUsers(request, env, segments) {
     return forwardPasarGuard(await pgFetch(env, `/api/user/by-id/${id}`));
   }
   if (segments.length === 5 && request.method === "PUT") {
-    return forwardPasarGuard(await pgFetch(env, `/api/user/by-id/${id}`, {
-      method: "PUT",
-      body: await request.text(),
-    }));
+    return forwardPasarGuard(await pgFetch(env, `/api/user/by-id/${id}`, { method: "PUT", body: await request.text() }));
   }
   if (segments.length === 5 && request.method === "DELETE") {
     return forwardPasarGuard(await pgFetch(env, `/api/user/by-id/${id}`, { method: "DELETE" }));
@@ -204,10 +184,7 @@ export default {
       }
       return json({ error: "not_found" }, 404);
     } catch (error) {
-      return json({
-        error: "internal_error",
-        message: error instanceof Error ? error.message : "unknown_error",
-      }, 500);
+      return json({ error: "internal_error", message: error instanceof Error ? error.message : "unknown_error" }, 500);
     }
   },
 };
