@@ -16,6 +16,18 @@
         android:theme="@style/Theme.V2RayManager">
 
         <activity
+            android:name=".SubscriptionSyncActivity"
+            android:exported="true"
+            android:theme="@style/Theme.V2RayManager">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="venzo" android:host="subscription" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
