@@ -34,67 +34,24 @@ class NodeRepository(private val nodeDao: NodeDao) {
         nodeDao.updatePing(id, pingMs)
     }
 
+    /**
+     * v1 shipped four demonstration records that were never real Venzo service
+     * credentials. Keeping them makes TCP ping look like VPN availability and
+     * was one source of the old "ping works but VPN does not" behaviour.
+     *
+     * v3 never seeds a server. It only removes the exact legacy demo records;
+     * real imported/subscription nodes are left untouched.
+     */
     suspend fun checkAndSeedInitialNodes() {
-        val existing = nodeDao.getAllNodes().firstOrNull()
-        if (existing.isNullOrEmpty()) {
-            val initialPresets = listOf(
-                V2RayNode(
-                    name = "Doprax VMess WebSocket (Default)",
-                    protocol = "VMess",
-                    address = "doprax.hicairo.com",
-                    port = 443,
-                    uuid = "de04add9-5c68-8bab-950c-08cd5320df18",
-                    alterId = 0,
-                    security = "auto",
-                    network = "ws",
-                    path = "/vmess",
-                    tls = "tls",
-                    sni = "doprax.hicairo.com",
-                    isActive = true
-                ),
-                V2RayNode(
-                    name = "Doprax VLESS WebSocket TLS",
-                    protocol = "VLESS",
-                    address = "doprax.hicairo.com",
-                    port = 443,
-                    uuid = "de04add9-5c68-8bab-950c-08cd5320df18",
-                    alterId = 0,
-                    security = "none",
-                    network = "ws",
-                    path = "/vless",
-                    tls = "tls",
-                    sni = "doprax.hicairo.com",
-                    isActive = false
-                ),
-                V2RayNode(
-                    name = "Cloudflare CDN Edge VMess",
-                    protocol = "VMess",
-                    address = "104.16.1.1",
-                    port = 443,
-                    uuid = "de04add9-5c68-8bab-950c-08cd5320df18",
-                    alterId = 0,
-                    security = "auto",
-                    network = "ws",
-                    path = "/vmess",
-                    tls = "tls",
-                    sni = "free.doprax.rocks",
-                    isActive = false
-                ),
-                V2RayNode(
-                    name = "Fast Trojan TLS Direct",
-                    protocol = "Trojan",
-                    address = "node-us.v2ray.network",
-                    port = 443,
-                    uuid = "de04add9-5c68-8bab-950c-08cd5320df18",
-                    security = "tls",
-                    network = "tcp",
-                    path = "",
-                    tls = "tls",
-                    sni = "node-us.v2ray.network",
-                    isActive = false
-                )
-            )
-            nodeDao.insertNodes(initialPresets)
-        }
+        val existing = nodeDao.getAllNodes().firstOrNull().orEmpty()
+        val legacyNames = setOf(
+            "Doprax VMess WebSocket (Default)",
+            "Doprax VLESS WebSocket TLS",
+            "Cloudflare CDN Edge VMess",
+            "Fast Trojan TLS Direct"
+        )
+        existing
+            .filter { it.name in legacyNames && it.uuid == "de04add9-5c68-8bab-950c-08cd5320df18" }
+            .forEach { nodeDao.deleteNode(it) }
     }
 }
