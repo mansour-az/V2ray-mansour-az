@@ -219,15 +219,23 @@ index 554db9afb957873be94a2c090763a712c8fca668..cdf5282baf8c03c3de0fc65a74e55f8d
 +        }
 +
 +        await selectVenzoServer(candidate);
-+        await Future<void>.delayed(const Duration(milliseconds: 700));
-+        if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
-+        final systemIp = await VenzoConnectionVerifier.fetchPublicIp();
-+        final verified = VenzoConnectionVerifier.routeIsVerified(
-+          baselineIp: _venzoBaselineIp,
-+          outboundIp: outboundIp,
-+          systemIp: systemIp,
-+        );
-+        if (!verified) {
++        String? systemIp;
++        for (var attempt = 0; attempt < 3; attempt++) {
++          await Future<void>.delayed(Duration(
++            milliseconds: attempt == 0 ? 900 : 1200,
++          ));
++          if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++          final observedIp = await VenzoConnectionVerifier.fetchPublicIp();
++          if (VenzoConnectionVerifier.routeIsVerified(
++            baselineIp: _venzoBaselineIp,
++            outboundIp: outboundIp,
++            systemIp: observedIp,
++          )) {
++            systemIp = observedIp;
++            break;
++          }
++        }
++        if (systemIp == null) {
 +          _addDebug(DebugSource.app,
 +              'Smart Connect $candidate: system route not verified');
 +          continue;
@@ -328,13 +336,23 @@ index 554db9afb957873be94a2c090763a712c8fca668..cdf5282baf8c03c3de0fc65a74e55f8d
 +        return false;
 +      }
 +      await selectVenzoServer(nodeTag);
-+      await Future<void>.delayed(const Duration(milliseconds: 700));
-+      final systemIp = await VenzoConnectionVerifier.fetchPublicIp();
-+      if (!VenzoConnectionVerifier.routeIsVerified(
-+        baselineIp: beforeIp,
-+        outboundIp: outboundIp,
-+        systemIp: systemIp,
-+      )) {
++      String? systemIp;
++      for (var attempt = 0; attempt < 3; attempt++) {
++        await Future<void>.delayed(Duration(
++          milliseconds: attempt == 0 ? 900 : 1200,
++        ));
++        if (!_state.tunnelUp || epoch != _smartConnectEpoch) return false;
++        final observedIp = await VenzoConnectionVerifier.fetchPublicIp();
++        if (VenzoConnectionVerifier.routeIsVerified(
++          baselineIp: beforeIp,
++          outboundIp: outboundIp,
++          systemIp: observedIp,
++        )) {
++          systemIp = observedIp;
++          break;
++        }
++      }
++      if (systemIp == null) {
 +        await _failVenzoSmartConnect(
 +          'این سرور Ping دارد، اما مسیر واقعی اینترنت از آن عبور نکرد.',
 +          epoch: epoch,
@@ -859,8 +877,13 @@ index 0000000000000000000000000000000000000000..a5b427b63e970f9bfec5d2bdf9aa4be0
 +    required String? systemIp,
 +  }) {
 +    if (outboundIp == null || systemIp == null) return false;
-+    if (outboundIp != systemIp) return false;
-+    return baselineIp == null || baselineIp != systemIp;
++    if (baselineIp != null) return baselineIp != systemIp;
++    // If the pre-VPN IP could not be captured, exact agreement is the safe
++    // fallback. When it was captured, a changed system IP plus the already
++    // successful HTTP exchange through this outbound proves real routing;
++    // the two observed exit IPs may legitimately differ because of IPv4/IPv6
++    // or load-balanced egress.
++    return outboundIp == systemIp;
 +  }
 +}
 diff --git a/app/test/services/venzo_connection_verifier_test.dart b/app/test/services/venzo_connection_verifier_test.dart
@@ -893,7 +916,7 @@ index 0000000000000000000000000000000000000000..2eabb7ca652127365c1c7a6cb1f023b6
 +    expect(VenzoConnectionVerifier.parsePublicIp('not-an-ip'), isNull);
 +  });
 +
-+  test('requires system route to match outbound and change baseline', () {
++  test('requires a changed system route after outbound HTTP succeeds', () {
 +    expect(
 +      VenzoConnectionVerifier.routeIsVerified(
 +        baselineIp: '198.51.100.2',
@@ -905,8 +928,24 @@ index 0000000000000000000000000000000000000000..2eabb7ca652127365c1c7a6cb1f023b6
 +    expect(
 +      VenzoConnectionVerifier.routeIsVerified(
 +        baselineIp: '198.51.100.2',
++        outboundIp: '2001:db8::7',
++        systemIp: '203.0.113.7',
++      ),
++      isTrue,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: '198.51.100.2',
 +        outboundIp: '203.0.113.7',
 +        systemIp: '198.51.100.2',
++      ),
++      isFalse,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: null,
++        outboundIp: '203.0.113.7',
++        systemIp: '203.0.113.8',
 +      ),
 +      isFalse,
 +    );
