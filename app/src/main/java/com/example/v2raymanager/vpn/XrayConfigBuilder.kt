@@ -4,7 +4,6 @@ import com.example.v2raymanager.data.model.V2RayNode
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -26,7 +25,7 @@ object XrayConfigBuilder {
             "REALITY requires public-key/short-id fields that are not present in the current node model"
         }
 
-        val config = buildJsonObject {
+        return buildJsonObject {
             putJsonObject("env") {
                 put("xray.tun.fd", tunFd.toString())
             }
@@ -42,10 +41,11 @@ object XrayConfigBuilder {
             putJsonArray("inbounds") {
                 add(buildJsonObject {
                     put("tag", "venzo-tun")
+                    put("port", 0)
                     put("protocol", "tun")
                     putJsonObject("settings") {
                         put("name", "venzo0")
-                        put("MTU", 1500)
+                        put("mtu", 1500)
                     }
                 })
             }
@@ -73,8 +73,7 @@ object XrayConfigBuilder {
                 }
             }
             put("stats", JsonObject(emptyMap()))
-        }
-        return config.toString()
+        }.toString()
     }
 
     private fun buildOutbound(node: V2RayNode): JsonObject = buildJsonObject {
