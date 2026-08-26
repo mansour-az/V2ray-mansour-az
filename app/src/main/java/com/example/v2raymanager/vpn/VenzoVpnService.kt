@@ -44,6 +44,10 @@ class VenzoVpnService : VpnService(), DialerController {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        // Xray's upstream sockets must bypass the Android VPN interface or the
+        // core would route its own connection back into the TUN indefinitely.
+        LibXray.registerDialerController(this)
+        LibXray.registerListenerController(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -65,9 +69,7 @@ class VenzoVpnService : VpnService(), DialerController {
     }
 
     private suspend fun startTunnel(node: V2RayNode) {
-        if (VpnRuntime.state.value.isConnected || VpnRuntime.state.value.isConnecting) {
-            stopTunnel(false)
-        }
+        if (VpnRuntime.state.value.isConnected || VpnRuntime.state.value.isConnecting) stopTunnel(false)
 
         activeNode = node
         VpnRuntime.connecting(node.name)
@@ -112,6 +114,7 @@ class VenzoVpnService : VpnService(), DialerController {
         } catch (t: Throwable) {
             runCatching { stopCore() }
             runCatching { tunInterface?.close() }
+            runCatching { LibXray.resetDNS() }
             tunInterface = null
             VpnRuntime.failed(node.name, t.message ?: "VPN connection failed")
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -183,7 +186,7 @@ class VenzoVpnService : VpnService(), DialerController {
         }
     }
 
-    override fun protectFd(fd: Long): Boolean = protect(fd.toInt())
+    override fun protectFd(fd: Int): Boolean = protect(fd)
 
     override fun onRevoke() {
         serviceScope.launch { stopTunnel(true) }
