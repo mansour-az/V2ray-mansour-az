@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"image/color"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -22,15 +26,14 @@ import (
 	"singbox-launcher/core/config/configtypes"
 	"singbox-launcher/core/services"
 	"singbox-launcher/core/state"
-	"singbox-launcher/core/uiservice"
 	"singbox-launcher/internal/debuglog"
 	"singbox-launcher/internal/locale"
 	"singbox-launcher/internal/platform"
 )
 
-// VenzoWindowSize matches the approved desktop composition: server rail on
-// the left, one-click connection in the middle and Persian navigation right.
-var VenzoWindowSize = fyne.NewSize(1200, 760)
+// VenzoWindowSize keeps the single-focus Persian experience comfortable on
+// common Windows laptops without forcing a dense multi-column composition.
+var VenzoWindowSize = fyne.NewSize(1080, 720)
 
 const (
 	venzoFreeCatalogURL = "https://venzo-store-api.mascot-gt.workers.dev/v1/free/subscription"
@@ -42,12 +45,11 @@ const (
 )
 
 var (
-	venzoRed       = color.NRGBA{R: 217, G: 35, B: 48, A: 255}
-	venzoRedBright = color.NRGBA{R: 239, G: 51, B: 64, A: 255}
-	venzoRedDeep   = color.NRGBA{R: 74, G: 17, B: 23, A: 255}
-	venzoGraphite  = color.NRGBA{R: 15, G: 17, B: 19, A: 255}
-	venzoPanel     = color.NRGBA{R: 20, G: 22, B: 24, A: 255}
-	venzoSilver    = color.NRGBA{R: 190, G: 195, B: 201, A: 255}
+	venzoCyan      = color.NRGBA{R: 88, G: 213, B: 228, A: 255}
+	venzoCyanDeep  = color.NRGBA{R: 11, G: 70, B: 82, A: 255}
+	venzoGraphite  = color.NRGBA{R: 5, G: 12, B: 24, A: 255}
+	venzoPanel     = color.NRGBA{R: 9, G: 24, B: 38, A: 255}
+	venzoSilver    = color.NRGBA{R: 171, G: 190, B: 202, A: 255}
 )
 
 type venzoHome struct {
@@ -74,13 +76,18 @@ type venzoHome struct {
 	serverRows      *fyne.Container
 	serverSignature string
 	connectedAt     time.Time
+	connectionMu    sync.RWMutex
+	connecting      bool
+	verified        bool
+	verifiedProxy   string
+	baselineIP      string
+	lastFailure     string
 
 	navHome     *widget.Button
 	navServers  *widget.Button
+	navPrivacy  *widget.Button
 	navStore    *widget.Button
 	navSettings *widget.Button
-	ringOuter   *canvas.Circle
-	ringInner   *canvas.Circle
 	stop        chan struct{}
 }
 
@@ -90,7 +97,7 @@ func NewVenzoShell(app *App, controller *core.AppController) fyne.CanvasObject {
 	v := &venzoHome{app: app, controller: controller, stop: make(chan struct{})}
 	v.home = v.buildHome()
 	v.body = container.NewStack(v.home)
-	v.root = container.NewBorder(v.buildHeader(), v.buildStatusBar(), v.buildServerPanel(), v.buildNavigation(), v.body)
+	v.root = container.NewBorder(v.buildHeader(), v.buildStatusBar(), nil, nil, v.body)
 
 	go v.bootstrap()
 	go v.refreshLoop()
@@ -112,15 +119,32 @@ func (v *venzoHome) bootstrap() {
 }
 
 func (v *venzoHome) buildHeader() fyne.CanvasObject {
-	mode := widget.NewLabel("VPN Mode · TUN")
-	mode.TextStyle = fyne.TextStyle{Monospace: true}
-	darkMode := widget.NewCheck("حالت شب", func(on bool) {
-		uiservice.ApplyVenzoTheme(v.controller.UIService.Application, on)
+	iconResource := fyne.NewStaticResource("venzo.ico", v.controller.UIService.AppIconData.Content())
+	logo := canvas.NewImageFromResource(iconResource)
+	logo.FillMode = canvas.ImageFillContain
+	logo.SetMinSize(fyne.NewSize(42, 42))
+	brand := container.NewHBox(logo, container.NewVBox(
+		widget.NewLabelWithStyle("Venzo VPN", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabel("Windows · 2.6.0"),
+	))
+
+	v.navHome = widget.NewButtonWithIcon("خانه", theme.HomeIcon(), v.showHome)
+	v.navHome.Importance = widget.HighImportance
+	v.navServers = widget.NewButtonWithIcon("سرورها", theme.StorageIcon(), v.showServers)
+	v.navPrivacy = widget.NewButtonWithIcon("حریم خصوصی", theme.VisibilityOffIcon(), v.showPrivacy)
+	v.navStore = widget.NewButtonWithIcon("فروشگاه", theme.AccountIcon(), v.showStore)
+	v.navSettings = widget.NewButtonWithIcon("تنظیمات", theme.SettingsIcon(), func() {
+		v.setActiveNav(v.navSettings)
+		for _, item := range v.app.tabs.Items {
+			if strings.Contains(item.Text, locale.T("app.tab.settings")) {
+				v.showTab(item)
+				return
+			}
+		}
 	})
-	darkMode.SetChecked(true)
 	updateButton := widget.NewButtonWithIcon("بروزرسانی", theme.DownloadIcon(), func() { go v.checkForAppUpdate(true) })
-	heading := widget.NewLabelWithStyle("Venzo VPN 2.5.1", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	return container.NewPadded(container.NewBorder(nil, nil, heading, container.NewHBox(updateButton, darkMode), container.NewCenter(mode)))
+	nav := container.NewHBox(v.navSettings, v.navStore, v.navPrivacy, v.navServers, v.navHome)
+	return container.NewPadded(container.NewBorder(nil, nil, brand, updateButton, container.NewCenter(nav)))
 }
 
 func (v *venzoHome) buildNavigation() fyne.CanvasObject {
@@ -199,41 +223,52 @@ func (v *venzoHome) buildHome() fyne.CanvasObject {
 	v.status = widget.NewLabelWithStyle("آماده اتصال", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	v.duration = widget.NewLabelWithStyle("00:00:00", fyne.TextAlignCenter, fyne.TextStyle{Monospace: true})
 	v.durationSummary = widget.NewLabelWithStyle("00:00:00", fyne.TextAlignCenter, fyne.TextStyle{Monospace: true})
-	v.protection = widget.NewLabelWithStyle("برای محافظت از اتصال، VPN را روشن کنید", fyne.TextAlignCenter, fyne.TextStyle{})
+	v.protection = widget.NewLabelWithStyle("برای شروع فقط دکمه اتصال را بزنید", fyne.TextAlignCenter, fyne.TextStyle{})
 	v.power = widget.NewButtonWithIcon("اتصال هوشمند", theme.MediaPlayIcon(), v.toggleConnection)
 	v.power.Importance = widget.HighImportance
 
-	v.ringOuter = canvas.NewCircle(venzoGraphite)
-	v.ringOuter.StrokeColor = venzoSilver
-	v.ringOuter.StrokeWidth = 16
-	v.ringInner = canvas.NewCircle(color.NRGBA{R: 28, G: 19, B: 22, A: 255})
-	v.ringInner.StrokeColor = venzoRedBright
-	v.ringInner.StrokeWidth = 2
-	outerSize := canvas.NewRectangle(color.Transparent)
-	outerSize.SetMinSize(fyne.NewSize(360, 360))
-	innerSize := canvas.NewRectangle(color.Transparent)
-	innerSize.SetMinSize(fyne.NewSize(310, 310))
+	v.location = trailingLabel("انتخاب خودکار", true)
+	v.locationDetail = trailingLabel("سریع‌ترین سرور قابل اتصال", false)
+	v.protocol = widget.NewLabelWithStyle("AUTO", fyne.TextAlignCenter, fyne.TextStyle{Monospace: true, Bold: true})
+	v.ping = widget.NewLabelWithStyle("— ms", fyne.TextAlignCenter, fyne.TextStyle{Monospace: true, Bold: true})
+	v.healthy = trailingLabel("در انتظار تست", false)
+	v.serviceStatus = trailingLabel("آماده", true)
+	v.serverRows = container.NewVBox(trailingLabel("پس از اتصال، سرورهای قابل استفاده نمایش داده می‌شوند", false))
+	v.refresh = widget.NewButtonWithIcon("بروزرسانی فهرست سرورها", theme.ViewRefreshIcon(), v.refreshSources)
 
-	centerContent := container.NewVBox(layout.NewSpacer(), container.NewCenter(widget.NewIcon(theme.ConfirmIcon())), v.status, v.duration, container.NewCenter(v.power), layout.NewSpacer())
-	ring := container.NewStack(outerSize, v.ringOuter, container.NewCenter(container.NewStack(innerSize, v.ringInner)), container.NewCenter(centerContent))
-	infoPanel := container.NewGridWithColumns(3,
-		widget.NewCard("زمان اتصال", "", container.NewCenter(v.durationSummary)),
-		widget.NewCard("حالت", "", container.NewCenter(widget.NewLabel("VPN (TUN)"))),
-		widget.NewCard("امنیت", "", container.NewCenter(widget.NewLabel("رمزگذاری فعال"))),
-	)
-	content := container.NewVBox(layout.NewSpacer(), container.NewCenter(ring), container.NewCenter(v.protection), layout.NewSpacer(), infoPanel)
-	background := canvas.NewRectangle(color.NRGBA{R: 13, G: 15, B: 17, A: 255})
+	intro := widget.NewCard("اتصال امن و ساده", "Venzo بهترین سرور را پیدا می‌کند و عبور واقعی اینترنت را قبل از نمایش وضعیت متصل بررسی می‌کند.", container.NewVBox(
+		v.status,
+		container.NewCenter(v.duration),
+		container.NewCenter(v.power),
+		v.protection,
+	))
+	server := widget.NewCard("سرور انتخاب‌شده", "Ping به‌تنهایی به معنی اتصال نیست", container.NewVBox(
+		v.location,
+		v.locationDetail,
+		container.NewGridWithColumns(3,
+			widget.NewCard("پروتکل", "", container.NewCenter(v.protocol)),
+			widget.NewCard("تأخیر", "", container.NewCenter(v.ping)),
+			widget.NewCard("وضعیت", "", container.NewCenter(v.healthy)),
+		),
+	))
+	quickPrivacy := widget.NewCard("حریم خصوصی", "برگرفته از راهنمای پیوست", container.NewGridWithColumns(3,
+		container.NewVBox(widget.NewLabelWithStyle("DNS", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("محافظت در حالت TUN", fyne.TextAlignCenter, fyne.TextStyle{})),
+		container.NewVBox(widget.NewLabelWithStyle("WebRTC", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("راهنمای مرورگر", fyne.TextAlignCenter, fyne.TextStyle{})),
+		container.NewVBox(widget.NewLabelWithStyle("Fingerprint", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("کاهش ردپای دیجیتال", fyne.TextAlignCenter, fyne.TextStyle{})),
+	))
+	content := container.NewVBox(layout.NewSpacer(), intro, server, quickPrivacy, layout.NewSpacer())
+	background := canvas.NewRectangle(venzoGraphite)
 	return container.NewStack(background, container.NewPadded(content))
 }
 
 func (v *venzoHome) buildStatusBar() fyne.CanvasObject {
 	return container.NewPadded(container.NewBorder(nil, nil,
-		widget.NewLabel("Venzo Core · sing-box"), widget.NewLabel("آماده"),
-		container.NewCenter(widget.NewLabel("حالت: VPN (TUN)"))))
+		widget.NewLabel("Venzo Core · sing-box"), v.serviceStatus,
+		container.NewCenter(widget.NewLabel("VPN (TUN) · بررسی اتصال انتها‌به‌انتها"))))
 }
 
 func (v *venzoHome) setActiveNav(active *widget.Button) {
-	for _, button := range []*widget.Button{v.navHome, v.navServers, v.navStore, v.navSettings} {
+	for _, button := range []*widget.Button{v.navHome, v.navServers, v.navPrivacy, v.navStore, v.navSettings} {
 		if button != nil {
 			button.Importance = widget.MediumImportance
 			button.Refresh()
@@ -262,6 +297,46 @@ func (v *venzoHome) showHome() {
 	v.body.Objects = []fyne.CanvasObject{v.home}
 	v.body.Refresh()
 	v.refreshStatus()
+}
+
+func (v *venzoHome) showServers() {
+	v.setActiveNav(v.navServers)
+	heading := trailingLabel("سرورها", true)
+	description := trailingLabel("فهرست بر اساس Ping مرتب می‌شود، اما نشان «تأییدشده» فقط بعد از عبور واقعی اینترنت نمایش داده می‌شود.", false)
+	panel := widget.NewCard("انتخاب سرور", "Venzo هنگام اتصال چند سرور سریع را به‌ترتیب آزمایش می‌کند.", container.NewVBox(
+		v.healthy,
+		v.serverRows,
+		v.refresh,
+	))
+	content := container.NewVBox(heading, description, separator(), panel, layout.NewSpacer())
+	v.body.Objects = []fyne.CanvasObject{container.NewStack(canvas.NewRectangle(venzoGraphite), container.NewPadded(content))}
+	v.body.Refresh()
+}
+
+func (v *venzoHome) showPrivacy() {
+	v.setActiveNav(v.navPrivacy)
+	dnsState := "برای فعال‌سازی، ابتدا VPN را متصل کنید"
+	v.connectionMu.RLock()
+	if v.verified {
+		dnsState = "مسیر VPN تأیید شده؛ DNS در حالت TUN محافظت می‌شود"
+	}
+	v.connectionMu.RUnlock()
+
+	dns := widget.NewCard("محافظت DNS", dnsState, trailingLabel("در نسخه جدید، وضعیت امن فقط بعد از تست اینترنت اعلام می‌شود.", false))
+	webrtc := widget.NewCard("نشت WebRTC", "WebRTC به مرورگر مربوط است و از داخل VPN قابل خاموش‌کردن نیست.", widget.NewButton("اجرای تست WebRTC در مرورگر", func() {
+		if err := platform.OpenURL("https://browserleaks.com/webrtc"); err != nil {
+			ShowError(v.controller.GetMainWindow(), err)
+		}
+	}))
+	fingerprint := widget.NewCard("کاهش ردپای دیجیتال", "مطابق راهنمای پیوست: افزونه‌های ضد Fingerprint و تغییر User-Agent را فقط از منبع رسمی مرورگر نصب کنید.", trailingLabel("Venzo تنظیمات مرورگر را بدون اجازه تغییر نمی‌دهد.", false))
+	guide := widget.NewCard("راهنمای امنیت", "سه لایه‌ای که باید جداگانه بررسی شوند", container.NewGridWithColumns(3,
+		container.NewVBox(widget.NewIcon(theme.StorageIcon()), widget.NewLabelWithStyle("DNS", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})),
+		container.NewVBox(widget.NewIcon(theme.VisibilityIcon()), widget.NewLabelWithStyle("WebRTC", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})),
+		container.NewVBox(widget.NewIcon(theme.AccountIcon()), widget.NewLabelWithStyle("Fingerprint", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})),
+	))
+	content := container.NewVBox(trailingLabel("حریم خصوصی", true), trailingLabel("کنترل‌های روشن و بدون ادعای گمراه‌کننده", false), separator(), dns, webrtc, fingerprint, guide, layout.NewSpacer())
+	v.body.Objects = []fyne.CanvasObject{container.NewScroll(container.NewStack(canvas.NewRectangle(venzoGraphite), container.NewPadded(content)))}
+	v.body.Refresh()
 }
 
 func (v *venzoHome) showStore() {
@@ -326,33 +401,49 @@ func (v *venzoHome) refreshStatus() {
 	v.refreshServerRows(proxies)
 
 	running := v.controller.RunningState != nil && v.controller.RunningState.IsRunning()
-	if running {
+	v.connectionMu.RLock()
+	connecting := v.connecting
+	verified := v.verified
+	verifiedProxy := v.verifiedProxy
+	lastFailure := v.lastFailure
+	v.connectionMu.RUnlock()
+	if connecting {
+		v.power.SetText("در حال بررسی…")
+		v.power.SetIcon(theme.ViewRefreshIcon())
+		v.serviceStatus.SetText("در حال آزمایش اتصال")
+		return
+	}
+	if running && verified {
 		if v.connectedAt.IsZero() {
 			v.connectedAt = time.Now()
 		}
-		v.status.SetText("متصل")
+		v.status.SetText("متصل و تأییدشده")
 		v.power.SetText("قطع اتصال")
 		v.power.SetIcon(theme.MediaStopIcon())
 		v.duration.SetText(formatConnectionDuration(time.Since(v.connectedAt)))
 		v.durationSummary.SetText(formatConnectionDuration(time.Since(v.connectedAt)))
-		v.protection.SetText("اتصال شما امن و رمزگذاری‌شده است")
-		v.ringOuter.StrokeColor = venzoSilver
-		v.ringInner.StrokeColor = venzoRedBright
-		v.ringInner.FillColor = venzoRedDeep
+		v.protection.SetText("عبور اینترنت از VPN بررسی شد · " + cleanProxyName(verifiedProxy))
+		v.serviceStatus.SetText("اتصال تأییدشده")
 	} else {
 		v.connectedAt = time.Time{}
-		v.status.SetText("آماده اتصال")
+		if running {
+			v.status.SetText("اتصال تأیید نشده")
+			v.protection.SetText("پردازش VPN روشن است، اما عبور اینترنت تأیید نشده")
+			v.serviceStatus.SetText("نیاز به بررسی")
+		} else if lastFailure != "" {
+			v.status.SetText("اتصال ناموفق")
+			v.protection.SetText(lastFailure)
+			v.serviceStatus.SetText("اتصال برقرار نشد")
+		} else {
+			v.status.SetText("آماده اتصال")
+			v.protection.SetText("برای شروع فقط دکمه اتصال را بزنید")
+			v.serviceStatus.SetText("آماده")
+		}
 		v.power.SetText("اتصال هوشمند")
 		v.power.SetIcon(theme.MediaPlayIcon())
 		v.duration.SetText("00:00:00")
 		v.durationSummary.SetText("00:00:00")
-		v.protection.SetText("برای محافظت از اتصال، VPN را روشن کنید")
-		v.ringOuter.StrokeColor = color.NRGBA{R: 93, G: 98, B: 105, A: 255}
-		v.ringInner.StrokeColor = venzoRed
-		v.ringInner.FillColor = color.NRGBA{R: 28, G: 19, B: 22, A: 255}
 	}
-	v.ringOuter.Refresh()
-	v.ringInner.Refresh()
 }
 
 func (v *venzoHome) refreshServerRows(proxies []api.ProxyInfo) {
@@ -395,35 +486,116 @@ func (v *venzoHome) switchProxy(proxy api.ProxyInfo) {
 	v.location.SetText(countryFromName(proxy.DisplayOrName()))
 	v.locationDetail.SetText(cleanProxyName(proxy.DisplayOrName()))
 	v.ping.SetText(fmt.Sprintf("%d ms", proxy.Delay))
+	if v.controller.RunningState != nil && v.controller.RunningState.IsRunning() {
+		v.status.SetText("در حال تأیید سرور انتخاب‌شده…")
+		go func() {
+			<-time.After(1500 * time.Millisecond)
+			if _, err := fetchPublicIP(8 * time.Second); err != nil {
+				fyne.Do(func() { v.protection.SetText("این سرور Ping دارد، اما اینترنت آن تأیید نشد") })
+				return
+			}
+			v.setConnectionResult(true, proxy.Name, "")
+			fyne.Do(v.refreshStatus)
+		}()
+	}
 }
 
 func (v *venzoHome) toggleConnection() {
 	if v.controller.RunningState != nil && v.controller.RunningState.IsRunning() {
 		v.status.SetText("در حال قطع اتصال…")
+		v.setConnectionResult(false, "", "")
 		go core.StopSingBoxProcess()
 		return
 	}
+	v.connectionMu.Lock()
+	if v.connecting {
+		v.connectionMu.Unlock()
+		return
+	}
+	v.connecting = true
+	v.verified = false
+	v.lastFailure = ""
+	v.connectionMu.Unlock()
 	v.power.Disable()
-	v.status.SetText("بروزرسانی و تست سرورها…")
+	v.status.SetText("در حال آماده‌سازی اتصال…")
 	go func() {
-		defer fyne.Do(v.power.Enable)
+		defer func() {
+			v.connectionMu.Lock()
+			v.connecting = false
+			v.connectionMu.Unlock()
+			fyne.Do(func() {
+				v.power.Enable()
+				v.refreshStatus()
+			})
+		}()
+		baselineIP, baselineErr := fetchPublicIP(7 * time.Second)
+		v.connectionMu.Lock()
+		v.baselineIP = baselineIP
+		v.connectionMu.Unlock()
+		if baselineErr != nil {
+			debuglog.WarnLog("Venzo smart-connect: baseline public IP unavailable: %v", baselineErr)
+		}
 		if err := ensureVenzoFreeSources(v.controller); err != nil {
 			debuglog.WarnLog("Venzo bootstrap: %v", err)
 		}
+		fyne.Do(func() { v.status.SetText("در حال ساخت تنظیمات امن…") })
 		core.RunParserProcess()
 		if !waitForFile(v.controller.FileService.ConfigPath, 25*time.Second) {
-			fyne.Do(func() { v.status.SetText("ساخت کانفیگ ناموفق بود؛ دوباره تلاش کنید") })
+			v.failConnection("ساخت تنظیمات ناموفق بود؛ دوباره تلاش کنید")
 			return
 		}
+		fyne.Do(func() { v.status.SetText("در حال راه‌اندازی موتور VPN…") })
 		core.StartSingBoxProcess()
-		<-time.After(5 * time.Second)
+		if !waitForCore(v.controller, 15*time.Second) {
+			v.failConnection("موتور VPN شروع نشد؛ برنامه را با دسترسی Administrator اجرا کنید")
+			return
+		}
+		<-time.After(3 * time.Second)
 		v.controller.APIService.AutoLoadProxies(context.Background())
 		if v.controller.UIService.AutoPingAfterConnectFunc != nil {
 			v.controller.UIService.AutoPingAfterConnectFunc()
 		}
-		<-time.After(7 * time.Second)
-		selectBestProxy(v.controller)
-		fyne.Do(v.refreshStatus)
+		fyne.Do(func() { v.status.SetText("در حال تست سرورها…") })
+		candidates := waitForCandidates(v.controller, 25*time.Second, 8)
+		if len(candidates) == 0 {
+			v.failConnection("هیچ سرور قابل آزمایشی پیدا نشد؛ فهرست سرورها را بروزرسانی کنید")
+			return
+		}
+		group := v.controller.APIService.GetSelectedClashGroup()
+		if group == "" {
+			v.failConnection("گروه اتصال پیدا نشد؛ تنظیمات برنامه را بازنشانی کنید")
+			return
+		}
+		for index, candidate := range candidates {
+			proxy := candidate
+			fyne.Do(func() {
+				v.status.SetText(fmt.Sprintf("آزمایش سرور %d از %d…", index+1, len(candidates)))
+				v.location.SetText(countryFromName(proxy.DisplayOrName()))
+				v.locationDetail.SetText(cleanProxyName(proxy.DisplayOrName()))
+				v.ping.SetText(fmt.Sprintf("%d ms", proxy.Delay))
+			})
+			if err := v.controller.APIService.SwitchProxy(group, proxy.Name); err != nil {
+				debuglog.WarnLog("Venzo smart-connect: switch %q failed: %v", proxy.Name, err)
+				continue
+			}
+			<-time.After(1800 * time.Millisecond)
+			publicIP, err := fetchPublicIP(8 * time.Second)
+			if err != nil {
+				debuglog.WarnLog("Venzo smart-connect: %q has ping but no verified internet: %v", proxy.Name, err)
+				continue
+			}
+			if baselineIP != "" && publicIP == baselineIP {
+				debuglog.WarnLog("Venzo smart-connect: %q did not change public IP", proxy.Name)
+				continue
+			}
+			v.setConnectionResult(true, proxy.Name, "")
+			fyne.Do(func() {
+				v.status.SetText("متصل و تأییدشده")
+				v.protection.SetText("تغییر IP عمومی و عبور اینترنت تأیید شد")
+			})
+			return
+		}
+		v.failConnection("سرورها Ping داشتند، اما هیچ‌کدام عبور واقعی اینترنت را تأیید نکردند")
 	}()
 }
 
@@ -443,6 +615,103 @@ func (v *venzoHome) refreshSources() {
 			v.status.SetText("منابع بروزرسانی شدند")
 		})
 	}()
+}
+
+func (v *venzoHome) setConnectionResult(verified bool, proxyName, failure string) {
+	v.connectionMu.Lock()
+	v.verified = verified
+	v.verifiedProxy = proxyName
+	v.lastFailure = failure
+	v.connectionMu.Unlock()
+}
+
+func (v *venzoHome) failConnection(message string) {
+	debuglog.WarnLog("Venzo smart-connect: %s", message)
+	v.setConnectionResult(false, "", message)
+	core.StopSingBoxProcess()
+	fyne.Do(func() {
+		v.status.SetText("اتصال ناموفق")
+		v.protection.SetText(message)
+	})
+}
+
+func waitForCore(controller *core.AppController, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if controller != nil && controller.RunningState != nil && controller.RunningState.IsRunning() {
+			return true
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return false
+}
+
+func waitForCandidates(controller *core.AppController, timeout time.Duration, limit int) []api.ProxyInfo {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if controller != nil && controller.APIService != nil {
+			if candidates := fastestProxies(controller.APIService.GetProxiesList(), limit); len(candidates) > 0 {
+				return candidates
+			}
+		}
+		time.Sleep(750 * time.Millisecond)
+	}
+	return nil
+}
+
+// fetchPublicIP uses a fresh transport so cached pre-VPN connections cannot
+// make a disconnected route look healthy. Multiple providers avoid treating
+// a single blocked diagnostic host as a VPN failure.
+func fetchPublicIP(timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	client := &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			Proxy:             http.ProxyFromEnvironment,
+			DisableKeepAlives: true,
+			DialContext:       (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		},
+	}
+	providers := []string{
+		"https://api.ipify.org",
+		"https://checkip.amazonaws.com",
+		"https://icanhazip.com",
+	}
+	var lastErr error
+	for _, endpoint := range providers {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("User-Agent", "Venzo-VPN/2.6.0 connectivity-check")
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 128))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			lastErr = fmt.Errorf("%s returned HTTP %d", endpoint, resp.StatusCode)
+			continue
+		}
+		ip := strings.TrimSpace(string(body))
+		if net.ParseIP(ip) == nil {
+			lastErr = fmt.Errorf("%s returned an invalid IP", endpoint)
+			continue
+		}
+		return ip, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("public IP verification failed")
+	}
+	return "", lastErr
 }
 
 func ensureVenzoFreeSources(controller *core.AppController) error {
