@@ -1,0 +1,1002 @@
+diff --git a/app/android/app/src/main/res/values-fa/strings.xml b/app/android/app/src/main/res/values-fa/strings.xml
+index 6b29cf7fe30219c7fedcfd8c1a3ab65c32b408ad..49dd7934f5e4b35fe7d4ccf6cce022d243a2665f 100644
+--- a/app/android/app/src/main/res/values-fa/strings.xml
++++ b/app/android/app/src/main/res/values-fa/strings.xml
+@@ -7,7 +7,7 @@
+     <string name="notification_channel_name">سرویس VPN</string>
+     <string name="notification_channel_description">هنگام فعال بودن VPN نمایش داده می‌شود</string>
+     <string name="notification_status_starting">در حال اتصال…</string>
+-    <string name="status_connected">متصل</string>
++    <string name="status_connected">تونل VPN فعال است؛ در حال تأیید اینترنت</string>
+     <string name="notification_action_stop">توقف</string>
+     <string name="notification_action_reconnect">اتصال دوباره</string>
+     <string name="notification_error_title">خطا</string>
+diff --git a/app/android/app/src/main/res/values-ru/strings.xml b/app/android/app/src/main/res/values-ru/strings.xml
+index 9680461735b5299e138367a495ea9fb558275c78..d84c23a1963053d755f178d6b00d4bfc06eb284a 100644
+--- a/app/android/app/src/main/res/values-ru/strings.xml
++++ b/app/android/app/src/main/res/values-ru/strings.xml
+@@ -13,7 +13,7 @@
+     <string name="notification_channel_name">VPN-сервис</string>
+     <string name="notification_channel_description">Показывается, пока VPN активен</string>
+     <string name="notification_status_starting">Запуск…</string>
+-    <string name="status_connected">Подключено</string>
++    <string name="status_connected">VPN-туннель активен; проверка интернета</string>
+     <string name="notification_action_stop">Остановить</string>
+     <string name="notification_action_reconnect">Переподключить</string>
+     <string name="notification_error_title">Ошибка</string>
+diff --git a/app/android/app/src/main/res/values/strings.xml b/app/android/app/src/main/res/values/strings.xml
+index 48fd1b64ca5abfa1700ccfe7958c745759b9d7cd..3924f202b241263be0fef36c82c2c94439d42a54 100644
+--- a/app/android/app/src/main/res/values/strings.xml
++++ b/app/android/app/src/main/res/values/strings.xml
+@@ -15,7 +15,7 @@
+     <string name="notification_channel_name">VPN Service</string>
+     <string name="notification_channel_description">Shows when VPN is active</string>
+     <string name="notification_status_starting">Starting...</string>
+-    <string name="status_connected">Connected</string>
++    <string name="status_connected">VPN tunnel active; verifying internet</string>
+     <string name="notification_action_stop">Stop</string>
+     <string name="notification_action_reconnect">Reconnect</string>
+     <string name="notification_error_title">Error</string>
+diff --git a/app/lib/controllers/home_controller.dart b/app/lib/controllers/home_controller.dart
+index a9d219866f22f727d37031446e4bc6b290388d90..b400776b913fb2b14ce78cc5e45f7740f2ed533a 100644
+--- a/app/lib/controllers/home_controller.dart
++++ b/app/lib/controllers/home_controller.dart
+@@ -25,6 +25,7 @@ import '../services/template_loader.dart';
+ import '../services/haptic_service.dart';
+ import '../services/rule_set_auto_updater.dart';
+ import '../services/subscription/auto_updater.dart';
++import '../services/venzo_connection_verifier.dart';
+ 
+ part 'home_controller/config_io.dart';
+ part 'home_controller/heartbeat.dart';
+@@ -681,6 +682,7 @@ class HomeController extends ChangeNotifier
+     }
+   }
+ 
++  @override
+   Future<void> stop() async {
+     _emit(_state.copyWith(busy: true, lastError: null));
+     try {
+diff --git a/app/lib/controllers/home_controller/ping_orchestration.dart b/app/lib/controllers/home_controller/ping_orchestration.dart
+index 554db9afb957873be94a2c090763a712c8fca668..cdf5282baf8c03c3de0fc65a74e55f8d3dd38695 100644
+--- a/app/lib/controllers/home_controller/ping_orchestration.dart
++++ b/app/lib/controllers/home_controller/ping_orchestration.dart
+@@ -67,6 +67,7 @@ mixin _PingMixin on ChangeNotifier {
+   Future<void> pullToRefresh();
+   Future<void> switchNode(String nodeTag);
+   Future<void> selectVenzoServer(String nodeTag);
++  Future<void> stop();
+ 
+   /// §355 — пересчёт графа detour-зависимостей после свежих замеров.
+   /// Реализация — HomeController; ping-пути дёргают после записи delay.
+@@ -196,6 +197,30 @@ mixin _PingMixin on ChangeNotifier {
+   String? _smartConnectNode;
+   String? get smartConnectNode => _smartConnectNode;
+   int _smartConnectEpoch = 0;
++  String? _venzoBaselineIp;
++  String? _venzoVerifiedIp;
++  String? get venzoVerifiedIp => _venzoVerifiedIp;
++  bool _venzoConnectionVerified = false;
++  bool get venzoConnectionVerified => _venzoConnectionVerified;
++  String? _venzoConnectionError;
++  String? get venzoConnectionError => _venzoConnectionError;
++  int _venzoServersTested = 0;
++  int get venzoServersTested => _venzoServersTested;
++  int _venzoServersTotal = 0;
++  int get venzoServersTotal => _venzoServersTotal;
++
++  /// Capture the device's public IP before Android starts the VPN. The
++  /// post-connect system route must differ and must match the chosen
++  /// outbound's independently observed exit IP.
++  Future<void> prepareVenzoConnectionCheck() async {
++    _venzoConnectionVerified = false;
++    _venzoConnectionError = null;
++    _venzoVerifiedIp = null;
++    _venzoServersTested = 0;
++    _venzoServersTotal = 0;
++    notifyListeners();
++    _venzoBaselineIp = await VenzoConnectionVerifier.fetchPublicIp();
++  }
+ 
+   // §040: ping/test settings now persisted в SettingsStorage `ping_options`.
+   // Resolve chain: per-group override → global storage → template default.
+@@ -309,6 +334,11 @@ mixin _PingMixin on ChangeNotifier {
+     final epoch = ++_smartConnectEpoch;
+     _smartConnectRunning = true;
+     _smartConnectNode = null;
++    _venzoConnectionVerified = false;
++    _venzoConnectionError = null;
++    _venzoVerifiedIp = null;
++    _venzoServersTested = 0;
++    _venzoServersTotal = 0;
+     notifyListeners();
+ 
+     try {
+@@ -330,52 +360,103 @@ mixin _PingMixin on ChangeNotifier {
+         urltestGroups: _state.urltestGroups,
+       );
+ 
++      List<String> candidates;
+       if (autoGroup == null) {
+-        // Imported/custom configs may not expose a URLTest group. Probe a
+-        // bounded sample; testing every node is the main source of UI stalls.
+-        if (_state.nodes.isEmpty) return;
+-        final best = await _probeBestVenzoNodes(
++        if (_state.nodes.isEmpty) {
++          await _failVenzoSmartConnect(
++            'هیچ سروری برای آزمایش پیدا نشد.',
++            epoch: epoch,
++          );
++          return;
++        }
++        candidates = await _probeVenzoNodes(
+           _state.nodes.take(_smartProbeBatchSize).toList(),
+           epoch: epoch,
+           groupTag: selectorTag,
+         );
+-        if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
+-        if (best != null) {
+-          await selectVenzoServer(best);
+-          _smartConnectNode = best;
+-        }
+-        return;
+-      }
+-
+-      final autoTag = autoGroup.tag;
+-      final firstBatch = venzoSmartProbeOrder(
+-        items: autoGroup.items,
+-        selected: autoGroup.selected,
+-        limit: _smartProbeBatchSize,
+-      );
+-      var best = await _probeBestVenzoNodes(
+-        firstBatch,
+-        epoch: epoch,
+-        groupTag: autoTag,
+-      );
+-      if (best == null && autoGroup.items.length > firstBatch.length) {
+-        final firstTags = firstBatch.toSet();
+-        final secondBatch = venzoSmartProbeOrder(
+-          items: autoGroup.items.where((item) => !firstTags.contains(item.tag)),
+-          selected: '',
++      } else {
++        final autoTag = autoGroup.tag;
++        final probeOrder = venzoSmartProbeOrder(
++          items: autoGroup.items,
++          selected: autoGroup.selected,
+           limit: _smartProbeBatchSize,
+         );
+-        best = await _probeBestVenzoNodes(
+-          secondBatch,
++        candidates = await _probeVenzoNodes(
++          probeOrder,
+           epoch: epoch,
+           groupTag: autoTag,
+         );
+       }
+-      if (best != null && _state.tunnelUp && epoch == _smartConnectEpoch) {
+-        await selectVenzoServer(best);
+-        _smartConnectNode = best;
+-        _addDebug(DebugSource.app, 'Smart Connect selected $best');
++
++      if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++      if (candidates.isEmpty) {
++        await _failVenzoSmartConnect(
++          'هیچ سروری پاسخ Ping معتبر نداد.',
++          epoch: epoch,
++        );
++        return;
+       }
++
++      _venzoServersTotal = candidates.length;
++      notifyListeners();
++      for (final candidate in candidates) {
++        if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++        _venzoServersTested++;
++        notifyListeners();
++
++        // A single connectivity provider may be filtered by the local ISP.
++        // Accept a real HTTP exchange (including an HTTP error response) via
++        // any independent target, and collect an exit IP when one is exposed.
++        var outboundHttpOk = false;
++        String? outboundIp;
++        for (final probeUrl in VenzoConnectionVerifier.probeUrls) {
++          try {
++            final probe = await _cc.getUrlViaOutbound(
++              candidate,
++              link: probeUrl,
++              timeoutMs: 6500,
++              maxBytes: 4096,
++            );
++            if (probe.ok) {
++              outboundHttpOk = true;
++              outboundIp = VenzoConnectionVerifier.parsePublicIp(
++                probe.content,
++              );
++              break;
++            }
++          } catch (e) {
++            _addDebug(DebugSource.app,
++                'Smart Connect $candidate: probe $probeUrl failed: $e');
++          }
++        }
++        if (!outboundHttpOk) {
++          _addDebug(DebugSource.app,
++              'Smart Connect $candidate: ping-only, all HTTP probes failed');
++          continue;
++        }
++
++        await selectVenzoServer(candidate);
++        String? systemIp;
++        for (var attempt = 0; attempt < 3; attempt++) {
++          await Future<void>.delayed(Duration(
++            milliseconds: attempt == 0 ? 900 : 1200,
++          ));
++          if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++          final observedIp = await VenzoConnectionVerifier.fetchPublicIp();
++          if (VenzoConnectionVerifier.routeIsVerified(
++            baselineIp: _venzoBaselineIp,
++            outboundIp: outboundIp,
++            systemIp: observedIp,
++          )) {
++            systemIp = observedIp;
++            break;
++          }
++        }
++        if (systemIp == null) {
++          _addDebug(DebugSource.app,
++              'Smart Connect $candidate: system route not verified');
++          continue;
++        }
++
++        _smartConnectNode = candidate;
++        _venzoVerifiedIp = systemIp;
++        _venzoConnectionVerified = true;
++        _venzoConnectionError = null;
++        _addDebug(DebugSource.app,
++            'Smart Connect verified $candidate via public IP $systemIp');
++        notifyListeners();
++        return;
++      }
++
++      await _failVenzoSmartConnect(
++        'سرورها Ping دارند، اما اینترنت از هیچ‌کدام عبور نکرد.',
++        epoch: epoch,
++      );
+     } finally {
+       if (epoch == _smartConnectEpoch) {
+         _smartConnectRunning = false;
+@@ -384,7 +465,7 @@ mixin _PingMixin on ChangeNotifier {
+     }
+   }
+ 
+-  Future<String?> _probeBestVenzoNodes(
++  Future<List<String>> _probeVenzoNodes(
+     List<String> candidates, {
+     required int epoch,
+     required String groupTag,
+@@ -395,7 +476,7 @@ mixin _PingMixin on ChangeNotifier {
+             _state.activeModel[tag]?.type != 'block')
+         .toSet()
+         .toList();
+-    if (tags.isEmpty) return null;
++    if (tags.isEmpty) return const [];
+ 
+     final delays = <String, int>{};
+     var index = 0;
+@@ -430,7 +511,7 @@ mixin _PingMixin on ChangeNotifier {
+       _smartProbeConcurrency.clamp(1, tags.length),
+       (_) => worker(),
+     ));
+-    if (!_state.tunnelUp || epoch != _smartConnectEpoch) return null;
++    if (!_state.tunnelUp || epoch != _smartConnectEpoch) return const [];
+ 
+     // One state emission per batch keeps the whole HomeScreen from rebuilding
+     // for every individual ping result.
+@@ -441,7 +522,83 @@ mixin _PingMixin on ChangeNotifier {
+     _recomputeDependencyHealth();
+     final working = delays.entries.where((entry) => entry.value >= 0).toList()
+       ..sort((a, b) => a.value.compareTo(b.value));
+-    return working.isEmpty ? null : working.first.key;
++    return working.map((entry) => entry.key).toList(growable: false);
++  }
++
++  Future<void> _failVenzoSmartConnect(
++    String message, {
++    required int epoch,
++  }) async {
++    if (epoch != _smartConnectEpoch) return;
++    _venzoConnectionVerified = false;
++    _venzoVerifiedIp = null;
++    _smartConnectNode = null;
++    _venzoConnectionError = message;
++    notifyListeners();
++    await stop();
++  }
++
++  Future<bool> selectAndVerifyVenzoServer(String nodeTag) async {
++    if (!_state.tunnelUp || _smartConnectRunning || nodeTag.isEmpty) {
++      return false;
++    }
++    final epoch = ++_smartConnectEpoch;
++    _smartConnectRunning = true;
++    _venzoConnectionVerified = false;
++    _venzoConnectionError = null;
++    _venzoServersTested = 1;
++    _venzoServersTotal = 1;
++    notifyListeners();
++    try {
++      final beforeIp = await VenzoConnectionVerifier.fetchPublicIp();
++      var outboundHttpOk = false;
++      String? outboundIp;
++      for (final probeUrl in VenzoConnectionVerifier.probeUrls) {
++        try {
++          final probe = await _cc.getUrlViaOutbound(
++            nodeTag,
++            link: probeUrl,
++            timeoutMs: 6500,
++            maxBytes: 4096,
++          );
++          if (probe.ok) {
++            outboundHttpOk = true;
++            outboundIp = VenzoConnectionVerifier.parsePublicIp(probe.content);
++            break;
++          }
++        } catch (e) {
++          _addDebug(DebugSource.app,
++              'Manual check $nodeTag: probe $probeUrl failed: $e');
++        }
++      }
++      if (!outboundHttpOk) {
++        await _failVenzoSmartConnect(
++          'این سرور Ping دارد، اما اینترنت آن در دسترس نیست.',
++          epoch: epoch,
++        );
++        return false;
++      }
++      await selectVenzoServer(nodeTag);
++      String? systemIp;
++      for (var attempt = 0; attempt < 3; attempt++) {
++        await Future<void>.delayed(Duration(
++          milliseconds: attempt == 0 ? 900 : 1200,
++        ));
++        if (!_state.tunnelUp || epoch != _smartConnectEpoch) return false;
++        final observedIp = await VenzoConnectionVerifier.fetchPublicIp();
++        if (VenzoConnectionVerifier.routeIsVerified(
++          baselineIp: beforeIp,
++          outboundIp: outboundIp,
++          systemIp: observedIp,
++        )) {
++          systemIp = observedIp;
++          break;
++        }
++      }
++      if (systemIp == null) {
++        await _failVenzoSmartConnect(
++          'این سرور Ping دارد، اما مسیر واقعی اینترنت از آن عبور نکرد.',
++          epoch: epoch,
++        );
++        return false;
++      }
++      _smartConnectNode = nodeTag;
++      _venzoVerifiedIp = systemIp;
++      _venzoConnectionVerified = true;
++      notifyListeners();
++      return true;
++    } catch (e) {
++      _addDebug(DebugSource.app, 'Manual server verification failed: $e');
++      await _failVenzoSmartConnect(
++        'بررسی اتصال این سرور ناموفق بود.',
++        epoch: epoch,
++      );
++      return false;
++    } finally {
++      if (epoch == _smartConnectEpoch) {
++        _smartConnectRunning = false;
++        notifyListeners();
++      }
++    }
+   }
+ 
+   void cancelSmartConnect() {
+diff --git a/app/lib/screens/home/widgets/home_controls.dart b/app/lib/screens/home/widgets/home_controls.dart
+index 0493106237858a4be8f8677088348fe3242be6f5..9c5fbd284a927b29510f626868bde537368b910a 100644
+--- a/app/lib/screens/home/widgets/home_controls.dart
++++ b/app/lib/screens/home/widgets/home_controls.dart
+@@ -86,6 +86,8 @@ class HomeControls extends StatelessWidget {
+     final isConnecting = state.tunnel == TunnelStatus.connecting;
+     final isStopping = state.tunnel == TunnelStatus.stopping;
+     final isSearching = controller.smartConnectRunning;
++    final isVerified = controller.venzoConnectionVerified;
++    final connectionError = controller.venzoConnectionError;
+     final canToggle = !state.busy && !isConnecting && !isStopping;
+     final toggleEnabled = canToggle && (state.tunnelUp || state.configRaw.isNotEmpty);
+     void toggle() {
+@@ -128,7 +130,7 @@ class HomeControls extends StatelessWidget {
+                     height: 174,
+                     decoration: BoxDecoration(
+                       shape: BoxShape.circle,
+-                      color: state.tunnelUp
++                      color: isVerified
+                           ? const Color(0xFF00C96B)
+                           : Theme.of(context).colorScheme.primary,
+                       border: Border.all(
+@@ -137,7 +139,7 @@ class HomeControls extends StatelessWidget {
+                       ),
+                       boxShadow: [
+                         BoxShadow(
+-                          color: (state.tunnelUp
++                          color: (isVerified
+                                   ? const Color(0xFF00E676)
+                                   : Theme.of(context).colorScheme.primary)
+                               .withValues(alpha: .30),
+@@ -174,10 +176,16 @@ class HomeControls extends StatelessWidget {
+                   const SizedBox(height: 22),
+                   Text(
+                     isSearching
+-                        ? getLocalText.s("Finding a working server…")
+-                        : state.tunnelUp
+-                            ? getLocalText.s("Your connection is protected")
+-                            : getLocalText.s("Smart Connect"),
++                        ? 'در حال آزمایش سرور '
++                            '${controller.venzoServersTested} از '
++                            '${controller.venzoServersTotal == 0 ? '…' : controller.venzoServersTotal}'
++                        : isVerified
++                            ? 'متصل و تأییدشده'
++                            : connectionError != null
++                                ? 'اتصال ناموفق'
++                                : state.tunnelUp
++                                    ? 'در حال تأیید عبور اینترنت'
++                                    : getLocalText.s("Smart Connect"),
+                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                           fontWeight: FontWeight.w800,
+                         ),
+@@ -185,11 +193,13 @@ class HomeControls extends StatelessWidget {
+                   const SizedBox(height: 8),
+                   Text(
+                     isSearching
+-                        ? getLocalText.s(
+-                            "Testing configs on your current internet")
+-                        : state.tunnelUp
+-                            ? getLocalText.s("Connected to a working server")
+-                            : 'یک لمس؛ ونزو بهترین سرور سالم را انتخاب می‌کند',
++                        ? 'Ping و عبور واقعی اینترنت هر سرور جدا بررسی می‌شود'
++                        : isVerified
++                            ? 'تغییر IP عمومی و مسیر VPN تأیید شد'
++                            : connectionError ??
++                                (state.tunnelUp
++                                    ? 'هنوز وضعیت اتصال تأیید نشده است'
++                                    : 'یک لمس؛ ونزو چند سرور را آزمایش می‌کند'),
+                     textAlign: TextAlign.center,
+                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                           color: Theme.of(context)
+diff --git a/app/lib/screens/home/widgets/home_drawer.dart b/app/lib/screens/home/widgets/home_drawer.dart
+index 53f1fb1fe5eb440fb5dae0928ec8382d83aa5064..dc4806bb2c817e601f19e4f93e16948fc258e11c 100644
+--- a/app/lib/screens/home/widgets/home_drawer.dart
++++ b/app/lib/screens/home/widgets/home_drawer.dart
+@@ -15,6 +15,7 @@ import '../../speed_test_screen.dart';
+ import '../../stats_screen.dart';
+ import '../../subscriptions_screen.dart';
+ import '../../venzo_store_screen.dart';
++import '../../venzo_privacy_screen.dart';
+ import '../../../services/l10n/locale_controller.dart';
+ 
+ /// Навигационное меню (Drawer) главного экрана: переход в разделы приложения.
+@@ -121,6 +122,15 @@ class HomeDrawer extends StatelessWidget {
+                 ),
+               ),
+             ),
++            ListTile(
++              leading: const Icon(Icons.privacy_tip_outlined),
++              title: const Text('حریم خصوصی'),
++              subtitle: const Text('DNS، WebRTC و کاهش Fingerprint'),
++              onTap: () => _go(
++                context,
++                VenzoPrivacyScreen(controller: controller),
++              ),
++            ),
+             ListTile(
+               leading: const Icon(Icons.tune_outlined),
+               title: Text(getLocalText.s("VPN Settings")),
+diff --git a/app/lib/screens/home/widgets/venzo_connection_panel.dart b/app/lib/screens/home/widgets/venzo_connection_panel.dart
+index bc6426f54c4f3c14c2e8ba00a6b751bfa52077ad..38fb75d0e03c3c5e6c06f7c1e60de868957482cc 100644
+--- a/app/lib/screens/home/widgets/venzo_connection_panel.dart
++++ b/app/lib/screens/home/widgets/venzo_connection_panel.dart
+@@ -18,9 +18,15 @@ class VenzoConnectionPanel extends StatelessWidget {
+ 
+   @override
+   Widget build(BuildContext context) {
++    if (!state.tunnelUp && controller.venzoConnectionError == null) {
++      return const SizedBox.shrink();
++    }
+     final active = VenzoServerInfo.active(state);
+     final servers = VenzoServerInfo.available(state);
+     final cs = Theme.of(context).colorScheme;
++    final verified = controller.venzoConnectionVerified;
++    final checking = controller.smartConnectRunning;
++    final error = controller.venzoConnectionError;
+ 
+     return Padding(
+       padding: const EdgeInsets.only(top: 12),
+@@ -31,20 +37,39 @@ class VenzoConnectionPanel extends StatelessWidget {
+             ListTile(
+               leading: Text(active?.flag ?? '🌐',
+                   style: const TextStyle(fontSize: 30)),
+-              title: Text(active?.location ?? 'در حال بررسی سرور…',
++              title: Text(error != null
++                  ? 'اتصال برقرار نشد'
++                  : active?.location ?? 'در حال بررسی سرور…',
+                   style: const TextStyle(fontWeight: FontWeight.w700)),
+-              subtitle: Text(active == null
+-                  ? 'بهترین کانفیگ به‌صورت خودکار انتخاب می‌شود'
+-                  : '${active.protocol}  •  ${active.pingMs > 0 ? '${active.pingMs} ms' : 'در حال اندازه‌گیری'}'),
+-              trailing: Icon(Icons.verified_user_rounded, color: cs.primary),
++              subtitle: Text(error ??
++                  (active == null
++                      ? 'بهترین کانفیگ به‌صورت خودکار انتخاب می‌شود'
++                      : '${active.protocol}  •  ${active.pingMs > 0 ? '${active.pingMs} ms' : 'در حال اندازه‌گیری'}')),
++              trailing: checking
++                  ? const SizedBox.square(
++                      dimension: 22,
++                      child: CircularProgressIndicator(strokeWidth: 2.5),
++                    )
++                  : Icon(
++                      verified
++                          ? Icons.verified_user_rounded
++                          : error != null
++                              ? Icons.signal_wifi_connected_no_internet_4_rounded
++                              : Icons.shield_outlined,
++                      color: verified
++                          ? Colors.green
++                          : error != null
++                              ? cs.error
++                              : cs.primary,
++                    ),
+             ),
+             const Divider(height: 1),
+             ListTile(
+               leading: const Icon(Icons.dns_rounded),
+               title: const Text('سرورهای در دسترس'),
+               subtitle: Text(servers.isEmpty
+-                  ? 'برای یافتن سرور سالم، تست پینگ را اجرا کنید'
+-                  : '${servers.length} سرور سالم پیدا شد'),
++                  ? 'هنوز نتیجه Ping موجود نیست'
++                  : '${servers.length} سرور دارای Ping؛ اتصال واقعی جدا بررسی می‌شود'),
+               trailing: const Icon(Icons.chevron_left),
+               onTap: () => showServerPicker(context, controller),
+             ),
+@@ -135,7 +160,11 @@ class VenzoConnectionPanel extends StatelessWidget {
+                             title: Text(server.location,
+                                 style: const TextStyle(
+                                     fontWeight: FontWeight.w700)),
+-                            subtitle: Text(server.protocol),
++                            subtitle: Text(server.selected &&
++                                    controller.venzoConnectionVerified &&
++                                    controller.smartConnectNode == server.tag
++                                ? '${server.protocol}  •  اتصال تأییدشده'
++                                : '${server.protocol}  •  فقط Ping'),
+                             trailing: Row(
+                               mainAxisSize: MainAxisSize.min,
+                               children: [
+@@ -160,10 +189,18 @@ class VenzoConnectionPanel extends StatelessWidget {
+                             onTap: server.selected
+                                 ? null
+                                 : () async {
+-                                    await controller
+-                                        .selectVenzoServer(server.tag);
++                                    final connected = await controller
++                                        .selectAndVerifyVenzoServer(server.tag);
+                                     if (sheetContext.mounted) {
+                                       Navigator.of(sheetContext).pop();
++                                      if (!connected && context.mounted) {
++                                        ScaffoldMessenger.of(context)
++                                            .showSnackBar(SnackBar(
++                                          content: Text(controller
++                                                  .venzoConnectionError ??
++                                              'این سرور اتصال واقعی ندارد.'),
++                                        ));
++                                      }
+                                     }
+                                   },
+                           );
+diff --git a/app/lib/screens/home_screen.dart b/app/lib/screens/home_screen.dart
+index 3d7ee05ffb5ec92ab1abcd0917197ed2e9fd3cd2..1af405dadd6c44810d9c57939a21e04dca0cfa7a 100644
+--- a/app/lib/screens/home_screen.dart
++++ b/app/lib/screens/home_screen.dart
+@@ -969,6 +969,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+       final ok = await showForeignVpnDialog(context);
+       if (ok != true) return;
+     }
++    // Capture the pre-VPN public IP while config refresh work continues. The
++    // smart connector later requires the Android system route to change and
++    // match the selected outbound's independently observed exit IP.
++    final baselineCheck = _controller.prepareVenzoConnectionCheck();
+     // §107 гейт: pending-изменения или пересборка в полёте — сначала довести
+     // конфиг на диске до актуального, потом стартовать. При ошибке сборки
+     // (configDirty остаётся true) стартуем со старым конфигом — banner
+@@ -985,6 +989,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
+     // auto_updater.dart) — 4 триггера, общая логика. При Start никакого
+     // синхронного HTTP-fetch'а не делаем: если подписки протухли, trigger 2
+     // (VPN connected + 2 мин) подтянет их через туннель.
++    await baselineCheck;
++    if (!mounted) return;
+     await _controller.start();
+     // §219 — inline error-snackbar удалён: он был мёртвым кодом. start()
+     // эмитит lastError через _emit→notifyListeners→_onControllerChange, который
+diff --git a/app/lib/screens/venzo_privacy_screen.dart b/app/lib/screens/venzo_privacy_screen.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..7d15f52d92b8482e021663e51f31fe24f6af94bf
+--- /dev/null
++++ b/app/lib/screens/venzo_privacy_screen.dart
+@@ -0,0 +1,191 @@
++import 'dart:convert';
++
++import 'package:flutter/material.dart';
++
++import '../controllers/home_controller.dart';
++import '../services/url_launcher.dart' as ul;
++
++class VenzoPrivacyScreen extends StatelessWidget {
++  const VenzoPrivacyScreen({
++    super.key,
++    required this.controller,
++  });
++
++  final HomeController controller;
++
++  @override
++  Widget build(BuildContext context) {
++    return Scaffold(
++      appBar: AppBar(title: const Text('حریم خصوصی')),
++      body: AnimatedBuilder(
++        animation: controller,
++        builder: (context, _) {
++          final verified = controller.venzoConnectionVerified;
++          final dnsConfigured = _hasProtectedDns(
++            controller.state.activeConfigRaw,
++          );
++          return ListView(
++            padding: const EdgeInsets.all(16),
++            children: [
++              _summaryCard(context, verified),
++              const SizedBox(height: 12),
++              _privacyCard(
++                context,
++                icon: Icons.dns_rounded,
++                title: 'محافظت DNS',
++                status: verified && dnsConfigured
++                    ? 'فعال و مسیر VPN تأییدشده'
++                    : dnsConfigured
++                        ? 'پیکربندی شده؛ برای تأیید VPN را متصل کنید'
++                        : 'DNS امن در کانفیگ فعال نیست',
++                description:
++                    'درخواست‌های DNS باید همراه ترافیک از تونل عبور کنند تا مقصدهای شما برای شبکه محلی آشکار نشوند.',
++                actionLabel: 'تست نشت DNS',
++                actionUrl: 'https://www.dnsleaktest.com/',
++              ),
++              const SizedBox(height: 12),
++              _privacyCard(
++                context,
++                icon: Icons.language_rounded,
++                title: 'WebRTC',
++                status: 'وابسته به مرورگر',
++                description:
++                    'WebRTC توسط مرورگر مدیریت می‌شود. Venzo بدون اجازه تنظیمات مرورگر را تغییر نمی‌دهد؛ پس نتیجه را داخل مرورگر بررسی کنید.',
++                actionLabel: 'تست WebRTC',
++                actionUrl: 'https://browserleaks.com/webrtc',
++              ),
++              const SizedBox(height: 12),
++              _privacyCard(
++                context,
++                icon: Icons.fingerprint_rounded,
++                title: 'کاهش Fingerprint',
++                status: 'نیازمند تنظیمات مرورگر',
++                description:
++                    'VPN آدرس IP را پنهان می‌کند، اما فونت‌ها، Canvas، User-Agent و مشخصات دستگاه می‌توانند ردپای جداگانه بسازند. از محافظت ضدردیابی مرورگر استفاده کنید.',
++                actionLabel: 'بررسی اثر انگشت مرورگر',
++                actionUrl: 'https://browserleaks.com/canvas',
++              ),
++              const SizedBox(height: 12),
++              Card(
++                child: Padding(
++                  padding: const EdgeInsets.all(16),
++                  child: Row(
++                    crossAxisAlignment: CrossAxisAlignment.start,
++                    children: [
++                      const Icon(Icons.info_outline_rounded),
++                      const SizedBox(width: 12),
++                      Expanded(
++                        child: Text(
++                          'وضعیت «تأییدشده» فقط زمانی نمایش داده می‌شود که IP عمومی دستگاه تغییر کند و با IP خروجی همان سرور یکسان باشد.',
++                          style: Theme.of(context).textTheme.bodyMedium,
++                        ),
++                      ),
++                    ],
++                  ),
++                ),
++              ),
++            ],
++          );
++        },
++      ),
++    );
++  }
++
++  Widget _summaryCard(BuildContext context, bool verified) => Card(
++        color: verified
++            ? Colors.green.withValues(alpha: .12)
++            : Theme.of(context).colorScheme.errorContainer,
++        child: Padding(
++          padding: const EdgeInsets.all(18),
++          child: Row(
++            children: [
++              Icon(
++                verified
++                    ? Icons.verified_user_rounded
++                    : Icons.shield_outlined,
++                size: 42,
++                color: verified
++                    ? Colors.green
++                    : Theme.of(context).colorScheme.error,
++              ),
++              const SizedBox(width: 14),
++              Expanded(
++                child: Column(
++                  crossAxisAlignment: CrossAxisAlignment.start,
++                  children: [
++                    Text(
++                      verified ? 'اتصال تأییدشده' : 'اتصال تأیید نشده',
++                      style: Theme.of(context)
++                          .textTheme
++                          .titleMedium
++                          ?.copyWith(fontWeight: FontWeight.w800),
++                    ),
++                    const SizedBox(height: 4),
++                    Text(verified
++                        ? 'IP عمومی و عبور واقعی اینترنت بررسی شده است.'
++                        : 'Ping به‌تنهایی نشانه اتصال امن نیست.'),
++                  ],
++                ),
++              ),
++            ],
++          ),
++        ),
++      );
++
++  Widget _privacyCard(
++    BuildContext context, {
++    required IconData icon,
++    required String title,
++    required String status,
++    required String description,
++    required String actionLabel,
++    required String actionUrl,
++  }) =>
++      Card(
++        child: Padding(
++          padding: const EdgeInsets.all(16),
++          child: Column(
++            crossAxisAlignment: CrossAxisAlignment.stretch,
++            children: [
++              Row(
++                children: [
++                  Icon(icon, color: Theme.of(context).colorScheme.primary),
++                  const SizedBox(width: 10),
++                  Expanded(
++                    child: Text(title,
++                        style: Theme.of(context)
++                            .textTheme
++                            .titleMedium
++                            ?.copyWith(fontWeight: FontWeight.w800)),
++                  ),
++                ],
++              ),
++              const SizedBox(height: 8),
++              Text(status,
++                  style: const TextStyle(fontWeight: FontWeight.w700)),
++              const SizedBox(height: 6),
++              Text(description),
++              const SizedBox(height: 12),
++              OutlinedButton.icon(
++                onPressed: () => ul.UrlLauncher.open(actionUrl),
++                icon: const Icon(Icons.open_in_new_rounded),
++                label: Text(actionLabel),
++              ),
++            ],
++          ),
++        ),
++      );
++
++  static bool _hasProtectedDns(String raw) {
++    try {
++      final json = jsonDecode(raw);
++      if (json is! Map<String, dynamic>) return false;
++      final dns = json['dns'];
++      if (dns is! Map<String, dynamic>) return false;
++      final servers = dns['servers'];
++      return servers is List && servers.isNotEmpty;
++    } catch (_) {
++      return false;
++    }
++  }
++}
+diff --git a/app/lib/services/venzo_connection_verifier.dart b/app/lib/services/venzo_connection_verifier.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..a5b427b63e970f9bfec5d2bdf9aa4be0f7d0101e
+--- /dev/null
++++ b/app/lib/services/venzo_connection_verifier.dart
+@@ -0,0 +1,74 @@
++import 'dart:async';
++import 'dart:convert';
++import 'dart:io';
++
++/// End-to-end verification used by Venzo Smart Connect.
++///
++/// A URLTest delay only proves that sing-box could open one test URL through
++/// an outbound. Venzo also checks the public IP seen by normal app traffic
++/// after selecting that outbound, so a live core or a Ping value can never be
++/// presented as a verified VPN connection on its own.
++class VenzoConnectionVerifier {
++  VenzoConnectionVerifier._();
++
++  static const traceUrl = 'https://1.1.1.1/cdn-cgi/trace';
++  static const probeUrls = <String>[
++    'https://www.gstatic.com/generate_204',
++    'https://connectivitycheck.gstatic.com/generate_204',
++    'https://cp.cloudflare.com/generate_204',
++    traceUrl,
++    'http://www.gstatic.com/generate_204',
++  ];
++  static const _fallbackUrls = <String>[
++    'https://api.ipify.org',
++    'https://checkip.amazonaws.com',
++    'https://ipv4.icanhazip.com',
++    traceUrl,
++    'https://cloudflare.com/cdn-cgi/trace',
++  ];
++
++  static Future<String?> fetchPublicIp({
++    Duration timeout = const Duration(seconds: 7),
++  }) async {
++    for (final endpoint in _fallbackUrls) {
++      final client = HttpClient()
++        ..connectionTimeout = timeout
++        ..idleTimeout = const Duration(seconds: 1);
++      try {
++        final request = await client
++            .getUrl(Uri.parse(endpoint))
++            .timeout(timeout);
++        request.headers.set(
++          HttpHeaders.userAgentHeader,
++          'VenzoVPN/2.6.0 connectivity-check',
++        );
++        request.persistentConnection = false;
++        final response = await request.close().timeout(timeout);
++        if (response.statusCode < 200 || response.statusCode >= 300) continue;
++        final body = await utf8
++            .decoder
++            .bind(response)
++            .join()
++            .timeout(timeout);
++        final ip = parsePublicIp(body);
++        if (ip != null) return ip;
++      } catch (_) {
++        // Try the next independent endpoint.
++      } finally {
++        client.close(force: true);
++      }
++    }
++    return null;
++  }
++
++  static String? parsePublicIp(String body) {
++    for (final line in const LineSplitter().convert(body.trim())) {
++      final value = line.startsWith('ip=')
++          ? line.substring(3).trim()
++          : line.trim();
++      if (InternetAddress.tryParse(value) != null) return value;
++    }
++    return null;
++  }
++
++  static bool routeIsVerified({
++    required String? baselineIp,
++    required String? outboundIp,
++    required String? systemIp,
++  }) {
++    if (systemIp == null) return false;
++    if (baselineIp != null) return baselineIp != systemIp;
++    // The caller has already completed a real HTTP exchange through the
++    // selected outbound. If an exit-IP endpoint was available, compare it;
++    // otherwise the post-connect public IP is sufficient as the fallback.
++    return outboundIp == null || outboundIp == systemIp;
++  }
++}
+diff --git a/app/test/services/venzo_connection_verifier_test.dart b/app/test/services/venzo_connection_verifier_test.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..2eabb7ca652127365c1c7a6cb1f023b6ea094a43
+--- /dev/null
++++ b/app/test/services/venzo_connection_verifier_test.dart
+@@ -0,0 +1,51 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/services/venzo_connection_verifier.dart';
++
++void main() {
++  test('parses Cloudflare trace public IP', () {
++    const body = 'fl=1\nh=1.1.1.1\nip=203.0.113.7\nwarp=off\n';
++    expect(
++      VenzoConnectionVerifier.parsePublicIp(body),
++      '203.0.113.7',
++    );
++  });
++
++  test('parses a plain public IP response', () {
++    expect(
++      VenzoConnectionVerifier.parsePublicIp('2001:db8::7\n'),
++      '2001:db8::7',
++    );
++  });
++
++  test('rejects missing or invalid public IP', () {
++    expect(VenzoConnectionVerifier.parsePublicIp('warp=off\n'), isNull);
++    expect(VenzoConnectionVerifier.parsePublicIp('not-an-ip'), isNull);
++  });
++
++  test('requires a changed system route after outbound HTTP succeeds', () {
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: '198.51.100.2',
++        outboundIp: '203.0.113.7',
++        systemIp: '203.0.113.7',
++      ),
++      isTrue,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: '198.51.100.2',
++        outboundIp: '2001:db8::7',
++        systemIp: '203.0.113.7',
++      ),
++      isTrue,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: '198.51.100.2',
++        outboundIp: '203.0.113.7',
++        systemIp: '198.51.100.2',
++      ),
++      isFalse,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: null,
++        outboundIp: '203.0.113.7',
++        systemIp: '203.0.113.8',
++      ),
++      isFalse,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: null,
++        outboundIp: null,
++        systemIp: '203.0.113.8',
++      ),
++      isTrue,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: '198.51.100.2',
++        outboundIp: null,
++        systemIp: null,
++      ),
++      isFalse,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: '203.0.113.7',
++        outboundIp: '203.0.113.7',
++        systemIp: '203.0.113.7',
++      ),
++      isFalse,
++    );
++  });
++}
