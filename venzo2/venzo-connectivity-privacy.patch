@@ -194,27 +194,34 @@ index 554db9afb957873be94a2c090763a712c8fca668..cdf5282baf8c03c3de0fc65a74e55f8d
 +        _venzoServersTested++;
 +        notifyListeners();
 +
-+        // Unlike URLTest, this performs a real HTTP exchange through the
-+        // candidate and returns the exit IP in the response body.
-+        CcGetUrlResult outboundCheck;
-+        try {
-+          outboundCheck = await _cc.getUrlViaOutbound(
-+            candidate,
-+            link: VenzoConnectionVerifier.traceUrl,
-+            timeoutMs: 6500,
-+            maxBytes: 4096,
-+          );
-+        } catch (e) {
-+          _addDebug(DebugSource.app,
-+              'Smart Connect $candidate: ping-only, HTTP check failed: $e');
-+          continue;
++        // A single connectivity provider may be filtered by the local ISP.
++        // Accept a real HTTP exchange (including an HTTP error response) via
++        // any independent target, and collect an exit IP when one is exposed.
++        var outboundHttpOk = false;
++        String? outboundIp;
++        for (final probeUrl in VenzoConnectionVerifier.probeUrls) {
++          try {
++            final probe = await _cc.getUrlViaOutbound(
++              candidate,
++              link: probeUrl,
++              timeoutMs: 6500,
++              maxBytes: 4096,
++            );
++            if (probe.ok) {
++              outboundHttpOk = true;
++              outboundIp = VenzoConnectionVerifier.parsePublicIp(
++                probe.content,
++              );
++              break;
++            }
++          } catch (e) {
++            _addDebug(DebugSource.app,
++                'Smart Connect $candidate: probe $probeUrl failed: $e');
++          }
 +        }
-+        final outboundIp = outboundCheck.ok
-+            ? VenzoConnectionVerifier.parsePublicIp(outboundCheck.content)
-+            : null;
-+        if (outboundIp == null) {
++        if (!outboundHttpOk) {
 +          _addDebug(DebugSource.app,
-+              'Smart Connect $candidate: ping-only, no exit IP');
++              'Smart Connect $candidate: ping-only, all HTTP probes failed');
 +          continue;
 +        }
 +
@@ -319,16 +326,27 @@ index 554db9afb957873be94a2c090763a712c8fca668..cdf5282baf8c03c3de0fc65a74e55f8d
 +    notifyListeners();
 +    try {
 +      final beforeIp = await VenzoConnectionVerifier.fetchPublicIp();
-+      final outbound = await _cc.getUrlViaOutbound(
-+        nodeTag,
-+        link: VenzoConnectionVerifier.traceUrl,
-+        timeoutMs: 6500,
-+        maxBytes: 4096,
-+      );
-+      final outboundIp = outbound.ok
-+          ? VenzoConnectionVerifier.parsePublicIp(outbound.content)
-+          : null;
-+      if (outboundIp == null) {
++      var outboundHttpOk = false;
++      String? outboundIp;
++      for (final probeUrl in VenzoConnectionVerifier.probeUrls) {
++        try {
++          final probe = await _cc.getUrlViaOutbound(
++            nodeTag,
++            link: probeUrl,
++            timeoutMs: 6500,
++            maxBytes: 4096,
++          );
++          if (probe.ok) {
++            outboundHttpOk = true;
++            outboundIp = VenzoConnectionVerifier.parsePublicIp(probe.content);
++            break;
++          }
++        } catch (e) {
++          _addDebug(DebugSource.app,
++              'Manual check $nodeTag: probe $probeUrl failed: $e');
++        }
++      }
++      if (!outboundHttpOk) {
 +        await _failVenzoSmartConnect(
 +          'این سرور Ping دارد، اما اینترنت آن در دسترس نیست.',
 +          epoch: epoch,
@@ -821,10 +839,19 @@ index 0000000000000000000000000000000000000000..a5b427b63e970f9bfec5d2bdf9aa4be0
 +  VenzoConnectionVerifier._();
 +
 +  static const traceUrl = 'https://1.1.1.1/cdn-cgi/trace';
++  static const probeUrls = <String>[
++    'https://www.gstatic.com/generate_204',
++    'https://connectivitycheck.gstatic.com/generate_204',
++    'https://cp.cloudflare.com/generate_204',
++    traceUrl,
++    'http://www.gstatic.com/generate_204',
++  ];
 +  static const _fallbackUrls = <String>[
++    'https://api.ipify.org',
++    'https://checkip.amazonaws.com',
++    'https://ipv4.icanhazip.com',
 +    traceUrl,
 +    'https://cloudflare.com/cdn-cgi/trace',
-+    'https://api.ipify.org',
 +  ];
 +
 +  static Future<String?> fetchPublicIp({
@@ -876,14 +903,12 @@ index 0000000000000000000000000000000000000000..a5b427b63e970f9bfec5d2bdf9aa4be0
 +    required String? outboundIp,
 +    required String? systemIp,
 +  }) {
-+    if (outboundIp == null || systemIp == null) return false;
++    if (systemIp == null) return false;
 +    if (baselineIp != null) return baselineIp != systemIp;
-+    // If the pre-VPN IP could not be captured, exact agreement is the safe
-+    // fallback. When it was captured, a changed system IP plus the already
-+    // successful HTTP exchange through this outbound proves real routing;
-+    // the two observed exit IPs may legitimately differ because of IPv4/IPv6
-+    // or load-balanced egress.
-+    return outboundIp == systemIp;
++    // The caller has already completed a real HTTP exchange through the
++    // selected outbound. If an exit-IP endpoint was available, compare it;
++    // otherwise the post-connect public IP is sufficient as the fallback.
++    return outboundIp == null || outboundIp == systemIp;
 +  }
 +}
 diff --git a/app/test/services/venzo_connection_verifier_test.dart b/app/test/services/venzo_connection_verifier_test.dart
@@ -946,6 +971,22 @@ index 0000000000000000000000000000000000000000..2eabb7ca652127365c1c7a6cb1f023b6
 +        baselineIp: null,
 +        outboundIp: '203.0.113.7',
 +        systemIp: '203.0.113.8',
++      ),
++      isFalse,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: null,
++        outboundIp: null,
++        systemIp: '203.0.113.8',
++      ),
++      isTrue,
++    );
++    expect(
++      VenzoConnectionVerifier.routeIsVerified(
++        baselineIp: '198.51.100.2',
++        outboundIp: null,
++        systemIp: null,
 +      ),
 +      isFalse,
 +    );
