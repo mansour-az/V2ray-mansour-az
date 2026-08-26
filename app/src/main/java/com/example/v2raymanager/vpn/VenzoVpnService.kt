@@ -20,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import libXray.DialerController
 import libXray.LibXray
@@ -80,9 +81,7 @@ class VenzoVpnService : VpnService(), DialerController {
                 .addDnsServer("1.1.1.1")
                 .addDnsServer("8.8.8.8")
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                builder.setMetered(false)
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
 
             val tun = builder.establish() ?: error("Android rejected VPN interface creation")
             tunInterface = tun
@@ -90,30 +89,23 @@ class VenzoVpnService : VpnService(), DialerController {
             LibXray.setDNS(this, "1.1.1.1:53")
 
             val xrayJson = XrayConfigBuilder.build(node, tun.fd)
-            val testResponse = LibXray.invoke(
-                buildInvokeRequest("testXray", xrayJson)
-            )
+            val testResponse = LibXray.invoke(buildInvokeRequest("testXray", xrayJson))
             require(isSuccessResponse(testResponse)) {
                 "Xray config validation failed: ${extractError(testResponse)}"
             }
 
-            val runResponse = LibXray.invoke(
-                buildInvokeRequest("runXray", xrayJson)
-            )
+            val runResponse = LibXray.invoke(buildInvokeRequest("runXray", xrayJson))
             require(isSuccessResponse(runResponse)) {
                 "Xray failed to start: ${extractError(runResponse)}"
             }
 
             val verification = verifyRealInternet()
             if (!verification.success) {
-                throw IllegalStateException(
-                    verification.error ?: "VPN tunnel started but internet verification failed"
-                )
+                throw IllegalStateException(verification.error ?: "VPN tunnel started but internet verification failed")
             }
 
             VpnRuntime.connected(node.name, verification.publicIp)
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.notify(
+            getSystemService(NotificationManager::class.java).notify(
                 NOTIFICATION_ID,
                 buildNotification("Connected • ${node.name}${verification.publicIp?.let { " • $it" } ?: ""}")
             )
@@ -209,19 +201,17 @@ class VenzoVpnService : VpnService(), DialerController {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "Venzo VPN", NotificationManager.IMPORTANCE_LOW)
             )
         }
     }
 
     private fun buildNotification(text: String): Notification {
-        val launchIntent = Intent(this, MainActivity::class.java)
         val pending = PendingIntent.getActivity(
             this,
             0,
-            launchIntent,
+            Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
