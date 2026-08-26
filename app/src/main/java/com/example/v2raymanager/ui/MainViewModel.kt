@@ -1,6 +1,8 @@
 package com.example.v2raymanager.ui
 
 import android.app.Application
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.v2raymanager.data.db.AppDatabase
@@ -9,6 +11,8 @@ import com.example.v2raymanager.data.model.NodeParser
 import com.example.v2raymanager.data.model.V2RayNode
 import com.example.v2raymanager.data.network.DetailedPingResult
 import com.example.v2raymanager.data.network.PingService
+import com.example.v2raymanager.vpn.VenzoVpnService
+import com.example.v2raymanager.vpn.VpnRuntime
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.random.Random
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 data class ConnectionStats(
     val isConnected: Boolean = false,
@@ -63,7 +68,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
-    private var trafficJob: Job? = null
+    private var durationJob: Job? = null
     private var pingJob: Job? = null
 
     init {
@@ -85,6 +90,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.checkAndSeedInitialNodes()
         }
+
+        viewModelScope.launch {
+            VpnRuntime.state.collect { state ->
+                val node = activeNode.value
+                _connectionStats.value = _connectionStats.value.copy(
+                    isConnected = state.isConnected,
+                    currentPingMs = if (state.isConnected && node != null && node.lastPingMs > 0) node.lastPingMs else 0L,
+                    uploadSpeedKbps = 0.0,
+                    downloadSpeedKbps = 0.0,
+                    connectionDurationSecs = if (state.isConnected && state.startedAt > 0) {
+                        (System.currentTimeMillis() - state.startedAt) / 1000L
+                    } else 0L
+                )
+
+                if (state.isConnected) {
+                    startDurationTicker(state.startedAt)
+                    _userMessage.value = buildString {
+                        append("Connected to ${state.nodeName}")
+                        state.publicIp?.let { append(" • IP $it") }
+                    }
+                } else {
+                    durationJob?.cancel()
+                    if (!state.error.isNullOrBlank()) {
+                        _userMessage.value = state.error
+                    }
+                }
+            }
+        }
     }
 
     fun clearMessage() {
@@ -95,55 +128,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _userMessage.value = msg
     }
 
-    fun toggleConnection() {
-        val current = _connectionStats.value.isConnected
-        if (!current) {
-            val node = activeNode.value
-            if (node == null) {
-                _userMessage.value = "Please select an active node first"
-                return
-            }
-            _connectionStats.value = _connectionStats.value.copy(
-                isConnected = true,
-                currentPingMs = if (node.lastPingMs > 0) node.lastPingMs else 85L
-            )
-            startTrafficSimulation()
-            _userMessage.value = "Connected to ${node.name}"
-        } else {
-            trafficJob?.cancel()
-            _connectionStats.value = _connectionStats.value.copy(
-                isConnected = false,
-                uploadSpeedKbps = 0.0,
-                downloadSpeedKbps = 0.0
-            )
-            _userMessage.value = "Disconnected"
+    fun startVpn() {
+        val node = activeNode.value
+        if (node == null) {
+            _userMessage.value = "Please select an active node first"
+            return
         }
+
+        val intent = Intent(getApplication(), VenzoVpnService::class.java).apply {
+            action = VenzoVpnService.ACTION_START
+            putExtra(VenzoVpnService.EXTRA_NODE_JSON, Json.encodeToString(node))
+        }
+        ContextCompat.startForegroundService(getApplication(), intent)
+        _userMessage.value = "Verifying ${node.name}…"
     }
 
-    private fun startTrafficSimulation() {
-        trafficJob?.cancel()
-        trafficJob = viewModelScope.launch {
-            while (isActive) {
+    fun stopVpn() {
+        val intent = Intent(getApplication(), VenzoVpnService::class.java).apply {
+            action = VenzoVpnService.ACTION_STOP
+        }
+        getApplication<Application>().startService(intent)
+    }
+
+    fun toggleConnectionAfterPermission() {
+        if (_connectionStats.value.isConnected) stopVpn() else startVpn()
+    }
+
+    private fun startDurationTicker(startedAt: Long) {
+        durationJob?.cancel()
+        durationJob = viewModelScope.launch {
+            while (isActive && VpnRuntime.state.value.isConnected) {
+                _connectionStats.value = _connectionStats.value.copy(
+                    connectionDurationSecs = (System.currentTimeMillis() - startedAt) / 1000L
+                )
                 delay(1000)
-                if (_connectionStats.value.isConnected) {
-                    val up = Random.nextDouble(12.0, 180.0)
-                    val down = Random.nextDouble(45.0, 950.0)
-                    val addedUp = (up * 1024 / 8).toLong()
-                    val addedDown = (down * 1024 / 8).toLong()
-                    _connectionStats.value = _connectionStats.value.copy(
-                        uploadSpeedKbps = up,
-                        downloadSpeedKbps = down,
-                        totalUploadBytes = _connectionStats.value.totalUploadBytes + addedUp,
-                        totalDownloadBytes = _connectionStats.value.totalDownloadBytes + addedDown,
-                        connectionDurationSecs = _connectionStats.value.connectionDurationSecs + 1
-                    )
-                }
             }
         }
     }
 
     fun setActiveNode(node: V2RayNode) {
         viewModelScope.launch {
+            if (_connectionStats.value.isConnected) {
+                stopVpn()
+            }
             repository.setActive(node.id)
             _userMessage.value = "Switched active node to ${node.name}"
             pingNode(node)
@@ -207,7 +234,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 val ping = PingService.pingTcp(node.address, node.port, 2500)
                 repository.updatePing(node.id, ping)
-                delay(100) // gentle delay between sequential pings
+                delay(100)
             }
 
             _diagnosticsProgress.value = DiagnosticsProgress(isRunning = false)
@@ -224,10 +251,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _userMessage.value = "No responsive nodes found. Run a ping test first."
                 return@launch
             }
-            val bestNode = onlineNodes.minByOrNull { it.lastPingMs }
-            if (bestNode != null) {
-                repository.setActive(bestNode.id)
-                _userMessage.value = "Selected lowest latency node: ${bestNode.name} (${bestNode.lastPingMs}ms)"
+            val candidates = onlineNodes.sortedBy { it.lastPingMs }.take(5)
+            var selected: V2RayNode? = null
+            for (candidate in candidates) {
+                val result = PingService.runDetailedDiagnostic(candidate, sampleCount = 2, timeoutMs = 2500)
+                if (result.isSuccess) {
+                    selected = candidate
+                    repository.updatePing(candidate.id, result.avgMs)
+                    break
+                }
+            }
+            if (selected != null) {
+                repository.setActive(selected.id)
+                _userMessage.value = "Selected verified node: ${selected.name}"
+            } else {
+                _userMessage.value = "Servers answered TCP ping but none passed the detailed test"
             }
         }
     }
@@ -262,24 +300,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 pingNode(parsed.copy(id = id.toInt()))
             }
             return true
-        } else {
-            _userMessage.value = "Failed to parse link format"
-            return false
         }
+        _userMessage.value = "Failed to parse link format"
+        return false
     }
 
     fun importBatch(text: String): Int {
-        val lines = text.lines()
-        val imported = mutableListOf<V2RayNode>()
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.isNotEmpty()) {
-                val parsed = NodeParser.parseLink(trimmed)
-                if (parsed != null) {
-                    imported.add(parsed)
-                }
-            }
-        }
+        val imported = text.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { NodeParser.parseLink(it) }
+
         if (imported.isNotEmpty()) {
             viewModelScope.launch {
                 repository.insertAll(imported)
