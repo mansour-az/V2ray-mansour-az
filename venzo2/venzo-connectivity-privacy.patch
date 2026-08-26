@@ -38,7 +38,7 @@ index 48fd1b64ca5abfa1700ccfe7958c745759b9d7cd..3924f202b241263be0fef36c82c2c944
      <string name="notification_action_reconnect">Reconnect</string>
      <string name="notification_error_title">Error</string>
 diff --git a/app/lib/controllers/home_controller.dart b/app/lib/controllers/home_controller.dart
-index a9d219866f22f727d37031446e4bc6b290388d90..16ca0efa7311b2757e469bf98549c6f7f3887edf 100644
+index a9d219866f22f727d37031446e4bc6b290388d90..b400776b913fb2b14ce78cc5e45f7740f2ed533a 100644
 --- a/app/lib/controllers/home_controller.dart
 +++ b/app/lib/controllers/home_controller.dart
 @@ -25,6 +25,7 @@ import '../services/template_loader.dart';
@@ -49,6 +49,14 @@ index a9d219866f22f727d37031446e4bc6b290388d90..16ca0efa7311b2757e469bf98549c6f7
  
  part 'home_controller/config_io.dart';
  part 'home_controller/heartbeat.dart';
+@@ -681,6 +682,7 @@ class HomeController extends ChangeNotifier
+     }
+   }
+ 
++  @override
+   Future<void> stop() async {
+     _emit(_state.copyWith(busy: true, lastError: null));
+     try {
 diff --git a/app/lib/controllers/home_controller/ping_orchestration.dart b/app/lib/controllers/home_controller/ping_orchestration.dart
 index 554db9afb957873be94a2c090763a712c8fca668..cdf5282baf8c03c3de0fc65a74e55f8d3dd38695 100644
 --- a/app/lib/controllers/home_controller/ping_orchestration.dart
