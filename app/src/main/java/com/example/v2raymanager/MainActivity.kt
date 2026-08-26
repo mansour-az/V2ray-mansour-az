@@ -1,9 +1,12 @@
 package com.example.v2raymanager
 
+import android.app.Activity
+import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,7 +27,6 @@ import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -32,14 +34,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -56,7 +56,6 @@ import com.example.v2raymanager.ui.theme.CyberCyan
 import com.example.v2raymanager.ui.theme.DarkBackground
 import com.example.v2raymanager.ui.theme.DarkBorder
 import com.example.v2raymanager.ui.theme.DarkSurfaceCard
-import com.example.v2raymanager.ui.theme.DarkSurfaceVariant
 import com.example.v2raymanager.ui.theme.TextMuted
 import com.example.v2raymanager.ui.theme.TextSecondary
 import com.example.v2raymanager.ui.theme.V2RayManagerTheme
@@ -71,6 +70,29 @@ data class NavItem(
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+
+    private val vpnPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.startVpn()
+        } else {
+            viewModel.showMessage("VPN permission is required to connect")
+        }
+    }
+
+    private fun requestVpnToggle() {
+        if (viewModel.connectionStats.value.isConnected) {
+            viewModel.stopVpn()
+            return
+        }
+        val permissionIntent = VpnService.prepare(this)
+        if (permissionIntent == null) {
+            viewModel.startVpn()
+        } else {
+            vpnPermissionLauncher.launch(permissionIntent)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -160,11 +182,9 @@ class MainActivity : ComponentActivity() {
                             0 -> HomeScreen(
                                 activeNode = activeNode,
                                 connectionStats = connectionStats,
-                                onToggleConnection = { viewModel.toggleConnection() },
+                                onToggleConnection = { requestVpnToggle() },
                                 onNavigateToNodes = { selectedTab = 1 },
-                                onPingActiveNode = {
-                                    activeNode?.let { viewModel.pingNode(it) }
-                                }
+                                onPingActiveNode = { activeNode?.let { viewModel.pingNode(it) } }
                             )
                             1 -> NodesScreen(
                                 nodes = nodes,
@@ -177,10 +197,7 @@ class MainActivity : ComponentActivity() {
                                 onImportLink = { viewModel.importFromLink(it) },
                                 onImportBatch = { viewModel.importBatch(it) }
                             )
-                            2 -> GeneratorScreen(
-                                nodes = nodes,
-                                activeNode = activeNode
-                            )
+                            2 -> GeneratorScreen(nodes = nodes, activeNode = activeNode)
                             3 -> DiagnosticsScreen(
                                 nodes = nodes,
                                 activeNode = activeNode,
