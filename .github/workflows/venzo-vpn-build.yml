@@ -1,6 +1,6 @@
 name: Build Venzo VPN 2.6.0
 
-# Public release request: 2026-08-25
+# Public release request: 2026-08-27 connectivity fix
 
 on:
   push:
