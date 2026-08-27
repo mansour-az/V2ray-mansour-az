@@ -193,8 +193,8 @@ index 93a8cd3..554db9a 100644
 -  static const _massPingFlushMs = 120;
 +  static const _massPingFlushMs = 300;
 +
-+  static const _smartProbeBatchSize = 24;
-+  static const _smartProbeSuccessTarget = 4;
++  static const _smartProbeBatchSize = 96;
++  static const _smartProbeSuccessTarget = 24;
 +  static const _smartProbeConcurrency = 6;
 +  static const _smartProbeTimeoutMs = 4500;
 
