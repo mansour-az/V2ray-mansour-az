@@ -310,7 +310,7 @@ index 554db9afb957873be94a2c090763a712c8fca668..cdf5282baf8c03c3de0fc65a74e55f8d
 +    _smartConnectNode = null;
 +    _venzoConnectionError = message;
 +    notifyListeners();
-+    await stop();
++    // Keep the tunnel alive after an exhausted automatic pass so the user can\n+    // inspect results, retry, or choose a server manually without restarting.
 +  }
 +
 +  Future<bool> selectAndVerifyVenzoServer(String nodeTag) async {
