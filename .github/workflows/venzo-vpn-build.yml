@@ -1,17 +1,17 @@
-name: Build Venzo VPN 2.6.0
+name: Build Venzo VPN 2.7.0
 
-# Public release request: 2026-08-27 connectivity fix
+# Release candidate: 2026-08-28 AbanGateway payments and API announcements
 
 on:
   push:
-    branches: [venzo-2.0, codex/venzo-mobile-2.6.0-connectivity]
+    branches: [venzo-2.0, codex/venzo-mobile-2.7.0-aban-notifications]
     paths:
       - "venzo2/**"
       - ".github/workflows/venzo-vpn-build.yml"
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Publish the verified artifacts as GitHub Release v2.6.0
+        description: Publish the verified artifacts as GitHub Release v2.7.0
         required: false
         default: false
         type: boolean
@@ -47,6 +47,7 @@ jobs:
           # This generated incremental patch is maintained independently from
           # the upstream files; recount makes edited hunk sizes deterministic.
           git apply --recount ../venzo2/venzo-connectivity-privacy.patch
+          git apply ../venzo2/venzo-aban-notifications.patch
           base64 --decode ../venzo2/icon.jpg.b64 > app/assets/icons/app_icon.png
 
       - name: Read Flutter version
@@ -123,8 +124,8 @@ jobs:
           --target-platform android-arm64
           --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --dart-define=LXBOX_DISTRIBUTION=github
-          --build-name 2.6.0
-          --build-number 20600000
+          --build-name 2.7.0
+          --build-number 20700000
 
       - name: Build Play Store app bundle
         working-directory: venzo-src/app
@@ -132,39 +133,39 @@ jobs:
           flutter build appbundle --release --flavor play
           --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --dart-define=LXBOX_DISTRIBUTION=play
-          --build-name 2.6.0
-          --build-number 20600000
+          --build-name 2.7.0
+          --build-number 20700000
 
       - name: Name release files
         run: |
-          cp venzo-src/app/build/app/outputs/flutter-apk/app-github-release.apk Venzo-VPN-2.6.0-arm64.apk
-          cp venzo-src/app/build/app/outputs/bundle/playRelease/app-play-release.aab Venzo-VPN-2.6.0.aab
+          cp venzo-src/app/build/app/outputs/flutter-apk/app-github-release.apk Venzo-VPN-2.7.0-arm64.apk
+          cp venzo-src/app/build/app/outputs/bundle/playRelease/app-play-release.aab Venzo-VPN-2.7.0.aab
 
       - name: Verify release signature
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
-            verify --verbose --print-certs Venzo-VPN-2.6.0-arm64.apk
+            verify --verbose --print-certs Venzo-VPN-2.7.0-arm64.apk
 
       - name: Create checksums
-        run: sha256sum Venzo-VPN-2.6.0-arm64.apk Venzo-VPN-2.6.0.aab > SHA256SUMS.txt
+        run: sha256sum Venzo-VPN-2.7.0-arm64.apk Venzo-VPN-2.7.0.aab > SHA256SUMS.txt
 
       - name: Upload APK and Play Store bundle
         uses: actions/upload-artifact@v4
         with:
-          name: Venzo-VPN-2.6.0-release
+          name: Venzo-VPN-2.7.0-release
           path: |
-            Venzo-VPN-2.6.0-arm64.apk
-            Venzo-VPN-2.6.0.aab
+            Venzo-VPN-2.7.0-arm64.apk
+            Venzo-VPN-2.7.0.aab
           if-no-files-found: error
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: "${{ github.ref == 'refs/heads/venzo-2.0' && ((github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.6.0')) }}"
+        if: "${{ github.ref == 'refs/heads/venzo-2.0' && ((github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.7.0')) }}"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf '%s\n' \
-            '# Venzo VPN 2.6.0' \
+            '# Venzo VPN 2.7.0' \
             '' \
             '- اتصال هوشمند و انتخاب خودکار کانفیگ سالم' \
             '- آزمایش چند سرور با عبور واقعی اینترنت، نه فقط Ping' \
@@ -181,29 +182,31 @@ jobs:
             '- موتور خودکار جست‌وجو و تجمیع منابع رایگان' \
             '- فروشگاه پلن‌ها با API امن برای اتصال به PasarGuard' \
             '- پرداخت رمزارزی OxaPay و زیرساخت امن درگاه‌های میزبانی‌شده' \
+            '- پرداخت ریالی آبان گیت‌وی با تأیید خودکار و امن سمت سرور' \
+            '- اعلان دوره‌ای آپدیت‌ها، تخفیف‌ها و خبرهای مهم بدون Firebase' \
             '- حذف کامل نام و لینک‌های LxBox از رابط و اعلان‌ها' \
             '- دریافت اعلان به‌روزرسانی فقط از GitHub رسمی Venzo VPN' \
             '- همگام‌سازی امن سورس پایه با نسخه‌های جدید upstream' \
             '' \
             'فایل APK برای نصب مستقیم روی دستگاه‌های arm64 است. فایل AAB فقط برای Google Play Console استفاده می‌شود.' \
             > release-notes.md
-          gh release create v2.6.0 \
+          gh release create v2.7.0 \
             --target "$GITHUB_SHA" \
-            --title 'Venzo VPN 2.6.0' \
+            --title 'Venzo VPN 2.7.0' \
             --notes-file release-notes.md \
-            Venzo-VPN-2.6.0-arm64.apk \
-            Venzo-VPN-2.6.0.aab \
+            Venzo-VPN-2.7.0-arm64.apk \
+            Venzo-VPN-2.7.0.aab \
             SHA256SUMS.txt
 
       - name: Update in-app release channel
-        if: "${{ github.ref == 'refs/heads/venzo-2.0' && ((github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.6.0')) }}"
+        if: "${{ github.ref == 'refs/heads/venzo-2.0' && ((github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.7.0')) }}"
         run: |
-          APK_SHA="$(sha256sum Venzo-VPN-2.6.0-arm64.apk | cut -d' ' -f1)"
+          APK_SHA="$(sha256sum Venzo-VPN-2.7.0-arm64.apk | cut -d' ' -f1)"
           jq -n \
-            --arg tag 'v2.6.0' \
-            --arg name 'Venzo VPN 2.6.0' \
-            --arg url 'https://github.com/mansour-az/V2ray-mansour-az/releases/tag/v2.6.0' \
-            --arg apk 'https://github.com/mansour-az/V2ray-mansour-az/releases/download/v2.6.0/Venzo-VPN-2.6.0-arm64.apk' \
+            --arg tag 'v2.7.0' \
+            --arg name 'Venzo VPN 2.7.0' \
+            --arg url 'https://github.com/mansour-az/V2ray-mansour-az/releases/tag/v2.7.0' \
+            --arg apk 'https://github.com/mansour-az/V2ray-mansour-az/releases/download/v2.7.0/Venzo-VPN-2.7.0-arm64.apk' \
             --arg sha "$APK_SHA" \
             '{tag:$tag,name:$name,html_url:$url,published_at:(now|todate),apk_url:$apk,sha256:$sha}' \
             > venzo2/latest.json
