@@ -1,7 +1,8 @@
 # Venzo Store API Worker
 
 This Worker exposes public plans, authenticated orders, automatic TRX and
-USDT-TRC20 verification through TronGrid, hosted SwapPay and OxaPay invoices,
+USDT-TRC20 verification through TronGrid, hosted SwapPay, OxaPay, and
+AbanGateway invoices,
 manual card-to-card review, and idempotent PasarGuard provisioning after
 payment.
 
@@ -9,13 +10,15 @@ payment.
 
 - `GET /health`
 - `GET /v1/plans`
+- `GET /v1/announcements`
+- `PUT /v1/internal/announcements` (server-to-server only)
 - `POST /v1/orders`
 - `GET /v1/orders/{id}`
 - `POST /v1/orders/{id}/card-receipt`
 - `POST /v1/internal/card-orders/{id}/approve`
 - `POST /v1/internal/provision` (server-to-server only)
 
-Create-order methods include `trx`, `card`, `swappay`, and `oxapay`. The response contains
+Create-order methods include `trx`, `card`, `swappay`, `oxapay`, and `aban`. The response contains
 a one-time `client_secret`; clients must send it as `Authorization: Bearer ...`
 when reading the order or submitting a card receipt. Crypto orders use a unique
 six-decimal amount and are fulfilled only after a confirmed on-chain match.
@@ -55,12 +58,16 @@ CARD_HOLDER=...
 SWAPPAY_API_KEY=...
 SWAPPAY_USERNAME=...
 OXAPAY_MERCHANT_API_KEY=...
+ABAN_API_TOKEN=live_... (or test_... for sandbox testing)
+ABAN_WEBHOOK_SECRET=...
 ```
 
 Optional hosted-payment settings are `SWAPPAY_API_BASE` (defaults to
 `https://swapwallet.app/api`), `SWAPPAY_AUTO_CONVERSION_TOKEN`, and
 `PAYMENT_RETURN_URL`. `USD_IRR` is an optional emergency rate override; by
-default the Worker caches the live USDT/IRR market rate. The Android app receives only the hosted checkout URL;
+default the Worker caches the live USDT/IRR market rate. Announcements can be
+updated through the protected internal endpoint and are polled by Android in
+the background. The Android app receives only public announcement content and hosted checkout URLs;
 provider API keys stay in encrypted Worker secrets.
 
 Never commit `.dev.vars`, API keys, panel credentials, wallet details, card
@@ -92,6 +99,8 @@ CARD_HOLDER
 SWAPPAY_API_KEY
 SWAPPAY_USERNAME
 OXAPAY_MERCHANT_API_KEY
+ABAN_API_TOKEN
+ABAN_WEBHOOK_SECRET
 ```
 
 Add `PASARGUARD_GROUP_IDS` and `USDT_TRC20_CONTRACT` as repository variables.
