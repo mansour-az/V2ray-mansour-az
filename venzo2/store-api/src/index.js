@@ -1,4 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
+import {
+  abanConfigured,
+  createAbanInvoice,
+  findAbanPayment,
+  verifyAbanWebhook,
+} from "./aban.js";
 
 const GIB = 1024 ** 3;
 const DAY = 86400;
@@ -144,7 +150,7 @@ export class AccountLedger extends DurableObject {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders() });
@@ -168,6 +174,18 @@ export default {
         200,
         publicHeaders(),
       );
+    }
+    if (request.method === "GET" && url.pathname === "/v1/announcements") {
+      return announcements(env);
+    }
+    if (request.method === "PUT" && url.pathname === "/v1/internal/announcements") {
+      if (!(await authorized(request, env.PROVISION_SECRET))) {
+        return json({ error: "UNAUTHORIZED" }, 401, noStoreHeaders());
+      }
+      return updateAnnouncements(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/v1/payments/aban/webhook") {
+      return handleAbanWebhook(request, env, ctx);
     }
     if (request.method === "POST" && url.pathname === "/v1/account/register") {
       return registerAccount(request, env);
@@ -307,7 +325,7 @@ async function createWalletTopup(request, env) {
   if (!parsed.ok) return parsed.response;
   const amount = positiveInteger(parsed.value.amount_irr);
   const method = String(parsed.value.payment_method || "");
-  if (amount < 50_000 || amount > 100_000_000 || !["trx", "card", "rial_gateway", "swappay", "oxapay"].includes(method)) {
+  if (amount < 50_000 || amount > 100_000_000 || !["trx", "card", "rial_gateway", "swappay", "oxapay", "aban"].includes(method)) {
     return json({ error: "INVALID_TOPUP" }, 400, noStoreHeaders());
   }
   const id = crypto.randomUUID().toLowerCase();
@@ -316,6 +334,7 @@ async function createWalletTopup(request, env) {
   const payment = await paymentFor(method, { price: amount }, env, {
     orderId: id,
     description: "شارژ کیف پول Venzo",
+    callbackUrl: `${new URL(request.url).origin}/v1/payments/aban/webhook`,
   });
   if (!payment.ok) return json({ error: payment.error }, 503, noStoreHeaders());
   const storedPayment = method === "card"
@@ -352,7 +371,7 @@ async function createOrder(request, env) {
   const accountAuth = await optionalAccountAuth(request, env);
   const effectiveCustomer = accountAuth.ok ? accountAuth.account.customer : customer;
   const renewUsername = clean(parsed.value.renew_username, 64);
-  if (!plan || !effectiveCustomer || !["trx", "card", "rial_gateway", "wallet", "swappay", "oxapay"].includes(method)) {
+  if (!plan || !effectiveCustomer || !["trx", "card", "rial_gateway", "wallet", "swappay", "oxapay", "aban"].includes(method)) {
     return json({ error: "INVALID_ORDER" }, 400);
   }
   if ((method === "wallet" || renewUsername) && !accountAuth.ok) {
@@ -366,6 +385,7 @@ async function createOrder(request, env) {
     : await paymentFor(method, plan, env, {
         orderId: id,
         description: `${renewUsername ? "تمدید" : "خرید"} ${plan.title}`,
+        callbackUrl: `${new URL(request.url).origin}/v1/payments/aban/webhook`,
       });
   if (!payment.ok) return json({ error: payment.error }, 503);
   const storedPayment = method === "card"
@@ -434,12 +454,15 @@ async function getOrder(request, env, id) {
     Date.now() - Number(order.last_checked_at || 0) >= 15_000
   ) {
     order.last_checked_at = Date.now();
-    const match = ["swappay", "oxapay"].includes(order.payment_method)
+    const match = ["swappay", "oxapay", "aban"].includes(order.payment_method)
       ? await findHostedPayment(order, env)
       : await findCryptoPayment(order, env);
     if (match?.status === "failed") {
       order.status = "payment_failed";
       order.payment_error = match.error || "PAYMENT_FAILED";
+    } else if (match?.status === "already_verified") {
+      // The one-time provider verification was already consumed. The stored
+      // order remains the idempotency source of truth; never fulfill twice.
     } else if (match) {
       order.status = "paid";
       order.payment_txid = match.txid;
@@ -813,6 +836,9 @@ async function paymentFor(method, plan, env, context = {}) {
   if (method === "oxapay") {
     return createOxaPayInvoice(plan, env, context);
   }
+  if (method === "aban") {
+    return createAbanInvoice(plan, env, context);
+  }
   if (method !== "trx") return { ok: false, error: "INVALID_PAYMENT_METHOD" };
   const wallet = clean(env.TRON_WALLET_ADDRESS, 64);
   const rate = await trxRate(env);
@@ -983,6 +1009,7 @@ async function createOxaPayInvoice(plan, env, context) {
 async function findHostedPayment(order, env) {
   if (order.payment_method === "swappay") return findSwapPayPayment(order, env);
   if (order.payment_method === "oxapay") return findOxaPayPayment(order, env);
+  if (order.payment_method === "aban") return findAbanPayment(order, env);
   return null;
 }
 
@@ -1315,8 +1342,99 @@ async function paymentAvailability(env) {
     card: digits(env.CARD_NUMBER, 16).length === 16 && Boolean(clean(env.CARD_HOLDER, 120)),
     swappay: Boolean(clean(env.SWAPPAY_API_KEY, 240)),
     oxapay: Boolean(hostedRateReady && clean(env.OXAPAY_MERCHANT_API_KEY, 240)),
+    aban: abanConfigured(env),
     rial_gateway: false,
   };
+}
+
+async function announcements(env) {
+  const stored = env.ORDERS
+    ? await env.ORDERS.get("announcements:current", "json")
+    : null;
+  const configured = stored || parseStoredJson(env.ANNOUNCEMENTS_JSON) || [];
+  const now = Date.now();
+  const rows = (Array.isArray(configured) ? configured : [])
+    .map((item) => ({
+      id: clean(item?.id, 80),
+      type: ["update", "discount", "news"].includes(item?.type)
+        ? item.type
+        : "news",
+      title: clean(item?.title, 120),
+      body: clean(item?.body, 500),
+      action_url: validHttpsUrl(item?.action_url) || null,
+      starts_at: Number(item?.starts_at || 0),
+      expires_at: Number(item?.expires_at || 0),
+    }))
+    .filter((item) => item.id && item.title && item.body)
+    .filter(
+      (item) =>
+        (!item.starts_at || item.starts_at <= now) &&
+        (!item.expires_at || item.expires_at > now),
+    )
+    .slice(0, 20);
+  return json({ announcements: rows, checked_at: now }, 200, publicHeaders());
+}
+
+async function updateAnnouncements(request, env) {
+  if (!env.ORDERS) {
+    return json({ error: "STORE_NOT_CONFIGURED" }, 503, noStoreHeaders());
+  }
+  const parsed = await readJson(request);
+  if (!parsed.ok) return parsed.response;
+  const rows = parsed.value?.announcements;
+  if (!Array.isArray(rows) || rows.length > 20) {
+    return json({ error: "INVALID_ANNOUNCEMENTS" }, 400, noStoreHeaders());
+  }
+  await env.ORDERS.put("announcements:current", JSON.stringify(rows));
+  return announcements(env);
+}
+
+async function handleAbanWebhook(request, env, ctx) {
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-signature") || "";
+  if (!(await verifyAbanWebhook(rawBody, signature, env.ABAN_WEBHOOK_SECRET))) {
+    return json({ error: "INVALID_SIGNATURE" }, 400, noStoreHeaders());
+  }
+  let payload;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return json({ error: "INVALID_JSON" }, 400, noStoreHeaders());
+  }
+  const orderId = clean(payload?.order_id || payload?.metadata?.order_id, 80);
+  const invoiceId = clean(payload?.invoice_id, 160);
+  if (!orderId || !invoiceId || !env.ORDERS) {
+    return json({ received: true }, 200, noStoreHeaders());
+  }
+  ctx.waitUntil(processAbanWebhook(payload, orderId, invoiceId, env));
+  return json({ received: true }, 200, noStoreHeaders());
+}
+
+async function processAbanWebhook(payload, orderId, invoiceId, env) {
+  let order = await loadOrder(env, orderId);
+  if (
+    !order ||
+    order.payment_method !== "aban" ||
+    order.payment?.invoice_id !== invoiceId
+  ) {
+    return;
+  }
+  if (order.status === "fulfilled") {
+    return;
+  }
+  if (payload.event === "invoice.paid") {
+    const match = await findAbanPayment(order, env);
+    if (match?.status === "paid") {
+      order.status = "paid";
+      order.payment_txid = match.txid;
+      order.paid_at = match.paid_at;
+      order = await fulfillOrder(order, env);
+      await saveOrder(env, order);
+    }
+  } else if (["invoice.expired", "invoice.cancelled"].includes(payload.event)) {
+    order.status = "expired";
+    await saveOrder(env, order);
+  }
 }
 
 function adminPage() {
