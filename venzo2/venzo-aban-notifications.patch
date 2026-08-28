@@ -1,0 +1,302 @@
+diff --git a/app/android/app/build.gradle.kts b/app/android/app/build.gradle.kts
+index e92c8a9..c53355b 100644
+--- a/app/android/app/build.gradle.kts
++++ b/app/android/app/build.gradle.kts
+@@ -154,6 +154,7 @@ dependencies {
+     implementation(files("libs/libbox.aar"))
+     implementation("androidx.core:core-ktx:1.12.0")
+     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
++    implementation("androidx.work:work-runtime-ktx:2.10.0")
+     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+ }
+ 
+diff --git a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/MainActivity.kt b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/MainActivity.kt
+index d222bf5..271346b 100644
+--- a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/MainActivity.kt
++++ b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/MainActivity.kt
+@@ -254,6 +254,7 @@ class MainActivity : FlutterActivity() {
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
++        VenzoAnnouncementWorker.schedule(applicationContext)
+         handleQuickAction(intent)
+     }
+ 
+diff --git a/app/android/app/src/main/kotlin/com/leadaxe/lxbox/VenzoAnnouncementWorker.kt b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/VenzoAnnouncementWorker.kt
+new file mode 100644
+index 0000000..85cfe24
+--- /dev/null
++++ b/app/android/app/src/main/kotlin/com/leadaxe/lxbox/VenzoAnnouncementWorker.kt
+@@ -0,0 +1,144 @@
++package com.leadaxe.lxbox
++
++import android.Manifest
++import android.app.NotificationChannel
++import android.app.NotificationManager
++import android.app.PendingIntent
++import android.content.Context
++import android.content.Intent
++import android.content.pm.PackageManager
++import android.net.Uri
++import android.os.Build
++import androidx.core.app.NotificationCompat
++import androidx.core.app.NotificationManagerCompat
++import androidx.core.content.ContextCompat
++import androidx.work.Constraints
++import androidx.work.CoroutineWorker
++import androidx.work.ExistingPeriodicWorkPolicy
++import androidx.work.NetworkType
++import androidx.work.PeriodicWorkRequestBuilder
++import androidx.work.WorkManager
++import androidx.work.WorkerParameters
++import org.json.JSONObject
++import java.net.HttpURLConnection
++import java.net.URL
++import java.util.concurrent.TimeUnit
++
++class VenzoAnnouncementWorker(
++    appContext: Context,
++    params: WorkerParameters,
++) : CoroutineWorker(appContext, params) {
++
++    override suspend fun doWork(): Result {
++        if (
++            Build.VERSION.SDK_INT >= 33 &&
++            ContextCompat.checkSelfPermission(
++                applicationContext,
++                Manifest.permission.POST_NOTIFICATIONS,
++            ) != PackageManager.PERMISSION_GRANTED
++        ) return Result.success()
++
++        return try {
++            val connection = URL(API_URL).openConnection() as HttpURLConnection
++            connection.connectTimeout = 10_000
++            connection.readTimeout = 10_000
++            connection.requestMethod = "GET"
++            connection.setRequestProperty("Accept", "application/json")
++            connection.setRequestProperty("User-Agent", "Venzo-VPN-Android/2.7")
++            val status = connection.responseCode
++            if (status != 200) {
++                connection.disconnect()
++                return if (status >= 500 || status == 429) Result.retry() else Result.success()
++            }
++            val body = connection.inputStream.bufferedReader().use { it.readText() }
++            connection.disconnect()
++            deliver(JSONObject(body))
++            Result.success()
++        } catch (_: Exception) {
++            Result.retry()
++        }
++    }
++
++    private fun deliver(payload: JSONObject) {
++        createChannel()
++        val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
++        val seen = prefs.getStringSet(KEY_SEEN, emptySet())?.toMutableSet() ?: mutableSetOf()
++        val rows = payload.optJSONArray("announcements") ?: return
++        var changed = false
++        for (index in 0 until rows.length()) {
++            val item = rows.optJSONObject(index) ?: continue
++            val id = item.optString("id").trim()
++            val title = item.optString("title").trim()
++            val body = item.optString("body").trim()
++            if (id.isEmpty() || title.isEmpty() || body.isEmpty() || id in seen) continue
++            showNotification(id, title, body, item.optString("action_url"))
++            seen += id
++            changed = true
++        }
++        if (changed) {
++            prefs.edit().putStringSet(KEY_SEEN, seen.toList().takeLast(100).toSet()).apply()
++        }
++    }
++
++    private fun createChannel() {
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
++        val manager = applicationContext.getSystemService(NotificationManager::class.java)
++        manager.createNotificationChannel(
++            NotificationChannel(
++                CHANNEL_ID,
++                "آپدیت‌ها و پیشنهادهای Venzo",
++                NotificationManager.IMPORTANCE_DEFAULT,
++            ).apply {
++                description = "اعلان نسخه جدید، تخفیف و خبرهای مهم Venzo VPN"
++            },
++        )
++    }
++
++    private fun showNotification(id: String, title: String, body: String, actionUrl: String) {
++        val intent = if (actionUrl.startsWith("https://")) {
++            Intent(Intent.ACTION_VIEW, Uri.parse(actionUrl))
++        } else {
++            applicationContext.packageManager.getLaunchIntentForPackage(applicationContext.packageName)
++                ?: Intent(applicationContext, MainActivity::class.java)
++        }.apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP }
++        val pendingIntent = PendingIntent.getActivity(
++            applicationContext,
++            id.hashCode(),
++            intent,
++            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
++        )
++        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
++            .setSmallIcon(com.leadaxe.lxbox.R.drawable.ic_lxbox_tile)
++            .setContentTitle(title)
++            .setContentText(body)
++            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
++            .setContentIntent(pendingIntent)
++            .setAutoCancel(true)
++            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
++            .build()
++        NotificationManagerCompat.from(applicationContext).notify(id.hashCode(), notification)
++    }
++
++    companion object {
++        private const val API_URL = "https://venzo-store-api.mascot-gt.workers.dev/v1/announcements"
++        private const val CHANNEL_ID = "venzo_updates_offers"
++        private const val PREFS = "venzo_announcements"
++        private const val KEY_SEEN = "seen_ids"
++        private const val UNIQUE_WORK = "venzo_periodic_announcements"
++
++        fun schedule(context: Context) {
++            val constraints = Constraints.Builder()
++                .setRequiredNetworkType(NetworkType.CONNECTED)
++                .build()
++            val request = PeriodicWorkRequestBuilder<VenzoAnnouncementWorker>(6, TimeUnit.HOURS)
++                .setInitialDelay(2, TimeUnit.MINUTES)
++                .setConstraints(constraints)
++                .build()
++            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
++                UNIQUE_WORK,
++                ExistingPeriodicWorkPolicy.UPDATE,
++                request,
++            )
++        }
++    }
++}
+diff --git a/app/assets/l10n/fa/ui.json b/app/assets/l10n/fa/ui.json
+index 6314470..5c3b12a 100644
+--- a/app/assets/l10n/fa/ui.json
++++ b/app/assets/l10n/fa/ui.json
+@@ -4,6 +4,7 @@
+   "Allow": {"value": "اجازه دادن"},
+   "Allow background activity": {"value": "اجازه فعالیت در پس‌زمینه"},
+   "Allow notifications": {"value": "اجازه اعلان‌ها"},
++  "Venzo VPN runs as a foreground service while VPN is active. A persistent notification is required by Android — it lets you see at a glance that VPN is on, and prevents the system from killing the tunnel in the background.\n\nVenzo may also show update, discount, and important service notifications. You can disable the updates and offers channel from Android notification settings.": {"value": "هنگام فعال بودن VPN، یک اعلان دائمی برای پایداری اتصال نمایش داده می‌شود.\n\nVenzo ممکن است اعلان نسخه جدید، تخفیف و خبر مهم سرویس را هم نمایش دهد. کانال «آپدیت‌ها و پیشنهادها» را می‌توانید جداگانه از تنظیمات اعلان اندروید خاموش کنید."},
+   "Another VPN is active": {"value": "یک VPN دیگر فعال است"},
+   "App Settings": {"value": "تنظیمات برنامه"},
+   "App connections": {"value": "اتصال‌های برنامه"},
+diff --git a/app/lib/screens/home/home_dialogs.dart b/app/lib/screens/home/home_dialogs.dart
+index 1fbc092..6884d63 100644
+--- a/app/lib/screens/home/home_dialogs.dart
++++ b/app/lib/screens/home/home_dialogs.dart
+@@ -328,7 +328,7 @@ Future<void> maybeShowNotificationPermissionDialog(BuildContext context) async {
+     barrierDismissible: false,
+     builder: (ctx) => AlertDialog.adaptive(
+       title: Text(getLocalText.s("Allow notifications")),
+-      content: Text(getLocalText.s("Venzo VPN runs as a foreground service while VPN is active. A persistent notification is required by Android — it lets you see at a glance that VPN is on, and prevents the system from killing the tunnel in the background.\n\nNo promotional or alert notifications will be sent.")),
++      content: Text(getLocalText.s("Venzo VPN runs as a foreground service while VPN is active. A persistent notification is required by Android — it lets you see at a glance that VPN is on, and prevents the system from killing the tunnel in the background.\n\nVenzo may also show update, discount, and important service notifications. You can disable the updates and offers channel from Android notification settings.")),
+       actions: [
+         TextButton(
+           onPressed: () => Navigator.of(ctx).pop(false),
+diff --git a/app/lib/screens/venzo_account_screen.dart b/app/lib/screens/venzo_account_screen.dart
+index d8ebbd5..fe16208 100644
+--- a/app/lib/screens/venzo_account_screen.dart
++++ b/app/lib/screens/venzo_account_screen.dart
+@@ -367,6 +367,13 @@ class _VenzoAccountScreenState extends State<VenzoAccountScreen> {
+                   onTap: () =>
+                       Navigator.pop(context, VenzoPaymentMethod.oxaPay),
+                 ),
++              if (_methods.contains(VenzoPaymentMethod.aban))
++                ListTile(
++                  leading: const Icon(Icons.account_balance_rounded),
++                  title: const Text('آبان گیت‌وی'),
++                  subtitle: const Text('پرداخت ریالی با تأیید خودکار'),
++                  onTap: () => Navigator.pop(context, VenzoPaymentMethod.aban),
++                ),
+               if (_methods.contains(VenzoPaymentMethod.rialGateway))
+                 ListTile(
+                   leading: const Icon(Icons.account_balance_rounded),
+diff --git a/app/lib/screens/venzo_payment_screen.dart b/app/lib/screens/venzo_payment_screen.dart
+index 6860d3f..62365ef 100644
+--- a/app/lib/screens/venzo_payment_screen.dart
++++ b/app/lib/screens/venzo_payment_screen.dart
+@@ -90,6 +90,7 @@ class _VenzoPaymentScreenState extends State<VenzoPaymentScreen> {
+       return _hostedGateway('SwapPay');
+     }
+     if (_order.paymentMethod == 'oxapay') return _hostedGateway('OxaPay');
++    if (_order.paymentMethod == 'aban') return _hostedGateway('آبان گیت‌وی');
+     final amount = _order.payment['amount']?.toString() ?? '';
+     final currency = _order.payment['currency']?.toString() ?? '';
+     final wallet = _order.payment['wallet_address']?.toString() ?? '';
+@@ -240,6 +241,7 @@ class _VenzoPaymentScreenState extends State<VenzoPaymentScreen> {
+   String get _providerName => switch (_order.paymentMethod) {
+         'swappay' => 'SwapPay',
+         'oxapay' => 'OxaPay',
++        'aban' => 'آبان گیت‌وی',
+         _ => 'Venzo',
+       };
+ 
+diff --git a/app/lib/screens/venzo_store_screen.dart b/app/lib/screens/venzo_store_screen.dart
+index 122cb35..56d6116 100644
+--- a/app/lib/screens/venzo_store_screen.dart
++++ b/app/lib/screens/venzo_store_screen.dart
+@@ -264,6 +264,14 @@ class _VenzoStoreScreenState extends State<VenzoStoreScreen> {
+                     onTap: () =>
+                         Navigator.pop(context, VenzoPaymentMethod.oxaPay),
+                   ),
++                if (_paymentMethods.contains(VenzoPaymentMethod.aban))
++                  ListTile(
++                    leading: const Icon(Icons.account_balance_rounded),
++                    title: const Text('آبان گیت‌وی'),
++                    subtitle: const Text('پرداخت ریالی کارت‌به‌کارت با تأیید خودکار'),
++                    onTap: () =>
++                        Navigator.pop(context, VenzoPaymentMethod.aban),
++                  ),
+                 if (_paymentMethods.contains(VenzoPaymentMethod.rialGateway))
+                   ListTile(
+                     leading: const Icon(Icons.account_balance_rounded),
+diff --git a/app/lib/services/venzo_store_api.dart b/app/lib/services/venzo_store_api.dart
+index 75b61b6..87a135d 100644
+--- a/app/lib/services/venzo_store_api.dart
++++ b/app/lib/services/venzo_store_api.dart
+@@ -217,7 +217,7 @@ class VenzoPlan {
+       );
+ }
+ 
+-enum VenzoPaymentMethod { wallet, trx, card, swapPay, oxaPay, rialGateway }
++enum VenzoPaymentMethod { wallet, trx, card, swapPay, oxaPay, aban, rialGateway }
+ 
+ extension VenzoPaymentMethodApi on VenzoPaymentMethod {
+   String get apiValue => switch (this) {
+@@ -226,6 +226,7 @@ extension VenzoPaymentMethodApi on VenzoPaymentMethod {
+         VenzoPaymentMethod.card => 'card',
+         VenzoPaymentMethod.swapPay => 'swappay',
+         VenzoPaymentMethod.oxaPay => 'oxapay',
++        VenzoPaymentMethod.aban => 'aban',
+         VenzoPaymentMethod.rialGateway => 'rial_gateway',
+       };
+ 
+@@ -235,6 +236,7 @@ extension VenzoPaymentMethodApi on VenzoPaymentMethod {
+         'card' => VenzoPaymentMethod.card,
+         'swappay' => VenzoPaymentMethod.swapPay,
+         'oxapay' => VenzoPaymentMethod.oxaPay,
++        'aban' => VenzoPaymentMethod.aban,
+         'rial_gateway' => VenzoPaymentMethod.rialGateway,
+         _ => null,
+       };
+diff --git a/app/test/services/venzo_payment_gateways_test.dart b/app/test/services/venzo_payment_gateways_test.dart
+index d7e7998..38b84be 100644
+--- a/app/test/services/venzo_payment_gateways_test.dart
++++ b/app/test/services/venzo_payment_gateways_test.dart
+@@ -5,10 +5,12 @@ void main() {
+   test('hosted payment methods map to API values', () {
+     expect(VenzoPaymentMethod.swapPay.apiValue, 'swappay');
+     expect(VenzoPaymentMethod.oxaPay.apiValue, 'oxapay');
++    expect(VenzoPaymentMethod.aban.apiValue, 'aban');
+     expect(VenzoPaymentMethodApi.fromApi('swappay'),
+         VenzoPaymentMethod.swapPay);
+     expect(
+         VenzoPaymentMethodApi.fromApi('oxapay'), VenzoPaymentMethod.oxaPay);
++    expect(VenzoPaymentMethodApi.fromApi('aban'), VenzoPaymentMethod.aban);
+   });
+ 
+   test('provider failure status is represented as a failed order', () {
