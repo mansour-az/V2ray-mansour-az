@@ -2,7 +2,7 @@ const ABAN_ORIGIN = "https://abangateway.ir";
 
 function tokenFor(env) {
   const token = String(env.ABAN_API_TOKEN || "").trim();
-  return /^(live|test)_[A-Za-z0-9_-]{8,}$/.test(token) ? token : "";
+  return /^(live|test)_\S{8,}$/.test(token) ? token : "";
 }
 
 async function abanRequest(env, path, init = {}) {
