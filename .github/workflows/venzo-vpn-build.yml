@@ -1,6 +1,6 @@
 name: Build Venzo VPN 2.7.0
 
-# Release candidate: 2026-08-28 AbanGateway payments and API announcements
+# Public release approved: 2026-08-28 AbanGateway payments and API announcements
 
 on:
   push:
