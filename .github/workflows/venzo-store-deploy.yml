@@ -69,6 +69,8 @@ jobs:
           SWAPPAY_API_KEY: ${{ secrets.SWAPPAY_API_KEY }}
           SWAPPAY_USERNAME: ${{ secrets.SWAPPAY_USERNAME }}
           OXAPAY_MERCHANT_API_KEY: ${{ secrets.OXAPAY_MERCHANT_API_KEY }}
+          ABAN_API_TOKEN: ${{ secrets.ABAN_API_TOKEN }}
+          ABAN_WEBHOOK_SECRET: ${{ secrets.ABAN_WEBHOOK_SECRET }}
         run: |
           set -euo pipefail
           required=(
@@ -76,6 +78,7 @@ jobs:
             PASARGUARD_BASE_URL PASARGUARD_API_KEY PROVISION_SECRET
             TRON_WALLET_ADDRESS TRONGRID_API_KEY CARD_NUMBER CARD_HOLDER
             SWAPPAY_API_KEY SWAPPAY_USERNAME OXAPAY_MERCHANT_API_KEY
+            ABAN_API_TOKEN ABAN_WEBHOOK_SECRET
           )
           for name in "${required[@]}"; do
             if [ -z "${!name:-}" ]; then
@@ -87,6 +90,12 @@ jobs:
             echo "PROVISION_SECRET must be at least 8 characters" >&2
             exit 1
           fi
+
+      - name: Test Store API
+        working-directory: venzo2/store-api
+        run: |
+          npm run check
+          npm test
 
       - name: Deploy Worker and encrypted secrets
         id: deploy
@@ -108,6 +117,8 @@ jobs:
             SWAPPAY_API_KEY
             SWAPPAY_USERNAME
             OXAPAY_MERCHANT_API_KEY
+            ABAN_API_TOKEN
+            ABAN_WEBHOOK_SECRET
         env:
           PASARGUARD_BASE_URL: ${{ secrets.PASARGUARD_BASE_URL }}
           PASARGUARD_API_KEY: ${{ secrets.PASARGUARD_API_KEY }}
@@ -119,6 +130,8 @@ jobs:
           SWAPPAY_API_KEY: ${{ secrets.SWAPPAY_API_KEY }}
           SWAPPAY_USERNAME: ${{ secrets.SWAPPAY_USERNAME }}
           OXAPAY_MERCHANT_API_KEY: ${{ secrets.OXAPAY_MERCHANT_API_KEY }}
+          ABAN_API_TOKEN: ${{ secrets.ABAN_API_TOKEN }}
+          ABAN_WEBHOOK_SECRET: ${{ secrets.ABAN_WEBHOOK_SECRET }}
 
       - name: Show deployment URL
         env:
