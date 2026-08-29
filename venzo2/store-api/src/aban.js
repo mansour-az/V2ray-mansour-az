@@ -43,6 +43,10 @@ export function abanConfigured(env) {
   return Boolean(tokenFor(env));
 }
 
+export function publicPaymentMethods(env) {
+  return abanConfigured(env) ? ["aban"] : [];
+}
+
 export async function createAbanInvoice(plan, env, context = {}) {
   const orderId = String(context.orderId || "").slice(0, 128);
   const callbackUrl = /^https:\/\//.test(String(context.callbackUrl || ""))

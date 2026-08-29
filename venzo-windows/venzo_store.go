@@ -49,8 +49,23 @@ type venzoCheckout struct {
 	ClientSecret string     `json:"client_secret"`
 }
 
+type venzoAccountCredentials struct {
+	ID       string `json:"id"`
+	Token    string `json:"token"`
+	Customer string `json:"customer"`
+}
+
+type venzoAccount struct {
+	ID           string `json:"id"`
+	Customer     string `json:"customer"`
+	BalanceIRR   int64  `json:"balance_irr"`
+	Subscription *struct {
+		SubscriptionURL string `json:"subscription_url"`
+	} `json:"subscription"`
+}
+
 type venzoStorePanel struct {
-	controller *core.AppController
+	controller  *core.AppController
 	onActivated func()
 	client      *http.Client
 
@@ -58,12 +73,14 @@ type venzoStorePanel struct {
 	plansBox       *fyne.Container
 	methodBox      *fyne.Container
 	resultBox      *fyne.Container
+	accountBox     *fyne.Container
 	status         *widget.Label
 	customer       *widget.Entry
 	buy            *widget.Button
 	selectedPlan   *venzoPlan
 	selectedMethod string
 	plans          []venzoPlan
+	account        venzoAccountCredentials
 
 	mu         sync.Mutex
 	pollCancel context.CancelFunc
@@ -81,6 +98,7 @@ func NewVenzoStorePanel(controller *core.AppController, onActivated func()) fyne
 	v.customer = widget.NewEntry()
 	v.customer.SetPlaceHolder("شماره موبایل یا نام کاربری تلگرام")
 	v.customer.OnChanged = func(string) { v.updateBuyState() }
+	v.accountBox = container.NewVBox()
 	v.status = widget.NewLabelWithStyle("در حال دریافت پلن‌ها…", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})
 	v.plansBox = container.NewVBox()
 	v.methodBox = container.NewVBox()
@@ -98,7 +116,7 @@ func NewVenzoStorePanel(controller *core.AppController, onActivated func()) fyne
 	v.root = container.NewVBox(
 		container.NewHBox(layout.NewSpacer(), container.NewVBox(heading, subtitle), widget.NewIcon(theme.AccountIcon())),
 		separator(),
-		widget.NewCard("۱. اطلاعات خریدار", "", v.customer),
+		widget.NewCard("۱. حساب کاربری", "اطلاعات فقط برای ساخت و بازیابی اشتراک استفاده می‌شود.", v.accountBox),
 		widget.NewCard("۲. انتخاب اشتراک", "", v.plansBox),
 		widget.NewCard("۳. روش پرداخت", "", v.methodBox),
 		privacy,
@@ -106,14 +124,139 @@ func NewVenzoStorePanel(controller *core.AppController, onActivated func()) fyne
 		v.status,
 		v.resultBox,
 	)
+	v.loadLocalAccount()
+	v.renderAccountPanel(nil)
 	go v.loadCatalog()
+	if v.account.ID != "" {
+		go v.refreshAccount()
+	}
 	return container.NewPadded(v.root)
+}
+
+func (v *venzoStorePanel) renderAccountPanel(snapshot *venzoAccount) {
+	if v.account.ID == "" {
+		register := widget.NewButtonWithIcon("ثبت اطلاعات و ورود", theme.AccountIcon(), v.registerAccount)
+		register.Importance = widget.HighImportance
+		v.accountBox.Objects = []fyne.CanvasObject{
+			v.customer,
+			trailingLabel("برای خرید، ابتدا شماره موبایل یا آیدی تلگرام خود را ثبت کنید.", false),
+			register,
+		}
+		v.accountBox.Refresh()
+		return
+	}
+	name := v.account.Customer
+	balance := int64(0)
+	if snapshot != nil {
+		if snapshot.Customer != "" {
+			name = snapshot.Customer
+		}
+		balance = snapshot.BalanceIRR
+	}
+	refresh := widget.NewButtonWithIcon("بروزرسانی حساب", theme.ViewRefreshIcon(), func() { go v.refreshAccount() })
+	v.accountBox.Objects = []fyne.CanvasObject{
+		trailingLabel("وارد شده با: "+name, true),
+		trailingLabel("موجودی: "+formatAmount(balance)+" ریال", false),
+		refresh,
+	}
+	v.accountBox.Refresh()
+}
+
+func (v *venzoStorePanel) registerAccount() {
+	customer := strings.TrimSpace(v.customer.Text)
+	if len(customer) < 3 {
+		v.status.SetText("شماره موبایل یا آیدی تلگرام معتبر وارد کنید.")
+		return
+	}
+	v.status.SetText("در حال ساخت حساب امن…")
+	go func() {
+		payload, _ := json.Marshal(map[string]string{"customer": customer})
+		req, err := http.NewRequest(http.MethodPost, venzoStoreAPI+"/v1/account/register", bytes.NewReader(payload))
+		if err != nil {
+			fyne.Do(func() { v.status.SetText("ساخت حساب ناموفق بود.") })
+			return
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+		var envelope struct {
+			Account      venzoAccount `json:"account"`
+			AccountToken string       `json:"account_token"`
+		}
+		if err := v.doJSON(req, &envelope); err != nil || envelope.Account.ID == "" || len(envelope.AccountToken) < 40 {
+			fyne.Do(func() { v.status.SetText("ساخت حساب ناموفق بود؛ دوباره تلاش کنید.") })
+			return
+		}
+		credentials := venzoAccountCredentials{ID: envelope.Account.ID, Token: envelope.AccountToken, Customer: envelope.Account.Customer}
+		if err := saveVenzoAccount(credentials); err != nil {
+			fyne.Do(func() {
+				v.status.SetText("حساب ساخته شد، اما ذخیره محلی آن ناموفق بود.")
+			})
+			return
+		}
+		v.account = credentials
+		fyne.Do(func() {
+			v.customer.SetText(credentials.Customer)
+			v.customer.Disable()
+			v.renderAccountPanel(&envelope.Account)
+			v.status.SetText("ورود با موفقیت انجام شد.")
+			v.updateBuyState()
+		})
+	}()
+}
+
+func (v *venzoStorePanel) refreshAccount() {
+	if v.account.ID == "" || v.account.Token == "" {
+		return
+	}
+	req, err := http.NewRequest(http.MethodGet, venzoStoreAPI+"/v1/account", nil)
+	if err != nil {
+		return
+	}
+	v.addAccountHeaders(req)
+	var envelope struct {
+		Account venzoAccount `json:"account"`
+	}
+	if err := v.doJSON(req, &envelope); err != nil {
+		fyne.Do(func() {
+			v.status.SetText("بروزرسانی حساب انجام نشد؛ اتصال اینترنت را بررسی کنید.")
+		})
+		return
+	}
+	if envelope.Account.Subscription != nil && strings.TrimSpace(envelope.Account.Subscription.SubscriptionURL) != "" {
+		if installVenzoSubscription(v.controller, envelope.Account.Subscription.SubscriptionURL) == nil {
+			core.RunParserProcess()
+		}
+	}
+	fyne.Do(func() {
+		v.renderAccountPanel(&envelope.Account)
+		v.status.SetText("اطلاعات حساب بروزرسانی شد.")
+	})
+}
+
+func (v *venzoStorePanel) loadLocalAccount() {
+	account, err := loadVenzoAccount()
+	if err != nil || account.ID == "" || account.Token == "" {
+		return
+	}
+	v.account = account
+	v.customer.SetText(account.Customer)
+	v.customer.Disable()
+}
+
+func (v *venzoStorePanel) addAccountHeaders(req *http.Request) {
+	if v.account.ID == "" || v.account.Token == "" {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+v.account.Token)
+	req.Header.Set("X-Venzo-Account", v.account.ID)
 }
 
 func (v *venzoStorePanel) loadCatalog() {
 	plans, err := v.fetchPlans()
 	if err != nil {
-		fyne.Do(func() { v.status.SetText("دریافت پلن‌ها ناموفق بود؛ اتصال اینترنت را بررسی کنید.") })
+		fyne.Do(func() {
+			v.status.SetText("دریافت پلن‌ها ناموفق بود؛ اتصال اینترنت را بررسی کنید.")
+		})
 		return
 	}
 	methods, _ := v.fetchPaymentMethods()
@@ -121,11 +264,10 @@ func (v *venzoStorePanel) loadCatalog() {
 	for _, method := range methods {
 		available[method] = true
 	}
-	// The two hosted methods requested for Venzo are always rendered. The API
-	// remains the final authority and returns a readable error if one is paused.
+	// Aban is the only public checkout method. The API remains the final
+	// authority and can temporarily hide it without requiring a new app build.
 	methodRows := []struct{ key, title, caption string }{
-		{"swappay", "Swap Wallet", "فاکتور SwapPay و بازگشت خودکار به Venzo"},
-		{"oxapay", "OxaPay", "پرداخت رمزارزی با فاکتور آنلاین"},
+		{"aban", "آبان", "پرداخت ریالی امن و فعال‌سازی خودکار اشتراک"},
 	}
 	fyne.Do(func() {
 		v.plans = plans
@@ -143,8 +285,9 @@ func (v *venzoStorePanel) loadCatalog() {
 		for _, row := range methodRows {
 			method := row
 			title := method.title
-			if len(available) > 0 && !available[method.key] {
-				title += " · در حال بررسی"
+			if !available[method.key] {
+				v.methodBox.Add(trailingLabel("درگاه آبان موقتاً در دسترس نیست.", false))
+				continue
 			}
 			button := widget.NewButtonWithIcon(title+" — "+method.caption, theme.AccountIcon(), func() {
 				v.selectedMethod = method.key
@@ -160,7 +303,7 @@ func (v *venzoStorePanel) loadCatalog() {
 }
 
 func (v *venzoStorePanel) updateBuyState() {
-	if v.selectedPlan != nil && v.selectedMethod != "" && strings.TrimSpace(v.customer.Text) != "" {
+	if v.selectedPlan != nil && v.selectedMethod == "aban" && v.account.ID != "" {
 		v.buy.Enable()
 		return
 	}
@@ -357,6 +500,7 @@ func (v *venzoStorePanel) postCheckout(planID, customer, method string) (venzoCh
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
+	v.addAccountHeaders(req)
 	var checkout venzoCheckout
 	if err := v.doJSON(req, &checkout); err != nil {
 		return venzoCheckout{}, err
@@ -469,15 +613,56 @@ func stringValue(value any) string {
 
 func providerError(method string, err error) string {
 	name := "درگاه پرداخت"
-	if method == "swappay" {
-		name = "Swap Wallet"
-	} else if method == "oxapay" {
-		name = "OxaPay"
+	if method == "aban" {
+		name = "آبان"
 	}
 	if strings.Contains(err.Error(), "503") {
 		return name + " در حال حاضر فاکتور صادر نکرد؛ دسترسی Merchant API را بررسی کنید."
 	}
 	return "اتصال به " + name + " ناموفق بود؛ دوباره تلاش کنید."
+}
+
+func venzoAccountPath() (string, error) {
+	root, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "Venzo VPN", "account.json"), nil
+}
+
+func loadVenzoAccount() (venzoAccountCredentials, error) {
+	path, err := venzoAccountPath()
+	if err != nil {
+		return venzoAccountCredentials{}, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return venzoAccountCredentials{}, err
+	}
+	var account venzoAccountCredentials
+	if err := json.Unmarshal(data, &account); err != nil {
+		return venzoAccountCredentials{}, err
+	}
+	return account, nil
+}
+
+func saveVenzoAccount(account venzoAccountCredentials) error {
+	path, err := venzoAccountPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.Marshal(account)
+	if err != nil {
+		return err
+	}
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, path)
 }
 
 func paymentStatusText(status string) string {

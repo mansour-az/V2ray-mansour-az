@@ -3,6 +3,7 @@ import {
   abanConfigured,
   createAbanInvoice,
   findAbanPayment,
+  publicPaymentMethods,
   verifyAbanWebhook,
 } from "./aban.js";
 
@@ -168,9 +169,8 @@ export default {
       return json({ plans: await plansFor(env) }, 200, publicHeaders());
     }
     if (request.method === "GET" && url.pathname === "/v1/payment-methods") {
-      const availability = await paymentAvailability(env);
       return json(
-        { methods: Object.entries(availability).filter(([, enabled]) => enabled).map(([method]) => method) },
+        { methods: publicPaymentMethods(env) },
         200,
         publicHeaders(),
       );
@@ -1331,19 +1331,8 @@ async function updateStoreSettings(request, env) {
 }
 
 async function paymentAvailability(env) {
-  const [rate, hostedRate] = await Promise.all([trxRate(env), usdRate(env)]);
-  const hostedRateReady = hostedRate.ok;
   return {
-    trx: Boolean(
-      env.TRON_WALLET_ADDRESS &&
-        rate.ok &&
-        env.TRONGRID_API_KEY,
-    ),
-    card: digits(env.CARD_NUMBER, 16).length === 16 && Boolean(clean(env.CARD_HOLDER, 120)),
-    swappay: Boolean(clean(env.SWAPPAY_API_KEY, 240)),
-    oxapay: Boolean(hostedRateReady && clean(env.OXAPAY_MERCHANT_API_KEY, 240)),
     aban: abanConfigured(env),
-    rial_gateway: false,
   };
 }
 

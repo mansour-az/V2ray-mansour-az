@@ -1,21 +1,23 @@
-# Venzo VPN for Windows 2.6.0 — Product Specification
+# Venzo VPN for Windows 2.7.0 — Product Specification
 
 ## Goal
 
 Deliver a Windows 10/11 desktop client branded entirely as Venzo VPN, using the proven sing-box desktop runtime while keeping all visible product identity, support links, and application updates under the Venzo GitHub repository.
 
-## Version 2.6.0 scope
+## Version 2.7.0 scope
 
 - Windows 10/11 x64 executable and installer.
-- Calm navy/cyan visual theme derived from the supplied Persian security guide.
+- Cyber Pulse graphite/red interface with cyan diagnostics and Persian-first navigation.
 - Persian as the first-run language, with English fallback.
 - TUN/VPN mode and system-proxy mode through sing-box.
 - Subscription import/update, node list, latency testing, automatic ping after connect, and manual server selection.
 - Single-focus desktop shell with top navigation and one primary connection action.
 - One-click smart connection that tries several low-latency servers and only reports success after an end-to-end public-IP check.
 - Dedicated privacy page covering DNS protection, WebRTC testing and browser fingerprint guidance without claiming control over browser settings.
-- Native store with Swap Wallet (SwapPay) and OxaPay hosted invoices.
+- Persistent Venzo account registration and subscription recovery.
+- Native store with AbanGateway as the only public payment method.
 - Automatic payment polling and secure subscription activation after fulfillment.
+- Native Windows notifications for updates, discounts, and service news, checked every six hours.
 - System tray controls, launch at startup, and start minimized.
 - Update checks only against `mansour-az/V2ray-mansour-az` Venzo releases.
 - Support: `@Venzzo_vpn`; channel: `https://t.me/venzo_vpn`.
@@ -32,7 +34,7 @@ Deliver a Windows 10/11 desktop client branded entirely as Venzo VPN, using the 
 
 - Wallet balance, account history and renewal management shared with Android.
 - Full RTL layout primitives (Persian content uses Fyne's current trailing alignment support).
-- Signed installer and Microsoft Store packaging (require a code-signing identity/account).
+- Microsoft Store publication (requires a Partner Center identity).
 
 ## Acceptance criteria
 
@@ -40,9 +42,10 @@ Deliver a Windows 10/11 desktop client branded entirely as Venzo VPN, using the 
 2. App update actions open only the Venzo GitHub release page.
 3. Help shows only Venzo support/channel/repository destinations.
 4. The default subscription User-Agent starts with `VenzoVPN/`.
-5. The primary UI color is cyan on a dark navy surface with large Persian labels and low visual density.
+5. The primary UI color is Venzo red on graphite surfaces with cyan diagnostics, Persian labels, and low visual density.
 6. The app can import a subscription, update it, start TUN, ping nodes, switch the selected node, and reject nodes that have latency but no working internet route.
 7. CI creates `Venzo-VPN.exe`, a portable ZIP, and `Venzo-VPN-Setup-<version>.exe`.
-8. SwapPay and OxaPay invoices are created server-side without provider secrets in the binary.
+8. Aban invoices are created and verified server-side without provider secrets in the binary.
 9. A fulfilled order adds its subscription to the local Venzo state and refreshes the core configuration.
 10. The UI never labels a connection as successful solely because the sing-box process is running or a node returns a Ping value.
+11. CI creates Setup EXE, portable ZIP, signed MSIX, a public signing certificate, and SHA-256 checksums.

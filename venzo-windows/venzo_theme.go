@@ -8,7 +8,7 @@ import (
 )
 
 // venzoTheme keeps native Fyne typography and icons while applying Venzo's
-// cyan accent and calm navy surfaces inspired by the supplied guide.
+// red Cyber Pulse accent, cyan diagnostics, and graphite surfaces.
 type venzoTheme struct {
 	base fyne.Theme
 }
@@ -18,7 +18,7 @@ func newVenzoTheme(base fyne.Theme) fyne.Theme {
 }
 
 // ApplyVenzoTheme switches the complete application between day and night
-// while keeping Venzo's new cyan controls.
+// while keeping Venzo's Cyber Pulse controls.
 func ApplyVenzoTheme(application fyne.App, dark bool) {
 	if application == nil {
 		return
@@ -33,22 +33,22 @@ func ApplyVenzoTheme(application fyne.App, dark bool) {
 func (t *venzoTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
 	switch name {
 	case theme.ColorNamePrimary:
-		return color.NRGBA{R: 88, G: 213, B: 228, A: 255}
+		return color.NRGBA{R: 239, G: 35, B: 60, A: 255}
 	case theme.ColorNameFocus:
-		return color.NRGBA{R: 108, G: 229, B: 239, A: 255}
+		return color.NRGBA{R: 255, G: 64, B: 87, A: 255}
 	case theme.ColorNameSelection:
-		return color.NRGBA{R: 88, G: 213, B: 228, A: 112}
+		return color.NRGBA{R: 239, G: 35, B: 60, A: 112}
 	case theme.ColorNameBackground:
 		if variant == theme.VariantDark {
-			return color.NRGBA{R: 5, G: 12, B: 24, A: 255}
+			return color.NRGBA{R: 7, G: 10, B: 16, A: 255}
 		}
 	case theme.ColorNameMenuBackground, theme.ColorNameInputBackground:
 		if variant == theme.VariantDark {
-			return color.NRGBA{R: 9, G: 24, B: 38, A: 255}
+			return color.NRGBA{R: 12, G: 17, B: 26, A: 255}
 		}
 	case theme.ColorNameSeparator:
 		if variant == theme.VariantDark {
-			return color.NRGBA{R: 27, G: 76, B: 88, A: 255}
+			return color.NRGBA{R: 43, G: 49, B: 61, A: 255}
 		}
 	case theme.ColorNameSuccess:
 		return color.NRGBA{R: 0, G: 230, B: 118, A: 255}

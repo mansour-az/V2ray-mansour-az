@@ -2,7 +2,7 @@ name: Build Venzo VPN for Windows
 
 on:
   push:
-    branches: [venzo-2.0, codex/venzo-windows-2.6.0-ux]
+    branches: [venzo-2.0, codex/venzo-windows-2.7.0-cyber]
     paths:
       - "venzo-windows/**"
       - ".github/workflows/venzo-windows-build.yml"
@@ -11,7 +11,7 @@ on:
       version:
         description: Windows app version without v prefix
         required: true
-        default: 2.6.0
+        default: 2.7.0
         type: string
       publish_release:
         description: Publish a GitHub prerelease after a successful build
@@ -32,8 +32,8 @@ jobs:
       UPSTREAM_COMMIT: 7bf58b82cd5c67c1be92e556cd0cea199f479d9f
       CORE_VERSION: 1.14.0-lx.26
       WINTUN_VERSION: 0.14.1
-      BUILD_VERSION: ${{ inputs.version || '2.6.0' }}
-      APP_VERSION: v${{ inputs.version || '2.6.0' }}
+      BUILD_VERSION: ${{ inputs.version || '2.7.0' }}
+      APP_VERSION: v${{ inputs.version || '2.7.0' }}
     steps:
       - name: Checkout Venzo source
         uses: actions/checkout@v4
@@ -59,6 +59,7 @@ jobs:
           Copy-Item venzo-windows/venzo_theme.go desktop/core/uiservice/venzo_theme.go
           Copy-Item venzo-windows/venzo_shell.go desktop/ui/venzo_shell.go
           Copy-Item venzo-windows/venzo_store.go desktop/ui/venzo_store.go
+          Copy-Item venzo-windows/venzo_notifications.go desktop/ui/venzo_notifications.go
           Copy-Item venzo-windows/venzo_updater.go desktop/ui/venzo_updater.go
           Copy-Item venzo-windows/get_free.json desktop/bin/get_free.json
           [IO.File]::WriteAllBytes('desktop/assets/app.ico', [Convert]::FromBase64String((Get-Content 'venzo-windows/icon-app.ico.b64' -Raw).Trim()))
@@ -136,6 +137,31 @@ jobs:
 
           Compress-Archive -Path staging/* -DestinationPath "Venzo-VPN-Windows-x64-$env:BUILD_VERSION.zip" -CompressionLevel Optimal
 
+      - name: Verify a real VPN route on Windows
+        shell: pwsh
+        timeout-minutes: 7
+        run: |
+          Copy-Item staging smoke -Recurse -Force
+          $resultPath = Join-Path $PWD 'venzo-connectivity-smoke.json'
+          $env:VENZO_CONNECTIVITY_SMOKE = '1'
+          $env:VENZO_SMOKE_RESULT = $resultPath
+          $process = Start-Process -FilePath (Resolve-Path 'smoke\Venzo-VPN.exe') -WorkingDirectory (Resolve-Path smoke) -ArgumentList '-tray' -PassThru
+          try {
+            $deadline = (Get-Date).AddMinutes(6)
+            while ((Get-Date) -lt $deadline -and -not (Test-Path $resultPath)) {
+              Start-Sleep -Seconds 2
+            }
+            if (-not (Test-Path $resultPath)) { throw 'Venzo connectivity smoke test timed out' }
+            $result = Get-Content $resultPath -Raw | ConvertFrom-Json
+            $result | ConvertTo-Json | Write-Host
+            if (-not $result.verified) { throw "Real VPN route was not verified: $($result.failure)" }
+            if (-not $result.proxy) { throw 'No active proxy was reported by the real connection test' }
+            if ($result.baseline_ip -eq $result.current_ip) { throw 'Public IP did not change through Venzo VPN' }
+          } finally {
+            if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+            Get-Process sing-box -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Build installer
         shell: pwsh
         run: |
@@ -148,12 +174,65 @@ jobs:
           }
           & $iscc "/DAppVersion=$env:BUILD_VERSION" venzo-windows/installer.iss
 
+      - name: Build and sign MSIX package
+        shell: pwsh
+        run: |
+          $parts = @($env:BUILD_VERSION.Split('.') | ForEach-Object { [int]$_ })
+          while ($parts.Count -lt 4) { $parts += 0 }
+          if ($parts.Count -gt 4) { throw 'MSIX version must contain at most four numeric parts' }
+          $msixVersion = $parts -join '.'
+          $layout = Join-Path $PWD 'msix-layout'
+          New-Item -ItemType Directory -Force "$layout\Assets" | Out-Null
+          Copy-Item staging\* $layout -Recurse -Force
+          (Get-Content venzo-windows\AppxManifest.xml.in -Raw).Replace('__VERSION__', $msixVersion) |
+            Set-Content "$layout\AppxManifest.xml" -Encoding utf8
+
+          Add-Type -AssemblyName System.Drawing
+          $sourceIcon = [System.Drawing.Icon]::new((Resolve-Path 'desktop\assets\app.ico').Path)
+          $sourceBitmap = $sourceIcon.ToBitmap()
+          function Write-Logo([int]$width, [int]$height, [string]$name) {
+            $bitmap = [System.Drawing.Bitmap]::new($width, $height)
+            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+            $graphics.Clear([System.Drawing.Color]::FromArgb(7, 10, 16))
+            $graphics.DrawImage($sourceBitmap, 0, 0, $width, $height)
+            $bitmap.Save((Join-Path "$layout\Assets" $name), [System.Drawing.Imaging.ImageFormat]::Png)
+            $graphics.Dispose()
+            $bitmap.Dispose()
+          }
+          Write-Logo 50 50 'StoreLogo.png'
+          Write-Logo 44 44 'Square44x44Logo.png'
+          Write-Logo 150 150 'Square150x150Logo.png'
+          Write-Logo 310 150 'Wide310x150Logo.png'
+          $sourceBitmap.Dispose()
+          $sourceIcon.Dispose()
+
+          $makeappx = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter makeappx.exe |
+            Where-Object FullName -Match '\\x64\\' | Sort-Object FullName -Descending | Select-Object -First 1
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object FullName -Match '\\x64\\' | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $makeappx -or -not $signtool) { throw 'Windows SDK packaging tools are unavailable' }
+          $msix = "Venzo-VPN-Windows-x64-$env:BUILD_VERSION.msix"
+          & $makeappx.FullName pack /d $layout /p $msix /o
+
+          $certificate = New-SelfSignedCertificate -Type Custom -Subject 'CN=Venzo VPN' -KeyUsage DigitalSignature `
+            -FriendlyName 'Venzo VPN Release' -CertStoreLocation 'Cert:\CurrentUser\My' -KeyExportPolicy Exportable `
+            -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3','2.5.29.19={text}')
+          $passwordText = [guid]::NewGuid().ToString('N')
+          $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
+          Export-Certificate -Cert $certificate -FilePath Venzo-VPN-Release.cer | Out-Null
+          Export-PfxCertificate -Cert $certificate -FilePath venzo-signing.pfx -Password $password | Out-Null
+          & $signtool.FullName sign /fd SHA256 /f venzo-signing.pfx /p $passwordText $msix
+          & $signtool.FullName sign /fd SHA256 /f venzo-signing.pfx /p $passwordText "venzo-windows\dist\Venzo-VPN-Setup-$env:BUILD_VERSION.exe"
+          Remove-Item venzo-signing.pfx -Force
+
       - name: Write checksums
         shell: pwsh
         run: |
           $files = @(
             "Venzo-VPN-Windows-x64-$env:BUILD_VERSION.zip",
-            "venzo-windows/dist/Venzo-VPN-Setup-$env:BUILD_VERSION.exe"
+            "venzo-windows/dist/Venzo-VPN-Setup-$env:BUILD_VERSION.exe",
+            "Venzo-VPN-Windows-x64-$env:BUILD_VERSION.msix",
+            "Venzo-VPN-Release.cer"
           )
           $files | ForEach-Object {
             $h = Get-FileHash $_ -Algorithm SHA256
@@ -163,10 +242,12 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Venzo-VPN-Windows-${{ inputs.version || '2.6.0' }}
+          name: Venzo-VPN-Windows-${{ inputs.version || '2.7.0' }}
           path: |
-            Venzo-VPN-Windows-x64-${{ inputs.version || '2.6.0' }}.zip
-            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '2.6.0' }}.exe
+            Venzo-VPN-Windows-x64-${{ inputs.version || '2.7.0' }}.zip
+            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '2.7.0' }}.exe
+            Venzo-VPN-Windows-x64-${{ inputs.version || '2.7.0' }}.msix
+            Venzo-VPN-Release.cer
             SHA256SUMS.txt
           if-no-files-found: error
 
@@ -174,17 +255,19 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: windows-v${{ inputs.version || '2.6.0' }}
-          name: Venzo VPN for Windows ${{ inputs.version || '2.6.0' }}
+          tag_name: windows-v${{ inputs.version || '2.7.0' }}
+          name: Venzo VPN for Windows ${{ inputs.version || '2.7.0' }}
           prerelease: true
           generate_release_notes: false
           body: |
-            نسخه دسکتاپ Venzo VPN 2.6.0 برای Windows 10/11 x64 با رابط ساده، اتصال تأییدشده و راهنمای حریم خصوصی.
+            نسخه دسکتاپ Venzo VPN 2.7.0 برای Windows 10/11 x64 با رابط Cyber Pulse، اتصال تأییدشده، حساب کاربری، پرداخت آبان و اعلان‌های بومی Windows.
 
-            فایل `Setup` برای نصب معمولی و فایل ZIP برای اجرای پرتابل است.
+            فایل `Setup` برای نصب معمولی، فایل `MSIX` برای نصب بسته‌ای و فایل ZIP برای اجرای پرتابل است. برای MSIX گواهی عمومی همراه Release را در Trusted People نصب کنید.
           files: |
-            Venzo-VPN-Windows-x64-${{ inputs.version || '2.6.0' }}.zip
-            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '2.6.0' }}.exe
+            Venzo-VPN-Windows-x64-${{ inputs.version || '2.7.0' }}.zip
+            venzo-windows/dist/Venzo-VPN-Setup-${{ inputs.version || '2.7.0' }}.exe
+            Venzo-VPN-Windows-x64-${{ inputs.version || '2.7.0' }}.msix
+            Venzo-VPN-Release.cer
             SHA256SUMS.txt
 
       - name: Publish update manifest
