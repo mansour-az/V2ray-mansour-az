@@ -34,7 +34,8 @@ LicenseFile=..\staging\LICENSE
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "..\staging\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\staging\bin\settings.json"; DestDir: "{app}\bin"; Flags: onlyifdoesntexist
+Source: "..\staging\*"; DestDir: "{app}"; Excludes: "bin\settings.json"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\Venzo VPN"; Filename: "{app}\{#AppExeName}"

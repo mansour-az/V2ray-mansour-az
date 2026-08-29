@@ -118,6 +118,10 @@ jobs:
           Copy-Item venzo-windows/THIRD_PARTY_NOTICES.md staging/THIRD_PARTY_NOTICES.md
           Copy-Item desktop/bin/wizard_template.json staging/bin/wizard_template.json
           Copy-Item venzo-windows/get_free.json staging/bin/get_free.json
+          @{
+            lang = 'fa'
+            last_template_launcher_version = $env:APP_VERSION
+          } | ConvertTo-Json | Set-Content staging/bin/settings.json -Encoding utf8NoBOM
 
           $release = Invoke-RestMethod "https://api.github.com/repos/Leadaxe/sing-box-lx/releases/tags/v$env:CORE_VERSION"
           $asset = $release.assets | Where-Object { $_.name -like '*windows-amd64.zip' } | Select-Object -First 1
