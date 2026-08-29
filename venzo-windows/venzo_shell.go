@@ -847,6 +847,12 @@ func refreshVenzoConfig(controller *core.AppController) error {
 	if _, err := controller.ConfigService.UpdateConfigFromSubscriptions(); err != nil {
 		return err
 	}
+	// Update performs a best-effort rebuild and intentionally does not return
+	// rebuild errors. A first-run client needs a concrete config before it can
+	// start sing-box, so repeat the idempotent rebuild and surface its error.
+	if err := controller.RebuildConfigIfDirty(); err != nil {
+		return fmt.Errorf("rebuild config: %w", err)
+	}
 	if _, err := os.Stat(controller.FileService.ConfigPath); err != nil {
 		return fmt.Errorf("config.json was not created: %w", err)
 	}
