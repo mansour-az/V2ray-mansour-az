@@ -184,10 +184,6 @@ func (v *venzoHome) writeConnectivitySmoke(result venzoConnectivitySmokeResult) 
 func (v *venzoHome) bootstrap() {
 	if err := ensureVenzoFreeSources(v.controller); err != nil {
 		debuglog.WarnLog("Venzo bootstrap: failed to prepare free sources: %v", err)
-		return
-	}
-	if _, err := os.Stat(v.controller.FileService.ConfigPath); os.IsNotExist(err) {
-		core.RunParserProcess()
 	}
 }
 
@@ -592,13 +588,9 @@ func (v *venzoHome) toggleConnection() {
 		if baselineErr != nil {
 			debuglog.WarnLog("Venzo smart-connect: baseline public IP unavailable: %v", baselineErr)
 		}
-		if err := ensureVenzoFreeSources(v.controller); err != nil {
-			debuglog.WarnLog("Venzo bootstrap: %v", err)
-		}
 		fyne.Do(func() { v.status.SetText("در حال ساخت تنظیمات امن…") })
-		core.RunParserProcess()
-		if !waitForFile(v.controller.FileService.ConfigPath, 25*time.Second) {
-			v.failConnection("ساخت تنظیمات ناموفق بود؛ دوباره تلاش کنید")
+		if err := refreshVenzoConfig(v.controller); err != nil {
+			v.failConnection("ساخت تنظیمات ناموفق بود: " + err.Error())
 			return
 		}
 		fyne.Do(func() { v.status.SetText("در حال راه‌اندازی موتور VPN…") })
@@ -661,12 +653,11 @@ func (v *venzoHome) refreshSources() {
 	v.status.SetText("در حال بروزرسانی منابع رایگان…")
 	go func() {
 		defer fyne.Do(v.refresh.Enable)
-		if err := ensureVenzoFreeSources(v.controller); err != nil {
+		if err := refreshVenzoConfig(v.controller); err != nil {
+			debuglog.WarnLog("Venzo refresh: %v", err)
 			fyne.Do(func() { v.status.SetText("خطا در آماده‌سازی منابع") })
 			return
 		}
-		core.RunParserProcess()
-		<-time.After(4 * time.Second)
 		fyne.Do(func() {
 			v.serverSignature = ""
 			v.status.SetText("منابع بروزرسانی شدند")
@@ -817,6 +808,49 @@ func ensureVenzoFreeSources(controller *core.AppController) error {
 		s.Connections.Defaults.Reload = "1h"
 	}
 	return s.Save(statePath)
+}
+
+func refreshVenzoConfig(controller *core.AppController) error {
+	if err := ensureVenzoFreeSources(controller); err != nil {
+		return err
+	}
+	if controller == nil || controller.ConfigService == nil || controller.FileService == nil {
+		return fmt.Errorf("configuration service unavailable")
+	}
+
+	controller.ParserMutex.Lock()
+	if controller.ParserRunning {
+		controller.ParserMutex.Unlock()
+		deadline := time.Now().Add(2 * time.Minute)
+		for time.Now().Before(deadline) {
+			<-time.After(500 * time.Millisecond)
+			controller.ParserMutex.Lock()
+			running := controller.ParserRunning
+			controller.ParserMutex.Unlock()
+			if !running {
+				if _, err := os.Stat(controller.FileService.ConfigPath); err == nil {
+					return nil
+				}
+				return fmt.Errorf("configuration refresh finished without config.json")
+			}
+		}
+		return fmt.Errorf("configuration refresh timed out")
+	}
+	controller.ParserRunning = true
+	controller.ParserMutex.Unlock()
+	defer func() {
+		controller.ParserMutex.Lock()
+		controller.ParserRunning = false
+		controller.ParserMutex.Unlock()
+	}()
+
+	if _, err := controller.ConfigService.UpdateConfigFromSubscriptions(); err != nil {
+		return err
+	}
+	if _, err := os.Stat(controller.FileService.ConfigPath); err != nil {
+		return fmt.Errorf("config.json was not created: %w", err)
+	}
+	return nil
 }
 
 func selectBestProxy(controller *core.AppController) {
