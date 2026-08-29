@@ -1,6 +1,6 @@
 name: Build Venzo VPN 2.8.0
 
-# Release candidate: Telegram membership gate, private sources and Aban-only payments
+# Release candidate CI: Telegram membership gate, private sources and Aban-only payments
 
 on:
   push:
