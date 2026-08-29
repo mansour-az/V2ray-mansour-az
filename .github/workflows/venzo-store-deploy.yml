@@ -1,6 +1,6 @@
 name: Deploy Venzo Store API
 
-# Secret refresh: payment credentials 2026-08-24
+# Security refresh: Telegram gate and Aban-only payments 2026-08-29
 
 on:
   workflow_dispatch:
@@ -62,23 +62,21 @@ jobs:
           PASARGUARD_BASE_URL: ${{ secrets.PASARGUARD_BASE_URL }}
           PASARGUARD_API_KEY: ${{ secrets.PASARGUARD_API_KEY }}
           PROVISION_SECRET: ${{ secrets.PROVISION_SECRET }}
-          TRON_WALLET_ADDRESS: ${{ secrets.TRON_WALLET_ADDRESS }}
-          TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
-          CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
-          CARD_HOLDER: ${{ secrets.CARD_HOLDER }}
-          SWAPPAY_API_KEY: ${{ secrets.SWAPPAY_API_KEY }}
-          SWAPPAY_USERNAME: ${{ secrets.SWAPPAY_USERNAME }}
-          OXAPAY_MERCHANT_API_KEY: ${{ secrets.OXAPAY_MERCHANT_API_KEY }}
           ABAN_API_TOKEN: ${{ secrets.ABAN_API_TOKEN }}
           ABAN_WEBHOOK_SECRET: ${{ secrets.ABAN_WEBHOOK_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
+          TELEGRAM_REQUIRED_CHANNEL: ${{ secrets.TELEGRAM_REQUIRED_CHANNEL }}
+          TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
         run: |
           set -euo pipefail
           required=(
             CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
             PASARGUARD_BASE_URL PASARGUARD_API_KEY PROVISION_SECRET
-            TRON_WALLET_ADDRESS TRONGRID_API_KEY CARD_NUMBER CARD_HOLDER
-            SWAPPAY_API_KEY SWAPPAY_USERNAME OXAPAY_MERCHANT_API_KEY
             ABAN_API_TOKEN ABAN_WEBHOOK_SECRET
+            TELEGRAM_BOT_TOKEN TELEGRAM_WEBHOOK_SECRET TELEGRAM_BOT_USERNAME
+            TELEGRAM_REQUIRED_CHANNEL TELEGRAM_OWNER_ID
           )
           for name in "${required[@]}"; do
             if [ -z "${!name:-}" ]; then
@@ -110,28 +108,41 @@ jobs:
             PASARGUARD_BASE_URL
             PASARGUARD_API_KEY
             PROVISION_SECRET
-            TRON_WALLET_ADDRESS
-            TRONGRID_API_KEY
-            CARD_NUMBER
-            CARD_HOLDER
-            SWAPPAY_API_KEY
-            SWAPPAY_USERNAME
-            OXAPAY_MERCHANT_API_KEY
             ABAN_API_TOKEN
             ABAN_WEBHOOK_SECRET
+            TELEGRAM_BOT_TOKEN
+            TELEGRAM_WEBHOOK_SECRET
+            TELEGRAM_BOT_USERNAME
+            TELEGRAM_REQUIRED_CHANNEL
+            TELEGRAM_OWNER_ID
         env:
           PASARGUARD_BASE_URL: ${{ secrets.PASARGUARD_BASE_URL }}
           PASARGUARD_API_KEY: ${{ secrets.PASARGUARD_API_KEY }}
           PROVISION_SECRET: ${{ secrets.PROVISION_SECRET }}
-          TRON_WALLET_ADDRESS: ${{ secrets.TRON_WALLET_ADDRESS }}
-          TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
-          CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
-          CARD_HOLDER: ${{ secrets.CARD_HOLDER }}
-          SWAPPAY_API_KEY: ${{ secrets.SWAPPAY_API_KEY }}
-          SWAPPAY_USERNAME: ${{ secrets.SWAPPAY_USERNAME }}
-          OXAPAY_MERCHANT_API_KEY: ${{ secrets.OXAPAY_MERCHANT_API_KEY }}
           ABAN_API_TOKEN: ${{ secrets.ABAN_API_TOKEN }}
           ABAN_WEBHOOK_SECRET: ${{ secrets.ABAN_WEBHOOK_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
+          TELEGRAM_REQUIRED_CHANNEL: ${{ secrets.TELEGRAM_REQUIRED_CHANNEL }}
+          TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+
+      - name: Configure Telegram webhook
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          response="$(curl --silent --show-error --fail-with-body \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --data "$(jq -nc \
+              --arg url "${DEPLOYMENT_URL%/}/v1/auth/telegram/webhook" \
+              --arg secret "$TELEGRAM_WEBHOOK_SECRET" \
+              '{url:$url,secret_token:$secret,allowed_updates:["message"],drop_pending_updates:false}')" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook")"
+          jq -e '.ok == true and .result == true' <<<"$response" >/dev/null
 
       - name: Show deployment URL
         env:

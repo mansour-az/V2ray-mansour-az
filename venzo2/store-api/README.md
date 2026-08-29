@@ -1,16 +1,19 @@
 # Venzo Store API Worker
 
-This Worker exposes public plans, authenticated orders, automatic TRX and
-USDT-TRC20 verification through TronGrid, hosted SwapPay, OxaPay, and
-AbanGateway invoices,
-manual card-to-card review, and idempotent PasarGuard provisioning after
-payment.
+This Worker exposes public plans, authenticated orders, AbanGateway invoices,
+Telegram-gated free subscriptions, and idempotent PasarGuard provisioning
+after payment.
 
 ## Routes
 
 - `GET /health`
 - `GET /v1/plans`
 - `GET /v1/announcements`
+- `POST /v1/auth/telegram/sessions`
+- `GET /v1/auth/telegram/sessions/{login_token}`
+- `POST /v1/auth/telegram/membership`
+- `GET /v1/free/subscription` (Telegram member only)
+- `GET /v1/free/sources` (Telegram owner only)
 - `PUT /v1/internal/announcements` (server-to-server only)
 - `POST /v1/orders`
 - `GET /v1/orders/{id}`
@@ -18,7 +21,7 @@ payment.
 - `POST /v1/internal/card-orders/{id}/approve`
 - `POST /v1/internal/provision` (server-to-server only)
 
-Create-order methods include `trx`, `card`, `swappay`, `oxapay`, and `aban`. The response contains
+The only enabled external payment method is `aban`. The response contains
 a one-time `client_secret`; clients must send it as `Authorization: Bearer ...`
 when reading the order or submitting a card receipt. Crypto orders use a unique
 six-decimal amount and are fulfilled only after a confirmed on-chain match.
@@ -60,6 +63,11 @@ SWAPPAY_USERNAME=...
 OXAPAY_MERCHANT_API_KEY=...
 ABAN_API_TOKEN=live_... (or test_... for sandbox testing)
 ABAN_WEBHOOK_SECRET=...
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_WEBHOOK_SECRET=...
+TELEGRAM_BOT_USERNAME=VenzoLoginBot
+TELEGRAM_REQUIRED_CHANNEL=@Venzzo_vpn
+TELEGRAM_OWNER_ID=<numeric Telegram user id>
 ```
 
 Optional hosted-payment settings are `SWAPPAY_API_BASE` (defaults to
@@ -70,9 +78,17 @@ updated through the protected internal endpoint and are polled by Android in
 the background. The Android app receives only public announcement content and hosted checkout URLs;
 provider API keys stay in encrypted Worker secrets.
 
-Never commit `.dev.vars`, API keys, panel credentials, wallet details, card
-details, or Google service-account files. Prefer a scoped `pg_key_...` API key
+Never commit `.dev.vars`, API keys, panel credentials, Telegram credentials,
+or Google service-account files. Prefer a scoped `pg_key_...` API key
 instead of the PasarGuard administrator password.
+
+The Telegram bot must be an administrator of the required channel so
+`getChatMember` can verify membership. The deployment workflow registers the
+HTTPS webhook with Telegram using the configured webhook secret. Login
+challenges expire after ten minutes and app sessions expire after thirty days.
+Only the numeric `TELEGRAM_OWNER_ID` can read the source inventory; regular
+clients receive only the aggregated subscription and never receive upstream
+source URLs.
 
 After deployment, set the GitHub repository variable `VENZO_API_BASE` to the
 Worker HTTPS origin for GitHub APK builds. The Play build keeps the external
@@ -90,17 +106,13 @@ CLOUDFLARE_ACCOUNT_ID
 PASARGUARD_BASE_URL
 PASARGUARD_API_KEY
 PROVISION_SECRET
-TRON_WALLET_ADDRESS
-TRONGRID_API_KEY
-USDT_IRR
-TRX_IRR
-CARD_NUMBER
-CARD_HOLDER
-SWAPPAY_API_KEY
-SWAPPAY_USERNAME
-OXAPAY_MERCHANT_API_KEY
 ABAN_API_TOKEN
 ABAN_WEBHOOK_SECRET
+TELEGRAM_BOT_TOKEN
+TELEGRAM_WEBHOOK_SECRET
+TELEGRAM_BOT_USERNAME
+TELEGRAM_REQUIRED_CHANNEL
+TELEGRAM_OWNER_ID
 ```
 
 Add `PASARGUARD_GROUP_IDS` and `USDT_TRC20_CONTRACT` as repository variables.

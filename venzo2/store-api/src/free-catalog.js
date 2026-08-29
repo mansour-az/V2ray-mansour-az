@@ -24,6 +24,34 @@ const CURATED_SOURCES = [
     discovered: false,
   },
   {
+    id: "mahsa-mci-1",
+    name: "MahsaNet MCI",
+    repository: "mahsanet/MahsaFreeConfig",
+    url: "https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mci/sub_1.txt",
+    discovered: false,
+  },
+  {
+    id: "mahsa-mci-2",
+    name: "MahsaNet MCI Backup",
+    repository: "mahsanet/MahsaFreeConfig",
+    url: "https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mci/sub_2.txt",
+    discovered: false,
+  },
+  {
+    id: "mahsa-mtn-1",
+    name: "MahsaNet MTN",
+    repository: "mahsanet/MahsaFreeConfig",
+    url: "https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mtn/sub_1.txt",
+    discovered: false,
+  },
+  {
+    id: "mahsa-mtn-2",
+    name: "MahsaNet MTN Backup",
+    repository: "mahsanet/MahsaFreeConfig",
+    url: "https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mtn/sub_2.txt",
+    discovered: false,
+  },
+  {
     id: "freedom-v2ray-vless",
     name: "Freedom V2Ray",
     repository: "MahanKenway/Freedom-V2Ray",
@@ -89,7 +117,7 @@ export async function freeSubscriptionResponse(env, ctx) {
   return new Response(encoded, {
     status: 200,
     headers: {
-      ...publicHeaders(),
+      ...noStoreHeaders(),
       "Content-Type": "text/plain; charset=utf-8",
       "Profile-Update-Interval": "4",
       "X-Venzo-Config-Count": String(catalog.configs.length),
@@ -112,7 +140,7 @@ export async function freeSourcesResponse(env, ctx) {
       refresh_interval_hours: 4,
     },
     200,
-    publicHeaders(),
+    noStoreHeaders(),
   );
 }
 

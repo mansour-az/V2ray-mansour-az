@@ -1,0 +1,682 @@
+diff --git a/app/lib/controllers/subscription_controller.dart b/app/lib/controllers/subscription_controller.dart
+index 7939943..fc14590 100644
+--- a/app/lib/controllers/subscription_controller.dart
++++ b/app/lib/controllers/subscription_controller.dart
+@@ -209,6 +209,31 @@ class SubscriptionController extends ChangeNotifier {
+       }
+       await SettingsStorage.setVar('venzo_performance_sources_v4', 'true');
+     }
++    final privateCatalogMigrated = await SettingsStorage.getVar(
++          'venzo_private_catalog_v5',
++          'false',
++        ) ==
++        'true';
++    if (!privateCatalogMigrated) {
++      final catalog = VenzoManagedSubscriptions.defaults().first;
++      lists = lists.where((list) {
++        return list is! SubscriptionServers ||
++            !VenzoManagedSubscriptions.legacyIds.contains(list.id);
++      }).map((list) {
++        if (list is SubscriptionServers && list.id == catalog.id) {
++          return catalog;
++        }
++        return list;
++      }).toList();
++      if (!lists.whereType<SubscriptionServers>().any(
++          (list) => list.id == catalog.id)) {
++        lists = [catalog, ...lists];
++      }
++      await SettingsStorage.saveServerLists(lists);
++      await SettingsStorage.setVar('venzo_private_catalog_v5', 'true');
++      AppLog.I.info(
++          'Removed direct free-source URLs; installed authenticated Venzo catalog');
++    }
+     _entries = lists.map((l) => SubscriptionEntry(list: l)).toList();
+     // §076: bootstrap mtime compare — restore in-memory configDirty после
+     // possible kill mid-session. Если settings новее чем saved config →
+diff --git a/app/lib/main.dart b/app/lib/main.dart
+index 00c40ff..78b9da5 100644
+--- a/app/lib/main.dart
++++ b/app/lib/main.dart
+@@ -8,6 +8,7 @@ import 'package:intl/date_symbol_data_local.dart' show initializeDateFormatting;
+ import 'package:shared_preferences/shared_preferences.dart';
+ 
+ import 'screens/home_screen.dart';
++import 'screens/venzo_telegram_gate.dart';
+ import 'services/app_log.dart';
+ import 'services/l10n/locale_controller.dart';
+ import 'services/automation/automation_dispatcher.dart';
+@@ -321,7 +322,7 @@ class LxBoxApp extends StatelessWidget {
+           // §076: global observer срабатывает на возврат на home (root)
+           // — auto-rebuild config'а если configDirty.
+           navigatorObservers: [homeReturnObserver],
+-          home: const HomeScreen(),
++          home: const VenzoTelegramGate(child: HomeScreen()),
+         );
+       },
+     );
+diff --git a/app/lib/screens/venzo_account_screen.dart b/app/lib/screens/venzo_account_screen.dart
+index fe16208..feb7214 100644
+--- a/app/lib/screens/venzo_account_screen.dart
++++ b/app/lib/screens/venzo_account_screen.dart
+@@ -333,12 +333,6 @@ class _VenzoAccountScreenState extends State<VenzoAccountScreen> {
+           child: Column(
+             mainAxisSize: MainAxisSize.min,
+             children: [
+-              if (allowWallet)
+-                ListTile(
+-                  leading: const Icon(Icons.account_balance_wallet_rounded),
+-                  title: const Text('پرداخت از کیف پول'),
+-                  onTap: () => Navigator.pop(context, VenzoPaymentMethod.wallet),
+-                ),
+               if (_methods.contains(VenzoPaymentMethod.trx))
+                 ListTile(
+                   leading: const Icon(Icons.token_rounded),
+diff --git a/app/lib/screens/venzo_store_screen.dart b/app/lib/screens/venzo_store_screen.dart
+index 56d6116..9261ff9 100644
+--- a/app/lib/screens/venzo_store_screen.dart
++++ b/app/lib/screens/venzo_store_screen.dart
+@@ -30,7 +30,7 @@ class _VenzoStoreScreenState extends State<VenzoStoreScreen> {
+   VenzoSavedCheckout? _pending;
+   VenzoAccountCredentials? _credentials;
+   VenzoAccount? _account;
+-  Set<VenzoPaymentMethod> _paymentMethods = {VenzoPaymentMethod.trx};
++  Set<VenzoPaymentMethod> _paymentMethods = const {};
+ 
+   @override
+   void initState() {
+@@ -224,14 +224,6 @@ class _VenzoStoreScreenState extends State<VenzoStoreScreen> {
+                         .titleLarge
+                         ?.copyWith(fontWeight: FontWeight.w800)),
+                 const SizedBox(height: 12),
+-                if ((_account?.balanceIrr ?? 0) >= plan.price)
+-                  ListTile(
+-                    leading: const Icon(Icons.account_balance_wallet_rounded),
+-                    title: const Text('پرداخت از کیف پول'),
+-                    subtitle: Text('موجودی: ${_money(_account!.balanceIrr)}'),
+-                    onTap: () =>
+-                        Navigator.pop(context, VenzoPaymentMethod.wallet),
+-                  ),
+                 if (_paymentMethods.contains(VenzoPaymentMethod.trx))
+                   ListTile(
+                     leading: const Icon(Icons.token_rounded),
+diff --git a/workspace/scratch/55cd83f19652/venzo-auth-src/app/lib/screens/venzo_telegram_gate.dart b/app/lib/screens/venzo_telegram_gate.dart
+new file mode 100644
+index 0000000..50dfa1a
+--- /dev/null
++++ b/app/lib/screens/venzo_telegram_gate.dart
+@@ -0,0 +1,133 @@
++import 'dart:async';
++
++import 'package:flutter/material.dart';
++
++import '../services/url_launcher.dart';
++import '../services/venzo_telegram_auth.dart';
++
++class VenzoTelegramGate extends StatefulWidget {
++  const VenzoTelegramGate({super.key, required this.child});
++  final Widget child;
++
++  @override
++  State<VenzoTelegramGate> createState() => _VenzoTelegramGateState();
++}
++
++class _VenzoTelegramGateState extends State<VenzoTelegramGate> {
++  final _auth = VenzoTelegramAuth();
++  VenzoTelegramState? _state;
++  bool _busy = true;
++  String? _error;
++
++  @override
++  void initState() {
++    super.initState();
++    _restore();
++  }
++
++  Future<void> _restore() async {
++    try {
++      final state = await _auth.restore();
++      if (mounted) setState(() => _state = state);
++    } catch (_) {
++      if (mounted) setState(() => _error = 'ارتباط با سرویس ورود برقرار نشد.');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  Future<void> _login() async {
++    setState(() { _busy = true; _error = null; });
++    try {
++      final challenge = await _auth.createChallenge();
++      await UrlLauncher.open(challenge.botUrl, fallbackUrl: challenge.botUrl);
++      final deadline = DateTime.now().add(const Duration(minutes: 10));
++      while (mounted && DateTime.now().isBefore(deadline)) {
++        await Future<void>.delayed(const Duration(seconds: 2));
++        final state = await _auth.poll(challenge);
++        if (state != null) {
++          if (mounted) setState(() => _state = state);
++          return;
++        }
++      }
++      throw const VenzoTelegramException('LOGIN_TIMEOUT');
++    } catch (_) {
++      if (mounted) setState(() => _error = 'ورود کامل نشد؛ دوباره تلاش کنید.');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  Future<void> _verify() async {
++    setState(() { _busy = true; _error = null; });
++    try {
++      final state = await _auth.verifyMembership();
++      if (mounted) setState(() => _state = state);
++    } catch (_) {
++      if (mounted) setState(() => _error = 'عضویت تأیید نشد؛ ابتدا کانال را Join کنید.');
++    } finally {
++      if (mounted) setState(() => _busy = false);
++    }
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    if (_state?.channelMember == true) return widget.child;
++    final loggedIn = _state?.loggedIn == true;
++    final channelUrl = _state?.channelUrl;
++    return Directionality(
++      textDirection: TextDirection.rtl,
++      child: Scaffold(
++        body: SafeArea(
++          child: Center(
++            child: SingleChildScrollView(
++              padding: const EdgeInsets.all(28),
++              child: ConstrainedBox(
++                constraints: const BoxConstraints(maxWidth: 430),
++                child: Column(
++                  children: [
++                    Image.asset('assets/icons/app_icon.png', width: 92, height: 92),
++                    const SizedBox(height: 22),
++                    Text('ورود به Venzo VPN', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
++                    const SizedBox(height: 12),
++                    Text(
++                      loggedIn
++                          ? 'ورود تلگرام انجام شد. برای استفاده از سرورهای رایگان باید عضو کانال رسمی Venzo باشید.'
++                          : 'ثبت‌نام با حساب واقعی تلگرام انجام می‌شود؛ رمز یا شماره تلفن شما در اختیار Venzo قرار نمی‌گیرد.',
++                      textAlign: TextAlign.center,
++                    ),
++                    if (_error != null) ...[
++                      const SizedBox(height: 16),
++                      Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.error)),
++                    ],
++                    const SizedBox(height: 24),
++                    if (_busy) const CircularProgressIndicator() else if (!loggedIn)
++                      FilledButton.icon(
++                        onPressed: _login,
++                        icon: const Icon(Icons.send_rounded),
++                        label: const Text('ورود امن با تلگرام'),
++                      ) else ...[
++                      FilledButton.icon(
++                        onPressed: channelUrl == null ? null : () => UrlLauncher.open(channelUrl),
++                        icon: const Icon(Icons.campaign_rounded),
++                        label: const Text('عضویت در کانال Venzo'),
++                      ),
++                      const SizedBox(height: 12),
++                      OutlinedButton.icon(
++                        onPressed: _verify,
++                        icon: const Icon(Icons.verified_rounded),
++                        label: const Text('بررسی عضویت و ادامه'),
++                      ),
++                    ],
++                    const SizedBox(height: 18),
++                    const Text('دسترسی رایگان فقط تا زمانی فعال است که عضویت کانال توسط Telegram تأیید شود.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
++                  ],
++                ),
++              ),
++            ),
++          ),
++        ),
++      ),
++    );
++  }
++}
+diff --git a/app/lib/services/subscription/sources.dart b/app/lib/services/subscription/sources.dart
+index 36059c4..6325035 100644
+--- a/app/lib/services/subscription/sources.dart
++++ b/app/lib/services/subscription/sources.dart
+@@ -10,6 +10,7 @@ import '../parser/body_decoder.dart';
+ import '../parser/parse_all.dart';
+ import 'subscription_identity.dart';
+ import 'user_agent.dart';
++import '../venzo_telegram_auth.dart';
+ 
+ /// Источник подписки/узлов (§3.1 спеки 026). Sealed — топ-функция `fetch`
+ /// делает exhaustive switch.
+@@ -212,6 +213,7 @@ Future<FetchResult> _fetch(SubscriptionSource source, http.Client client) async
+       final reqHeaders = <String, String>{
+         'User-Agent': effectiveUa,
+         ...idHeaders,
++        ...await VenzoTelegramAuth.subscriptionHeaders(Uri.parse(u)),
+       };
+       // 3 попытки с exp backoff (1s, 3s) — worst case ~31s (9+1+9+3+9).
+       // Retry нужен для transient'ов мобильной сети (DNS fail, RST сразу
+diff --git a/app/lib/services/venzo_managed_subscriptions.dart b/app/lib/services/venzo_managed_subscriptions.dart
+index 08a47d8..5c5f644 100644
+--- a/app/lib/services/venzo_managed_subscriptions.dart
++++ b/app/lib/services/venzo_managed_subscriptions.dart
+@@ -1,38 +1,21 @@
+ import '../models/server_list.dart';
+ 
+-/// Curated, independent subscription sources seeded only on a fresh install.
+-///
+-/// Each source remains a normal editable subscription: users can disable,
+-/// remove, replace, or add their own providers. Subscription bodies are cached
+-/// by the existing HttpCache layer, so a temporary upstream outage does not
+-/// remove the last working nodes from the device.
++/// Venzo clients receive free nodes only through the authenticated Worker.
++/// Upstream catalog URLs stay server-side and are never seeded into the app.
+ class VenzoManagedSubscriptions {
+   VenzoManagedSubscriptions._();
+ 
+-  /// Kept on-device for emergency/manual failover, but disabled during normal
+-  /// operation so duplicate mirror bodies are not parsed and rebuilt together.
+-  static const fallbackIds = <String>{
++  static const legacyIds = <String>{
++    'venzo-managed-primary-v1',
+     'venzo-managed-backup-v1',
++    'venzo-myapp-verified-v1',
+     'venzo-universal-v1',
+     'venzo-universal-codeberg-v1',
+     'venzo-reality-v1',
+     'venzo-reality-gitlab-v1',
+   };
+ 
+-  static const _primaryUrl =
+-      'https://cdn.jsdelivr.net/gh/0xRadikal/Free-v2ray-Configs@main/top100.txt';
+-  static const _backupUrl =
+-      'https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/main/configs/vless_sub.txt';
+-  static const _verifiedUrl =
+-      'https://raw.githubusercontent.com/indelingDanil/MyAppVPN/proxylist/output/filtered.txt';
+-  static const _universalUrl =
+-      'https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt';
+-  static const _universalCodebergUrl =
+-      'https://codeberg.org/zieng2/wl/raw/branch/main/vless_universal.txt';
+-  static const _realityUrl =
+-      'https://raw.githack.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt';
+-  static const _realityGitLabUrl =
+-      'https://gitlab.com/igareck/vpn-configs-for-russia/raw/main/BLACK_VLESS_RUS.txt';
++  static const fallbackIds = <String>{};
+   static const _defaultApiBase =
+       'https://venzo-store-api.mascot-gt.workers.dev';
+   static const _apiBase = String.fromEnvironment(
+@@ -40,7 +23,7 @@ class VenzoManagedSubscriptions {
+     defaultValue: _defaultApiBase,
+   );
+ 
+-  static String get _catalogUrl =>
++  static String get catalogUrl =>
+       Uri.parse(_apiBase).resolve('/v1/free/subscription').toString();
+ 
+   static List<SubscriptionServers> defaults() => [
+@@ -50,79 +33,9 @@ class VenzoManagedSubscriptions {
+           enabled: true,
+           tagPrefix: 'VZF-',
+           detourPolicy: DetourPolicy.defaults,
+-          url: _catalogUrl,
++          url: catalogUrl,
+           updateIntervalHours: 1,
+           onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+         ),
+-        SubscriptionServers(
+-          id: 'venzo-managed-primary-v1',
+-          name: 'Venzo Fast Servers',
+-          enabled: true,
+-          tagPrefix: 'VZ1-',
+-          detourPolicy: DetourPolicy.defaults,
+-          url: _primaryUrl,
+-          updateIntervalHours: 1,
+-          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+-        ),
+-        SubscriptionServers(
+-          id: 'venzo-managed-backup-v1',
+-          name: 'Venzo Backup Servers',
+-          enabled: false,
+-          tagPrefix: 'VZ2-',
+-          detourPolicy: DetourPolicy.defaults,
+-          url: _backupUrl,
+-          updateIntervalHours: 2,
+-          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+-        ),
+-        SubscriptionServers(
+-          id: 'venzo-myapp-verified-v1',
+-          name: 'Venzo Verified',
+-          enabled: true,
+-          tagPrefix: 'VZV-',
+-          detourPolicy: DetourPolicy.defaults,
+-          url: _verifiedUrl,
+-          updateIntervalHours: 1,
+-          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+-        ),
+-        SubscriptionServers(
+-          id: 'venzo-universal-v1',
+-          name: 'Venzo Universal',
+-          enabled: false,
+-          tagPrefix: 'VZU-',
+-          detourPolicy: DetourPolicy.defaults,
+-          url: _universalUrl,
+-          updateIntervalHours: 1,
+-          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+-        ),
+-        SubscriptionServers(
+-          id: 'venzo-universal-codeberg-v1',
+-          name: 'Venzo Universal Mirror',
+-          enabled: false,
+-          tagPrefix: 'VZC-',
+-          detourPolicy: DetourPolicy.defaults,
+-          url: _universalCodebergUrl,
+-          updateIntervalHours: 2,
+-          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+-        ),
+-        SubscriptionServers(
+-          id: 'venzo-reality-v1',
+-          name: 'Venzo Reality',
+-          enabled: false,
+-          tagPrefix: 'VZR-',
+-          detourPolicy: DetourPolicy.defaults,
+-          url: _realityUrl,
+-          updateIntervalHours: 1,
+-          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+-        ),
+-        SubscriptionServers(
+-          id: 'venzo-reality-gitlab-v1',
+-          name: 'Venzo Reality Mirror',
+-          enabled: false,
+-          tagPrefix: 'VZG-',
+-          detourPolicy: DetourPolicy.defaults,
+-          url: _realityGitLabUrl,
+-          updateIntervalHours: 2,
+-          onUpdateAction: SubscriptionOnUpdateAction.rebuild,
+-        ),
+       ];
+ }
+diff --git a/app/lib/services/venzo_store_api.dart b/app/lib/services/venzo_store_api.dart
+index 87a135d..173f077 100644
+--- a/app/lib/services/venzo_store_api.dart
++++ b/app/lib/services/venzo_store_api.dart
+@@ -49,7 +49,7 @@ class VenzoStoreApi {
+     final json = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
+         .cast<String, dynamic>();
+     final rows = json['methods'];
+-    if (rows is! List) return {VenzoPaymentMethod.trx};
++    if (rows is! List) return const {};
+     return rows
+         .map((value) => VenzoPaymentMethodApi.fromApi(value.toString()))
+         .whereType<VenzoPaymentMethod>()
+diff --git a/workspace/scratch/55cd83f19652/venzo-auth-src/app/lib/services/venzo_telegram_auth.dart b/app/lib/services/venzo_telegram_auth.dart
+new file mode 100644
+index 0000000..10edab8
+--- /dev/null
++++ b/app/lib/services/venzo_telegram_auth.dart
+@@ -0,0 +1,188 @@
++import 'dart:async';
++import 'dart:convert';
++
++import 'package:flutter_secure_storage/flutter_secure_storage.dart';
++import 'package:http/http.dart' as http;
++
++class VenzoTelegramAuth {
++  VenzoTelegramAuth({http.Client? client}) : _client = client ?? http.Client();
++
++  static const _apiBase = String.fromEnvironment(
++    'VENZO_API_BASE',
++    defaultValue: 'https://venzo-store-api.mascot-gt.workers.dev',
++  );
++  static const _tokenKey = 'venzo_telegram_access_token_v1';
++  static const _storage = FlutterSecureStorage(
++    aOptions: AndroidOptions(encryptedSharedPreferences: true),
++  );
++  static String? _memoryToken;
++  final http.Client _client;
++
++  static Future<String?> accessToken() async {
++    final cached = _memoryToken;
++    if (cached != null && cached.isNotEmpty) return cached;
++    final stored = await _storage.read(key: _tokenKey);
++    _memoryToken = stored;
++    return stored;
++  }
++
++  static bool isFreeCatalog(Uri uri) {
++    final base = Uri.tryParse(_apiBase);
++    return base != null &&
++        uri.scheme == base.scheme &&
++        uri.host == base.host &&
++        uri.path == '/v1/free/subscription';
++  }
++
++  static Future<Map<String, String>> subscriptionHeaders(Uri uri) async {
++    if (!isFreeCatalog(uri)) return const {};
++    final value = await accessToken();
++    return value == null || value.isEmpty
++        ? const {}
++        : {'Authorization': 'Bearer $value'};
++  }
++
++  Future<VenzoTelegramState> restore() async {
++    final value = await accessToken();
++    if (value == null || value.isEmpty) return const VenzoTelegramState.loggedOut();
++    final response = await _client.get(
++      _uri('/v1/auth/me'),
++      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $value'},
++    ).timeout(const Duration(seconds: 15));
++    if (response.statusCode == 401) {
++      await logout();
++      return const VenzoTelegramState.loggedOut();
++    }
++    if (response.statusCode != 200) throw VenzoTelegramException('AUTH_${response.statusCode}');
++    return _stateFrom(response);
++  }
++
++  Future<VenzoLoginChallenge> createChallenge() async {
++    final response = await _client.post(
++      _uri('/v1/auth/telegram/sessions'),
++      headers: const {'Accept': 'application/json'},
++    ).timeout(const Duration(seconds: 15));
++    if (response.statusCode != 201) throw VenzoTelegramException('LOGIN_${response.statusCode}');
++    final json = _json(response);
++    return VenzoLoginChallenge(
++      token: json['login_token']?.toString() ?? '',
++      pollSecret: json['poll_secret']?.toString() ?? '',
++      botUrl: json['bot_url']?.toString() ?? '',
++    );
++  }
++
++  Future<VenzoTelegramState?> poll(VenzoLoginChallenge challenge) async {
++    final response = await _client.get(
++      _uri('/v1/auth/telegram/sessions/${challenge.token}'),
++      headers: {
++        'Accept': 'application/json',
++        'X-Venzo-Login-Secret': challenge.pollSecret,
++      },
++    ).timeout(const Duration(seconds: 15));
++    if (response.statusCode == 202) return null;
++    if (response.statusCode != 200) throw VenzoTelegramException('POLL_${response.statusCode}');
++    final json = _json(response);
++    final value = json['access_token']?.toString() ?? '';
++    if (value.isEmpty) throw const VenzoTelegramException('INVALID_ACCESS_TOKEN');
++    await _storage.write(key: _tokenKey, value: value);
++    _memoryToken = value;
++    return VenzoTelegramState(
++      loggedIn: true,
++      channelMember: json['channel_member'] == true,
++      user: VenzoTelegramUser.fromJson(json['user']),
++      channelUrl: json['channel_url']?.toString(),
++    );
++  }
++
++  Future<VenzoTelegramState> verifyMembership() async {
++    final value = await accessToken();
++    if (value == null) return const VenzoTelegramState.loggedOut();
++    final response = await _client.post(
++      _uri('/v1/auth/telegram/membership'),
++      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $value'},
++    ).timeout(const Duration(seconds: 15));
++    if (response.statusCode == 401) {
++      await logout();
++      return const VenzoTelegramState.loggedOut();
++    }
++    if (response.statusCode != 200) throw VenzoTelegramException('MEMBERSHIP_${response.statusCode}');
++    final state = _stateFrom(response);
++    final config = await _client.get(_uri('/v1/auth/telegram/config'));
++    if (config.statusCode != 200) return state;
++    final configJson = _json(config);
++    return state.copyWith(channelUrl: configJson['channel_url']?.toString());
++  }
++
++  Future<void> logout() async {
++    _memoryToken = null;
++    await _storage.delete(key: _tokenKey);
++  }
++
++  VenzoTelegramState _stateFrom(http.Response response) {
++    final json = _json(response);
++    return VenzoTelegramState(
++      loggedIn: true,
++      channelMember: json['channel_member'] == true,
++      user: VenzoTelegramUser.fromJson(json['user']),
++      channelUrl: json['channel_url']?.toString(),
++    );
++  }
++
++  Uri _uri(String path) => Uri.parse(_apiBase).resolve(path);
++
++  Map<String, dynamic> _json(http.Response response) =>
++      (jsonDecode(utf8.decode(response.bodyBytes)) as Map).cast<String, dynamic>();
++}
++
++class VenzoLoginChallenge {
++  const VenzoLoginChallenge({required this.token, required this.pollSecret, required this.botUrl});
++  final String token;
++  final String pollSecret;
++  final String botUrl;
++}
++
++class VenzoTelegramState {
++  const VenzoTelegramState({
++    required this.loggedIn,
++    required this.channelMember,
++    this.user,
++    this.channelUrl,
++  });
++  const VenzoTelegramState.loggedOut()
++      : loggedIn = false,
++        channelMember = false,
++        user = null,
++        channelUrl = null;
++  final bool loggedIn;
++  final bool channelMember;
++  final VenzoTelegramUser? user;
++  final String? channelUrl;
++
++  VenzoTelegramState copyWith({String? channelUrl}) => VenzoTelegramState(
++        loggedIn: loggedIn,
++        channelMember: channelMember,
++        user: user,
++        channelUrl: channelUrl ?? this.channelUrl,
++      );
++}
++
++class VenzoTelegramUser {
++  const VenzoTelegramUser({required this.id, this.username, this.firstName});
++  final String id;
++  final String? username;
++  final String? firstName;
++
++  factory VenzoTelegramUser.fromJson(dynamic value) {
++    final json = value is Map ? value : const {};
++    return VenzoTelegramUser(
++      id: json['telegram_id']?.toString() ?? '',
++      username: json['username']?.toString(),
++      firstName: json['first_name']?.toString(),
++    );
++  }
++}
++
++class VenzoTelegramException implements Exception {
++  const VenzoTelegramException(this.code);
++  final String code;
++}
+diff --git a/app/pubspec.yaml b/app/pubspec.yaml
+index 273d6c8..86a2185 100644
+--- a/app/pubspec.yaml
++++ b/app/pubspec.yaml
+@@ -31,6 +31,7 @@ dependencies:
+   file_picker: ^11.0.2
+   path_provider: ^2.1.5
+   shared_preferences: ^2.3.4
++  flutter_secure_storage: ^9.2.4
+   share_plus: ^10.1.4
+   freezed_annotation: ^2.4.4
+   json_annotation: ^4.9.0
+diff --git a/app/test/services/venzo_managed_subscriptions_test.dart b/app/test/services/venzo_managed_subscriptions_test.dart
+index 3ec875b..78daf27 100644
+--- a/app/test/services/venzo_managed_subscriptions_test.dart
++++ b/app/test/services/venzo_managed_subscriptions_test.dart
+@@ -2,22 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
+ import 'package:lxbox/services/venzo_managed_subscriptions.dart';
+ 
+ void main() {
+-  test('managed subscriptions are independent, enabled and bounded', () {
++  test('only the authenticated Venzo catalog is seeded', () {
+     final subscriptions = VenzoManagedSubscriptions.defaults();
+ 
+-    expect(subscriptions, hasLength(8));
+-    expect(subscriptions.where((s) => s.enabled), hasLength(3));
+-    expect(
+-      subscriptions
+-          .where((s) => !s.enabled)
+-          .map((s) => s.id)
+-          .toSet(),
+-      VenzoManagedSubscriptions.fallbackIds,
+-    );
+-    expect(subscriptions.map((s) => Uri.parse(s.url).host).toSet(),
+-        hasLength(greaterThanOrEqualTo(5)));
+-    expect(subscriptions.every((s) => s.updateIntervalHours >= 1), isTrue);
+-    expect(subscriptions.map((s) => s.id).toSet(), hasLength(8));
+-    expect(subscriptions.map((s) => s.tagPrefix).toSet(), hasLength(8));
++    expect(subscriptions, hasLength(1));
++    expect(subscriptions.single.enabled, isTrue);
++    expect(subscriptions.single.url,
++        'https://venzo-store-api.mascot-gt.workers.dev/v1/free/subscription');
++    expect(subscriptions.single.updateIntervalHours, greaterThanOrEqualTo(1));
++    expect(subscriptions.single.id, 'venzo-live-catalog-v2');
++    expect(subscriptions.single.tagPrefix, 'VZF-');
+   });
+ }
+diff --git a/workspace/scratch/55cd83f19652/venzo-auth-src/app/test/services/venzo_telegram_auth_test.dart b/app/test/services/venzo_telegram_auth_test.dart
+new file mode 100644
+index 0000000..045ddb3
+--- /dev/null
++++ b/app/test/services/venzo_telegram_auth_test.dart
+@@ -0,0 +1,22 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:lxbox/services/venzo_telegram_auth.dart';
++
++void main() {
++  test('only the Venzo Worker free catalog receives Telegram credentials', () {
++    expect(
++      VenzoTelegramAuth.isFreeCatalog(Uri.parse(
++          'https://venzo-store-api.mascot-gt.workers.dev/v1/free/subscription')),
++      isTrue,
++    );
++    expect(
++      VenzoTelegramAuth.isFreeCatalog(Uri.parse(
++          'https://raw.githubusercontent.com/example/free/main/sub.txt')),
++      isFalse,
++    );
++    expect(
++      VenzoTelegramAuth.isFreeCatalog(Uri.parse(
++          'https://venzo-store-api.mascot-gt.workers.dev/v1/plans')),
++      isFalse,
++    );
++  });
++}

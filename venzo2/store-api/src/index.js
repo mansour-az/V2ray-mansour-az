@@ -5,6 +5,7 @@ import {
   findAbanPayment,
   verifyAbanWebhook,
 } from "./aban.js";
+import { requireTelegramSession, telegramConfigured } from "./telegram-auth.js";
 
 const GIB = 1024 ** 3;
 const DAY = 86400;
@@ -162,6 +163,7 @@ export default {
         store: Boolean(env.ORDERS),
         pasarguard: Boolean(validHttpsOrigin(env.PASARGUARD_BASE_URL)),
         payments: await paymentAvailability(env),
+        telegram_auth: telegramConfigured(env),
       });
     }
     if (request.method === "GET" && url.pathname === "/v1/plans") {
@@ -197,6 +199,11 @@ export default {
       return createWalletTopup(request, env);
     }
     if (request.method === "GET" && url.pathname === "/admin") {
+      const auth = await requireTelegramSession(request, env, {
+        requireMember: false,
+        ownerOnly: true,
+      });
+      if (!auth.ok) return json({ error: auth.error }, auth.status, noStoreHeaders());
       return adminPage();
     }
     if (
@@ -325,7 +332,7 @@ async function createWalletTopup(request, env) {
   if (!parsed.ok) return parsed.response;
   const amount = positiveInteger(parsed.value.amount_irr);
   const method = String(parsed.value.payment_method || "");
-  if (amount < 50_000 || amount > 100_000_000 || !["trx", "card", "rial_gateway", "swappay", "oxapay", "aban"].includes(method)) {
+  if (amount < 50_000 || amount > 100_000_000 || method !== "aban") {
     return json({ error: "INVALID_TOPUP" }, 400, noStoreHeaders());
   }
   const id = crypto.randomUUID().toLowerCase();
@@ -371,7 +378,7 @@ async function createOrder(request, env) {
   const accountAuth = await optionalAccountAuth(request, env);
   const effectiveCustomer = accountAuth.ok ? accountAuth.account.customer : customer;
   const renewUsername = clean(parsed.value.renew_username, 64);
-  if (!plan || !effectiveCustomer || !["trx", "card", "rial_gateway", "wallet", "swappay", "oxapay", "aban"].includes(method)) {
+  if (!plan || !effectiveCustomer || method !== "aban") {
     return json({ error: "INVALID_ORDER" }, 400);
   }
   if ((method === "wallet" || renewUsername) && !accountAuth.ok) {
@@ -1331,17 +1338,11 @@ async function updateStoreSettings(request, env) {
 }
 
 async function paymentAvailability(env) {
-  const [rate, hostedRate] = await Promise.all([trxRate(env), usdRate(env)]);
-  const hostedRateReady = hostedRate.ok;
   return {
-    trx: Boolean(
-      env.TRON_WALLET_ADDRESS &&
-        rate.ok &&
-        env.TRONGRID_API_KEY,
-    ),
-    card: digits(env.CARD_NUMBER, 16).length === 16 && Boolean(clean(env.CARD_HOLDER, 120)),
-    swappay: Boolean(clean(env.SWAPPAY_API_KEY, 240)),
-    oxapay: Boolean(hostedRateReady && clean(env.OXAPAY_MERCHANT_API_KEY, 240)),
+    trx: false,
+    card: false,
+    swappay: false,
+    oxapay: false,
     aban: abanConfigured(env),
     rial_gateway: false,
   };
@@ -1763,7 +1764,7 @@ function validHttpsOrigin(value) {
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Venzo-Account",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Venzo-Account, X-Venzo-Login-Secret",
     "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
     "Access-Control-Max-Age": "86400",
   };
