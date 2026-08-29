@@ -276,8 +276,9 @@ func (v *venzoHome) buildHome() fyne.CanvasObject {
 	v.refresh = widget.NewButtonWithIcon("بروزرسانی فهرست سرورها", theme.ViewRefreshIcon(), v.refreshSources)
 
 	pulse := canvas.NewCircle(venzoRed)
-	pulse.SetMinSize(fyne.NewSize(220, 220))
-	connectionControl := container.NewStack(pulse, container.NewCenter(container.NewVBox(
+	pulseBounds := canvas.NewRectangle(color.Transparent)
+	pulseBounds.SetMinSize(fyne.NewSize(220, 220))
+	connectionControl := container.NewStack(pulseBounds, pulse, container.NewCenter(container.NewVBox(
 		v.status,
 		v.duration,
 		v.power,
