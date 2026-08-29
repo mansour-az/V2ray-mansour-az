@@ -145,9 +145,12 @@ jobs:
           $resultPath = Join-Path $PWD 'venzo-connectivity-smoke.json'
           $env:VENZO_CONNECTIVITY_SMOKE = '1'
           $env:VENZO_SMOKE_RESULT = $resultPath
+          # The hosted Windows runner is non-interactive. Skip the upstream
+          # Mesa consent dialog; the tray smoke test does not render a window.
+          $env:SINGBOX_LAUNCHER_NO_MESA = '1'
           $stdoutPath = Join-Path $PWD 'venzo-smoke.stdout.log'
           $stderrPath = Join-Path $PWD 'venzo-smoke.stderr.log'
-          $process = Start-Process -FilePath (Resolve-Path 'smoke\Venzo-VPN.exe') -WorkingDirectory (Resolve-Path smoke) -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+          $process = Start-Process -FilePath (Resolve-Path 'smoke\Venzo-VPN.exe') -WorkingDirectory (Resolve-Path smoke) -ArgumentList '-tray' -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
           try {
             $deadline = (Get-Date).AddMinutes(6)
             $result = $null
