@@ -145,19 +145,32 @@ jobs:
           $resultPath = Join-Path $PWD 'venzo-connectivity-smoke.json'
           $env:VENZO_CONNECTIVITY_SMOKE = '1'
           $env:VENZO_SMOKE_RESULT = $resultPath
-          $process = Start-Process -FilePath (Resolve-Path 'smoke\Venzo-VPN.exe') -WorkingDirectory (Resolve-Path smoke) -ArgumentList '-tray' -PassThru
+          $stdoutPath = Join-Path $PWD 'venzo-smoke.stdout.log'
+          $stderrPath = Join-Path $PWD 'venzo-smoke.stderr.log'
+          $process = Start-Process -FilePath (Resolve-Path 'smoke\Venzo-VPN.exe') -WorkingDirectory (Resolve-Path smoke) -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
           try {
             $deadline = (Get-Date).AddMinutes(6)
-            while ((Get-Date) -lt $deadline -and -not (Test-Path $resultPath)) {
+            $result = $null
+            while ((Get-Date) -lt $deadline) {
+              if ($process.HasExited) { throw "Venzo exited before completing the smoke test (exit $($process.ExitCode))" }
+              if (Test-Path $resultPath) {
+                try { $result = Get-Content $resultPath -Raw | ConvertFrom-Json } catch { $result = $null }
+                if ($result -and $result.completed) { break }
+              }
               Start-Sleep -Seconds 2
             }
-            if (-not (Test-Path $resultPath)) { throw 'Venzo connectivity smoke test timed out' }
-            $result = Get-Content $resultPath -Raw | ConvertFrom-Json
+            if (-not $result -or -not $result.completed) {
+              if (Test-Path $resultPath) { Get-Content $resultPath -Raw | Write-Host }
+              throw 'Venzo connectivity smoke test timed out before a final result'
+            }
             $result | ConvertTo-Json | Write-Host
             if (-not $result.verified) { throw "Real VPN route was not verified: $($result.failure)" }
             if (-not $result.proxy) { throw 'No active proxy was reported by the real connection test' }
             if ($result.baseline_ip -eq $result.current_ip) { throw 'Public IP did not change through Venzo VPN' }
           } finally {
+            if (Test-Path $stdoutPath) { Get-Content $stdoutPath | Write-Host }
+            if (Test-Path $stderrPath) { Get-Content $stderrPath | Write-Host }
+            Get-ChildItem $env:APPDATA,$env:LOCALAPPDATA -Recurse -Filter 'venzo-vpn.log' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "--- $($_.FullName)"; Get-Content $_.FullName -Tail 200 }
             if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
             Get-Process sing-box -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           }

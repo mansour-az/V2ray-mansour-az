@@ -117,6 +117,8 @@ func NewVenzoShell(app *App, controller *core.AppController) fyne.CanvasObject {
 }
 
 type venzoConnectivitySmokeResult struct {
+	Completed bool   `json:"completed"`
+	Phase     string `json:"phase,omitempty"`
 	Verified  bool   `json:"verified"`
 	Proxy     string `json:"proxy"`
 	Baseline  string `json:"baseline_ip"`
@@ -125,7 +127,9 @@ type venzoConnectivitySmokeResult struct {
 }
 
 func (v *venzoHome) runConnectivitySmokeTest() {
+	v.writeConnectivitySmoke(venzoConnectivitySmokeResult{Phase: "shell_ready"})
 	<-time.After(12 * time.Second)
+	v.writeConnectivitySmoke(venzoConnectivitySmokeResult{Phase: "connect_requested"})
 	fyne.Do(v.toggleConnection)
 	deadline := time.Now().Add(4 * time.Minute)
 	result := venzoConnectivitySmokeResult{}
@@ -140,7 +144,7 @@ func (v *venzoHome) runConnectivitySmokeTest() {
 		v.connectionMu.RUnlock()
 		if verified {
 			currentIP, err := fetchPublicIP(12 * time.Second)
-			result = venzoConnectivitySmokeResult{Verified: err == nil && baseline != "" && currentIP != "" && currentIP != baseline, Proxy: proxy, Baseline: baseline, CurrentIP: currentIP}
+			result = venzoConnectivitySmokeResult{Completed: true, Phase: "verified", Verified: err == nil && baseline != "" && currentIP != "" && currentIP != baseline, Proxy: proxy, Baseline: baseline, CurrentIP: currentIP}
 			if err != nil {
 				result.Failure = err.Error()
 			} else if !result.Verified {
@@ -150,25 +154,31 @@ func (v *venzoHome) runConnectivitySmokeTest() {
 			return
 		}
 		if !connecting && failure != "" {
-			result = venzoConnectivitySmokeResult{Failure: failure, Baseline: baseline}
+			result = venzoConnectivitySmokeResult{Completed: true, Phase: "failed", Failure: failure, Baseline: baseline}
 			v.finishConnectivitySmoke(result)
 			return
 		}
 	}
+	result.Completed = true
+	result.Phase = "timed_out"
 	result.Failure = "connectivity smoke test timed out"
 	v.finishConnectivitySmoke(result)
 }
 
 func (v *venzoHome) finishConnectivitySmoke(result venzoConnectivitySmokeResult) {
+	v.writeConnectivitySmoke(result)
+	core.StopSingBoxProcess()
+	<-time.After(2 * time.Second)
+	v.controller.GracefulExit()
+}
+
+func (v *venzoHome) writeConnectivitySmoke(result venzoConnectivitySmokeResult) {
 	path := strings.TrimSpace(os.Getenv("VENZO_SMOKE_RESULT"))
 	if path != "" {
 		if data, err := json.MarshalIndent(result, "", "  "); err == nil {
 			_ = os.WriteFile(path, data, 0o600)
 		}
 	}
-	core.StopSingBoxProcess()
-	<-time.After(2 * time.Second)
-	v.controller.GracefulExit()
 }
 
 func (v *venzoHome) bootstrap() {
