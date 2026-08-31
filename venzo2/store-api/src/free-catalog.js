@@ -1,3 +1,5 @@
+import { readManagedConfigLines } from "./admin-console.js";
+
 const CATALOG_KEY = "free:catalog:v3";
 const REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const SOURCE_TIMEOUT_MS = 10_000;
@@ -105,14 +107,19 @@ const CURATED_SOURCES = [
 export async function freeSubscriptionResponse(env, ctx) {
   let catalog = await readCatalog(env);
   if (!catalog) catalog = await refreshFreeCatalog(env, { discover: false });
-  if (!catalog || !Array.isArray(catalog.configs) || catalog.configs.length === 0) {
+  const managed = await readManagedConfigLines(env);
+  const configs = dedupeConfigs([
+    ...managed,
+    ...(Array.isArray(catalog?.configs) ? catalog.configs : []),
+  ]);
+  if (configs.length === 0) {
     return json({ error: "FREE_CATALOG_UNAVAILABLE" }, 503, noStoreHeaders());
   }
-  if (Date.now() - Number(catalog.updated_at || 0) > REFRESH_INTERVAL_MS) {
+  if (Date.now() - Number(catalog?.updated_at || 0) > REFRESH_INTERVAL_MS) {
     ctx.waitUntil(refreshFreeCatalog(env, { discover: true }));
   }
   const encoded = bytesToBase64(
-    new TextEncoder().encode(`${catalog.configs.join("\n")}\n`),
+    new TextEncoder().encode(`${configs.join("\n")}\n`),
   );
   return new Response(encoded, {
     status: 200,
@@ -120,10 +127,25 @@ export async function freeSubscriptionResponse(env, ctx) {
       ...noStoreHeaders(),
       "Content-Type": "text/plain; charset=utf-8",
       "Profile-Update-Interval": "4",
-      "X-Venzo-Config-Count": String(catalog.configs.length),
-      "X-Venzo-Catalog-Updated-At": String(catalog.updated_at),
+      "X-Venzo-Config-Count": String(configs.length),
+      "X-Venzo-Managed-Config-Count": String(managed.length),
+      "X-Venzo-Catalog-Updated-At": String(catalog?.updated_at || 0),
     },
   });
+}
+
+function dedupeConfigs(configs) {
+  const seen = new Set();
+  const result = [];
+  for (const config of configs) {
+    const value = String(config || "").trim();
+    const key = dedupeKey(value);
+    if (!value || seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+    if (result.length >= MAX_CONFIGS + MAX_CONFIGS_PER_SOURCE) break;
+  }
+  return result;
 }
 
 export async function freeSourcesResponse(env, ctx) {
