@@ -74,3 +74,15 @@ test("admin data routes fail closed without a valid session", async () => {
   );
   assert.equal(response.status, 401);
 });
+
+test("admin page ships valid executable JavaScript", async () => {
+  const response = await adminConsoleRouter(
+    new Request("https://example.com/admin"),
+    {},
+  );
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  const script = html.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(script, "admin page must include its client script");
+  assert.doesNotThrow(() => new Function(script));
+});
