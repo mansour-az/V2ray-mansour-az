@@ -1,19 +1,22 @@
 # Venzo Store API Worker
 
 This Worker exposes public plans, authenticated orders, AbanGateway invoices,
-Telegram-gated free subscriptions, and idempotent PasarGuard provisioning
-after payment.
+managed VPN configuration delivery, privacy-minimized app-open statistics,
+and idempotent PasarGuard provisioning after payment.
 
 ## Routes
 
 - `GET /health`
 - `GET /v1/plans`
 - `GET /v1/announcements`
-- `POST /v1/auth/telegram/sessions`
-- `GET /v1/auth/telegram/sessions/{login_token}`
-- `POST /v1/auth/telegram/membership`
-- `GET /v1/free/subscription` (Telegram member only)
-- `GET /v1/free/sources` (Telegram owner only)
+- `GET /v1/free/subscription`
+- `GET /admin` (standalone owner console)
+- `POST /v1/internal/admin/login`
+- `GET /v1/internal/admin/summary`
+- `GET /v1/internal/admin/visitors`
+- `GET|POST /v1/internal/admin/configs`
+- `PUT|DELETE /v1/internal/admin/configs/{id}`
+- `POST /v1/telemetry/app-open`
 - `PUT /v1/internal/announcements` (server-to-server only)
 - `POST /v1/orders`
 - `GET /v1/orders/{id}`
@@ -82,13 +85,11 @@ Never commit `.dev.vars`, API keys, panel credentials, Telegram credentials,
 or Google service-account files. Prefer a scoped `pg_key_...` API key
 instead of the PasarGuard administrator password.
 
-The Telegram bot must be an administrator of the required channel so
-`getChatMember` can verify membership. The deployment workflow registers the
-HTTPS webhook with Telegram using the configured webhook secret. Login
-challenges expire after ten minutes and app sessions expire after thirty days.
-Only the numeric `TELEGRAM_OWNER_ID` can read the source inventory; regular
-clients receive only the aggregated subscription and never receive upstream
-source URLs.
+The management console uses `PROVISION_SECRET` only to create a short-lived,
+HttpOnly and SameSite=Strict administrator session. Regular clients can receive
+the aggregated subscription but never receive upstream source URLs. App-open
+statistics use a random per-installation identifier; raw IP addresses, IMEI,
+phone numbers, browsing history and VPN destinations are not stored.
 
 After deployment, set the GitHub repository variable `VENZO_API_BASE` to the
 Worker HTTPS origin for GitHub APK builds. The Play build keeps the external
