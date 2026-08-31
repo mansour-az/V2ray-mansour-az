@@ -255,8 +255,13 @@ function botUsername(value) {
 }
 
 function channelId(value) {
-  const result = String(value || "").trim();
-  return /^@[A-Za-z0-9_]{4,}$/.test(result) || /^-100\d{6,}$/.test(result) ? result : "";
+  const raw = String(value || "").trim();
+  if (/^-100\d{6,}$/.test(raw)) return raw;
+  const result = raw
+    .replace(/^https?:\/\/(?:www\.)?t\.me\//i, "")
+    .replace(/^@/, "")
+    .replace(/\/$/, "");
+  return /^[A-Za-z0-9_]{4,}$/.test(result) ? `@${result}` : "";
 }
 
 function ownerId(value) {
