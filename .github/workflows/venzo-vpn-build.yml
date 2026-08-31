@@ -55,6 +55,13 @@ jobs:
         id: flutter
         run: echo "version=$(tr -d '[:space:]' < venzo-src/app/android/flutter.version)" >> "$GITHUB_OUTPUT"
 
+      - name: Verify Telegram gate is absent
+        run: |
+          if rg -n 'v1/auth/telegram|ورود با تلگرام|احراز هویت تلگرام|عضویت اجباری' venzo-src/app/lib; then
+            echo 'Telegram authentication gate unexpectedly exists in the Android UI.' >&2
+            exit 1
+          fi
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -213,8 +220,8 @@ jobs:
           jq -n \
             --arg tag 'v2.9.0' \
             --arg name 'Venzo VPN 2.9.0' \
-            --arg url 'https://github.com/mansour-az/V2ray-mansour-az/releases/tag/v2.9.0' \
-            --arg apk 'https://github.com/mansour-az/V2ray-mansour-az/releases/download/v2.9.0/Venzo-VPN-2.9.0-arm64.apk' \
+            --arg url 'https://github.com/mansour-az/VenzoVPN/releases/tag/v2.9.0' \
+            --arg apk 'https://github.com/mansour-az/VenzoVPN/releases/download/v2.9.0/Venzo-VPN-2.9.0-arm64.apk' \
             --arg sha "$APK_SHA" \
             '{tag:$tag,name:$name,html_url:$url,published_at:(now|todate),apk_url:$apk,sha256:$sha}' \
             > venzo2/latest.json
