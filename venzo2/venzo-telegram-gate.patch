@@ -105,7 +105,7 @@ new file mode 100644
 index 0000000..50dfa1a
 --- /dev/null
 +++ b/app/lib/screens/venzo_telegram_gate.dart
-@@ -0,0 +1,0 @@
+@@ -0,0 +1,158 @@
 +import 'dart:async';
 +
 +import 'package:flutter/material.dart';
