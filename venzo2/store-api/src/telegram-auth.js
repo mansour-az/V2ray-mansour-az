@@ -116,7 +116,9 @@ async function pollLoginSession(request, env, loginToken) {
   if (login.status !== "verified" || !login.access_token) {
     return json({ status: "pending" }, 202);
   }
-  await env.ORDERS.delete(key);
+  // Keep the challenge until its short TTL expires so the bot's
+  // "membership checked" callback can still update the same login while the
+  // Android app is paused in Telegram.
   return json({
     status: "verified",
     access_token: login.access_token,
