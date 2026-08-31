@@ -105,7 +105,7 @@ new file mode 100644
 index 0000000..50dfa1a
 --- /dev/null
 +++ b/app/lib/screens/venzo_telegram_gate.dart
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,0 @@
 +import 'dart:async';
 +
 +import 'package:flutter/material.dart';
@@ -121,7 +121,8 @@ index 0000000..50dfa1a
 +  State<VenzoTelegramGate> createState() => _VenzoTelegramGateState();
 +}
 +
-+class _VenzoTelegramGateState extends State<VenzoTelegramGate> {
++class _VenzoTelegramGateState extends State<VenzoTelegramGate>
++    with WidgetsBindingObserver {
 +  final _auth = VenzoTelegramAuth();
 +  VenzoTelegramState? _state;
 +  bool _busy = true;
@@ -130,7 +131,24 @@ index 0000000..50dfa1a
 +  @override
 +  void initState() {
 +    super.initState();
++    WidgetsBinding.instance.addObserver(this);
 +    _restore();
++  }
++
++  @override
++  void dispose() {
++    WidgetsBinding.instance.removeObserver(this);
++    super.dispose();
++  }
++
++  @override
++  void didChangeAppLifecycleState(AppLifecycleState state) {
++    if (state == AppLifecycleState.resumed &&
++        !_busy &&
++        _state?.loggedIn == true &&
++        _state?.channelMember != true) {
++      unawaited(_verify());
++    }
 +  }
 +
 +  Future<void> _restore() async {
@@ -152,8 +170,15 @@ index 0000000..50dfa1a
 +      final deadline = DateTime.now().add(const Duration(minutes: 10));
 +      while (mounted && DateTime.now().isBefore(deadline)) {
 +        await Future<void>.delayed(const Duration(seconds: 2));
-+        final state = await _auth.poll(challenge);
++        var state = await _auth.poll(challenge);
 +        if (state != null) {
++          if (!state.channelMember) {
++            try {
++              state = await _auth.verifyMembership();
++            } catch (_) {
++              // The visible retry button remains available on transient errors.
++            }
++          }
 +          if (mounted) setState(() => _state = state);
 +          return;
 +        }
