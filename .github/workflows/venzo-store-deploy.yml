@@ -140,7 +140,7 @@ jobs:
             --data "$(jq -nc \
               --arg url "${DEPLOYMENT_URL%/}/v1/auth/telegram/webhook" \
               --arg secret "$TELEGRAM_WEBHOOK_SECRET" \
-              '{url:$url,secret_token:$secret,allowed_updates:["message"],drop_pending_updates:false}')" \
+              '{url:$url,secret_token:$secret,allowed_updates:["message","callback_query"],drop_pending_updates:false}')" \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook")"
           jq -e '.ok == true and .result == true' <<<"$response" >/dev/null
 
