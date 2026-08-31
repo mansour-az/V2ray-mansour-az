@@ -138,6 +138,17 @@ async function telegramWebhook(request, env) {
   } catch {
     return json({ error: "INVALID_JSON" }, 400);
   }
+  const callback = update?.callback_query;
+  const callbackMatch = String(callback?.data || "").match(/^venzo_membership:([a-f0-9]{48})$/);
+  const callbackTelegramId = Number(callback?.from?.id);
+  if (
+    callbackMatch &&
+    Number.isSafeInteger(callbackTelegramId) &&
+    callbackTelegramId > 0
+  ) {
+    return handleMembershipCallback(env, callback, callbackMatch[1], callbackTelegramId);
+  }
+
   const message = update?.message;
   const match = String(message?.text || "").trim().match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([a-f0-9]{48})$/);
   const telegramId = Number(message?.from?.id);
@@ -174,8 +185,73 @@ async function telegramWebhook(request, env) {
     JSON.stringify({ ...login, ...session, status: "verified", access_token: accessToken }),
     { expirationTtl: LOGIN_TTL_SECONDS },
   );
-  await sendWelcome(env, telegramId, session.channel_member);
+  await sendWelcome(env, telegramId, session.channel_member, match[1]);
   return json({ received: true });
+}
+
+async function handleMembershipCallback(env, callback, loginToken, telegramId) {
+  const loginKey = `telegram:login:${loginToken}`;
+  const login = await env.ORDERS.get(loginKey, "json");
+  if (
+    !login ||
+    login.status !== "verified" ||
+    !login.access_token ||
+    String(login.telegram_id) !== String(telegramId)
+  ) {
+    await answerCallback(env, callback.id, "نشست ورود منقضی شده است؛ دوباره از برنامه وارد شوید.", true);
+    return json({ received: true });
+  }
+
+  const checked = await fetchMembership(env, telegramId);
+  if (!checked.ok) {
+    await answerCallback(env, callback.id, "بررسی عضویت موقتاً ممکن نیست؛ دوباره تلاش کنید.", true);
+    return json({ received: true });
+  }
+  if (!checked.member) {
+    await answerCallback(env, callback.id, "هنوز عضویت شما در کانال تأیید نشد.", true);
+    return json({ received: true });
+  }
+
+  const now = Date.now();
+  const updatedLogin = {
+    ...login,
+    channel_member: true,
+    membership_checked_at: now,
+  };
+  await env.ORDERS.put(loginKey, JSON.stringify(updatedLogin), {
+    expirationTtl: LOGIN_TTL_SECONDS,
+  });
+
+  const sessionKey = `telegram:session:${await sha256(login.access_token)}`;
+  const session = await env.ORDERS.get(sessionKey, "json");
+  if (session && String(session.telegram_id) === String(telegramId)) {
+    await env.ORDERS.put(
+      sessionKey,
+      JSON.stringify({
+        ...session,
+        channel_member: true,
+        membership_checked_at: now,
+      }),
+      { expirationTtl: SESSION_TTL_SECONDS },
+    );
+  }
+
+  await answerCallback(env, callback.id, "عضویت تأیید شد؛ اکنون به برنامه Venzo VPN برگردید.", false);
+  await telegramApi(env, "sendMessage", {
+    chat_id: telegramId,
+    text: "✅ عضویت شما تأیید شد. اکنون به برنامه Venzo VPN برگردید؛ ورود به‌صورت خودکار تکمیل می‌شود.",
+  });
+  return json({ received: true });
+}
+
+async function answerCallback(env, callbackId, text, showAlert) {
+  if (!callbackId) return;
+  await telegramApi(env, "answerCallbackQuery", {
+    callback_query_id: callbackId,
+    text,
+    show_alert: showAlert,
+    cache_time: 0,
+  });
 }
 
 async function checkMembership(env, session, { force = false } = {}) {
@@ -203,16 +279,24 @@ async function fetchMembership(env, telegramId) {
   return { ok: true, member: acceptedMemberStatus(response.result) };
 }
 
-async function sendWelcome(env, telegramId, member) {
+async function sendWelcome(env, telegramId, member, loginToken) {
   const channel = channelUrl(env, channelId(env.TELEGRAM_REQUIRED_CHANNEL));
   const text = member
-    ? "ورود شما به Venzo VPN تأیید شد. به برنامه برگردید."
-    : "ورود شما تأیید شد. برای استفاده از VPN رایگان ابتدا عضو کانال Venzo شوید و سپس در برنامه «بررسی عضویت» را بزنید.";
+    ? "✅ ورود و عضویت شما در Venzo VPN تأیید شد. به برنامه برگردید."
+    : "ورود تلگرام انجام شد. ابتدا عضو کانال Venzo شوید، سپس همین‌جا دکمه «عضو شدم؛ بررسی کن» را بزنید.";
+  const inlineKeyboard = member
+    ? undefined
+    : {
+        inline_keyboard: [
+          ...(channel ? [[{ text: "۱. عضویت در کانال Venzo", url: channel }]] : []),
+          [[{ text: "۲. عضو شدم؛ بررسی کن", callback_data: `venzo_membership:${loginToken}` }]],
+        ],
+      };
   try {
     await telegramApi(env, "sendMessage", {
       chat_id: telegramId,
       text,
-      reply_markup: channel ? { inline_keyboard: [[{ text: "عضویت در کانال Venzo", url: channel }]] } : undefined,
+      reply_markup: inlineKeyboard,
     });
   } catch {
     // Login remains valid if an informational bot reply fails.
