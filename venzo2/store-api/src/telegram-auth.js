@@ -24,6 +24,9 @@ export async function telegramAuthRouter(request, env) {
       channel_url: channelUrl(env, channel),
     });
   }
+  if (request.method === "GET" && url.pathname === "/v1/auth/telegram/diagnostics") {
+    return telegramDiagnostics(env);
+  }
   if (request.method === "POST" && url.pathname === "/v1/auth/telegram/sessions") {
     return createLoginSession(env);
   }
@@ -51,6 +54,51 @@ export async function telegramAuthRouter(request, env) {
     });
   }
   return null;
+}
+
+async function telegramDiagnostics(env) {
+  const channel = channelId(env.TELEGRAM_REQUIRED_CHANNEL);
+  const username = botUsername(env.TELEGRAM_BOT_USERNAME);
+  const result = {
+    configured: telegramConfigured(env),
+    bot_username: username || null,
+    channel: channel || null,
+    bot_api_ok: false,
+    bot_status: null,
+    bot_is_admin: false,
+    membership_check_ready: false,
+  };
+  if (!result.configured) return json(result, 503);
+
+  const me = await telegramApi(env, "getMe", {});
+  if (!me.ok || !Number.isSafeInteger(Number(me.result?.id))) {
+    return json({
+      ...result,
+      error: "TELEGRAM_BOT_API_FAILED",
+      telegram_error_code: me.error_code || null,
+      telegram_error: me.description || null,
+    }, 502);
+  }
+
+  result.bot_api_ok = true;
+  const membership = await telegramApi(env, "getChatMember", {
+    chat_id: channel,
+    user_id: Number(me.result.id),
+  });
+  if (!membership.ok) {
+    return json({
+      ...result,
+      error: "TELEGRAM_CHANNEL_ACCESS_FAILED",
+      telegram_error_code: membership.error_code || null,
+      telegram_error: membership.description || null,
+    });
+  }
+
+  const status = String(membership.result?.status || "");
+  result.bot_status = status || null;
+  result.bot_is_admin = status === "administrator" || status === "creator";
+  result.membership_check_ready = result.bot_is_admin;
+  return json(result);
 }
 
 export async function requireTelegramSession(request, env, { requireMember = true, ownerOnly = false } = {}) {
@@ -314,9 +362,15 @@ async function telegramApi(env, method, payload) {
       signal: AbortSignal.timeout(10_000),
     });
     const body = await response.json();
-    return response.ok && body?.ok ? { ok: true, result: body.result } : { ok: false };
+    return response.ok && body?.ok
+      ? { ok: true, result: body.result }
+      : {
+          ok: false,
+          error_code: Number(body?.error_code) || response.status || null,
+          description: cleanTelegram(body?.description, 160) || null,
+        };
   } catch {
-    return { ok: false };
+    return { ok: false, error_code: null, description: "Telegram API unavailable" };
   }
 }
 
