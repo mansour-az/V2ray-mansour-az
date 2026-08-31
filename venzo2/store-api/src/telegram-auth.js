@@ -98,6 +98,25 @@ async function telegramDiagnostics(env) {
   result.bot_status = status || null;
   result.bot_is_admin = status === "administrator" || status === "creator";
   result.membership_check_ready = result.bot_is_admin;
+
+  const configuredOwnerId = Number(ownerId(env.TELEGRAM_OWNER_ID));
+  if (result.membership_check_ready && Number.isSafeInteger(configuredOwnerId)) {
+    const ownerMembership = await telegramApi(env, "getChatMember", {
+      chat_id: channel,
+      user_id: configuredOwnerId,
+    });
+    result.owner_membership_api_ok = ownerMembership.ok;
+    result.owner_status = ownerMembership.ok
+      ? String(ownerMembership.result?.status || "") || null
+      : null;
+    result.owner_is_member = ownerMembership.ok
+      ? acceptedMemberStatus(ownerMembership.result)
+      : false;
+    if (!ownerMembership.ok) {
+      result.owner_membership_error_code = ownerMembership.error_code || null;
+      result.owner_membership_error = ownerMembership.description || null;
+    }
+  }
   return json(result);
 }
 
