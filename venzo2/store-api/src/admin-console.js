@@ -7,6 +7,7 @@ const DAILY_PREFIX = "analytics:day:";
 const MAX_MANAGED_GROUPS = 40;
 const MAX_CONFIGS_PER_GROUP = 500;
 const MAX_VISITOR_INDEX = 2500;
+const DIAGNOSTIC_INSTALL_ID = "abcdefabcdefabcdefabcdefabcdefab";
 const SUPPORTED_SCHEMES = new Set([
   "vless:",
   "vmess:",
@@ -250,6 +251,7 @@ async function recordAppOpen(request, env) {
   }
   const installId = String(body?.install_id || "").trim().toLowerCase();
   if (!/^[a-f0-9]{32}$/.test(installId)) return json({ error: "INVALID_INSTALL_ID" }, 400);
+  if (installId === DIAGNOSTIC_INSTALL_ID) return json({ accepted: true, diagnostic: true }, 202);
   const now = Date.now();
   const visitorKey = `${VISITOR_PREFIX}${installId}`;
   const previous = await env.ORDERS.get(visitorKey, "json");
@@ -294,8 +296,10 @@ async function adminSummary(env) {
     const time = Date.now() - offset * 86400 * 1000;
     const date = new Date(time).toISOString().slice(0, 10);
     const row = await env.ORDERS.get(`${DAILY_PREFIX}${date}`, "json");
-    const opens = Number(row?.opens || 0);
-    const ids = Array.isArray(row?.unique) ? row.unique : [];
+    const rawIds = Array.isArray(row?.unique) ? row.unique : [];
+    const hadDiagnostic = rawIds.includes(DIAGNOSTIC_INSTALL_ID);
+    const ids = rawIds.filter((id) => id !== DIAGNOSTIC_INSTALL_ID);
+    const opens = Math.max(0, Number(row?.opens || 0) - (hadDiagnostic ? 1 : 0));
     if (offset < 7) {
       opens7d += opens;
       for (const id of ids) unique7d.add(id);
@@ -320,7 +324,9 @@ async function adminSummary(env) {
 async function adminVisitors(url, env) {
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 100), 1), 250);
   const index = await env.ORDERS.get(VISITOR_INDEX_KEY, "json");
-  const ids = Array.isArray(index?.ids) ? index.ids.slice(0, limit) : [];
+  const ids = Array.isArray(index?.ids)
+    ? index.ids.filter((id) => id !== DIAGNOSTIC_INSTALL_ID).slice(0, limit)
+    : [];
   const visitors = (await Promise.all(ids.map((id) => env.ORDERS.get(`${VISITOR_PREFIX}${id}`, "json"))))
     .filter(Boolean)
     .sort((a, b) => Number(b.last_seen_at || 0) - Number(a.last_seen_at || 0));
