@@ -1,0 +1,252 @@
+diff --git a/app/lib/controllers/home_controller/ping_orchestration.dart b/app/lib/controllers/home_controller/ping_orchestration.dart
+index 8acde21..9263ab9 100644
+--- a/app/lib/controllers/home_controller/ping_orchestration.dart
++++ b/app/lib/controllers/home_controller/ping_orchestration.dart
+@@ -19,6 +19,56 @@ CcGroup? chooseVenzoSmartAutoGroup({
+   return fallback;
+ }
+ 
++/// Connection ladder used by Venzo. Normal subscription nodes are preferred;
++/// MASQUE and WARP are escape transports and are only promoted after the
++/// ordinary route candidates fail real-traffic verification.
++int venzoFallbackPriority({required String tag, required String type}) {
++  final normalizedTag = tag.toLowerCase();
++  final normalizedType = type.toLowerCase();
++  if (normalizedType == 'masque' || normalizedTag.contains('masque')) return 1;
++  if (normalizedType == 'wireguard' && normalizedTag.contains('warp')) return 2;
++  if (normalizedType == 'wireguard') return 3;
++  return 0;
++}
++
++String venzoFallbackStageLabel({required String tag, required String type}) {
++  return switch (venzoFallbackPriority(tag: tag, type: type)) {
++    1 => 'مسیر جایگزین MASQUE / HTTP3',
++    2 => 'مسیر جایگزین Cloudflare WARP',
++    3 => 'مسیر جایگزین WireGuard',
++    _ => 'سرورهای معمول Venzo',
++  };
++}
++
++/// Finds MASQUE/WARP/WireGuard payloads reachable through the active selector,
++/// including nodes nested in subscription groups. The returned outbounds can
++/// be appended to the channel AUTO group without exposing unrelated channels.
++List<CcOutbound> venzoSelectorFallbackTransports({
++  required CcGroup selector,
++  required Iterable<CcGroup> groups,
++}) {
++  return venzoSelectorPayloads(selector: selector, groups: groups)
++      .where((payload) =>
++          venzoFallbackPriority(tag: payload.tag, type: payload.type) > 0)
++      .toList(growable: false);
++}
++
++List<CcOutbound> venzoSelectorPayloads({
++  required CcGroup selector,
++  required Iterable<CcGroup> groups,
++}) {
++  final byTag = {for (final group in groups) group.tag: group};
++  final result = <String, CcOutbound>{};
++  for (final item in selector.items) {
++    final nested = byTag[item.tag];
++    final payloads = nested?.items ?? <CcOutbound>[item];
++    for (final payload in payloads) {
++      result.putIfAbsent(payload.tag, () => payload);
++    }
++  }
++  return result.values.toList(growable: false);
++}
++
+ /// Returns a small deterministic probe set instead of waking every outbound.
+ /// The currently selected node comes first, then previously healthy nodes by
+ /// cached delay, followed by unmeasured candidates in config order.
+@@ -39,6 +89,9 @@ List<String> venzoSmartProbeOrder({
+   }
+   final ordered = unique.values.toList()
+     ..sort((a, b) {
++      final tierA = venzoFallbackPriority(tag: a.tag, type: a.type);
++      final tierB = venzoFallbackPriority(tag: b.tag, type: b.type);
++      if (tierA != tierB) return tierA.compareTo(tierB);
+       if (a.tag == selected) return b.tag == selected ? 0 : -1;
+       if (b.tag == selected) return 1;
+       final aHealthy = a.urlTestTime > 0 && a.urlTestDelay >= 0;
+@@ -208,6 +261,8 @@ mixin _PingMixin on ChangeNotifier {
+   int get venzoServersTested => _venzoServersTested;
+   int _venzoServersTotal = 0;
+   int get venzoServersTotal => _venzoServersTotal;
++  String _venzoFallbackStage = 'سرورهای معمول Venzo';
++  String get venzoFallbackStage => _venzoFallbackStage;
+ 
+   /// Capture the device's public IP before Android starts the VPN. The
+   /// post-connect system route must differ and must match the chosen
+@@ -218,6 +273,7 @@ mixin _PingMixin on ChangeNotifier {
+     _venzoVerifiedIp = null;
+     _venzoServersTested = 0;
+     _venzoServersTotal = 0;
++    _venzoFallbackStage = 'سرورهای معمول Venzo';
+     notifyListeners();
+     _venzoBaselineIp = await VenzoConnectionVerifier.fetchPublicIp();
+   }
+@@ -354,6 +410,13 @@ mixin _PingMixin on ChangeNotifier {
+       final selectorTag = _state.selectedGroup;
+       if (selectorTag == null) return;
+       final selector = _state.groupOf(selectorTag);
++      if (selector == null) {
++        await _failVenzoSmartConnect(
++          'گروه اتصال فعال در دسترس نیست.',
++          epoch: epoch,
++        );
++        return;
++      }
+       final autoGroup = chooseVenzoSmartAutoGroup(
+         selectorTag: selectorTag,
+         selector: selector,
+@@ -362,25 +425,45 @@ mixin _PingMixin on ChangeNotifier {
+ 
+       List<String> candidates;
+       if (autoGroup == null) {
+-        if (_state.nodes.isEmpty) {
++        final payloads = venzoSelectorPayloads(
++          selector: selector,
++          groups: _state.ccGroups,
++        );
++        if (payloads.isEmpty) {
+           await _failVenzoSmartConnect(
+             'هیچ سروری برای آزمایش پیدا نشد.',
+             epoch: epoch,
+           );
+           return;
+         }
++        final probeOrder = venzoSmartProbeOrder(
++          items: payloads,
++          selected: selector.selected,
++          limit: _smartProbeBatchSize,
++        );
+         candidates = await _probeVenzoNodes(
+-          _state.nodes.take(_smartProbeBatchSize).toList(),
++          probeOrder,
+           epoch: epoch,
+           groupTag: selectorTag,
+         );
+       } else {
+         final autoTag = autoGroup.tag;
+-        final probeOrder = venzoSmartProbeOrder(
++        final primaryOrder = venzoSmartProbeOrder(
+           items: autoGroup.items,
+           selected: autoGroup.selected,
+           limit: _smartProbeBatchSize,
+         );
++        final fallbackOrder = venzoSmartProbeOrder(
++          items: venzoSelectorFallbackTransports(
++            selector: selector,
++            groups: _state.ccGroups,
++          ),
++          limit: _smartProbeBatchSize,
++        );
++        final probeOrder = <String>{
++          ...primaryOrder,
++          ...fallbackOrder,
++        }.take(_smartProbeBatchSize).toList(growable: false);
+         candidates = await _probeVenzoNodes(
+           probeOrder,
+           epoch: epoch,
+@@ -401,6 +484,11 @@ mixin _PingMixin on ChangeNotifier {
+       notifyListeners();
+       for (final candidate in candidates) {
+         if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++        final candidateType = _state.activeModel[candidate]?.type ?? '';
++        _venzoFallbackStage = venzoFallbackStageLabel(
++          tag: candidate,
++          type: candidateType,
++        );
+         _venzoServersTested++;
+         notifyListeners();
+ 
+@@ -536,7 +624,18 @@ mixin _PingMixin on ChangeNotifier {
+     ));
+     _recomputeDependencyHealth();
+     final working = delays.entries.where((entry) => entry.value >= 0).toList()
+-      ..sort((a, b) => a.value.compareTo(b.value));
++      ..sort((a, b) {
++        final tierA = venzoFallbackPriority(
++          tag: a.key,
++          type: _state.activeModel[a.key]?.type ?? '',
++        );
++        final tierB = venzoFallbackPriority(
++          tag: b.key,
++          type: _state.activeModel[b.key]?.type ?? '',
++        );
++        if (tierA != tierB) return tierA.compareTo(tierB);
++        return a.value.compareTo(b.value);
++      });
+     return working.map((entry) => entry.key).toList(growable: false);
+   }
+ 
+diff --git a/app/lib/screens/home/widgets/venzo_connection_panel.dart b/app/lib/screens/home/widgets/venzo_connection_panel.dart
+index 292de44..2d3d451 100644
+--- a/app/lib/screens/home/widgets/venzo_connection_panel.dart
++++ b/app/lib/screens/home/widgets/venzo_connection_panel.dart
+@@ -42,9 +42,11 @@ class VenzoConnectionPanel extends StatelessWidget {
+                   : active?.location ?? 'در حال بررسی سرور…',
+                   style: const TextStyle(fontWeight: FontWeight.w700)),
+               subtitle: Text(error ??
+-                  (active == null
+-                      ? 'بهترین کانفیگ به‌صورت خودکار انتخاب می‌شود'
+-                      : '${active.protocol}  •  ${active.pingMs > 0 ? '${active.pingMs} ms' : 'در حال اندازه‌گیری'}')),
++                  (checking
++                      ? '${controller.venzoFallbackStage}  •  ${controller.venzoServersTested}/${controller.venzoServersTotal == 0 ? '…' : controller.venzoServersTotal}'
++                      : active == null
++                          ? 'بهترین کانفیگ به‌صورت خودکار انتخاب می‌شود'
++                          : '${active.protocol}  •  ${active.pingMs > 0 ? '${active.pingMs} ms' : 'در حال اندازه‌گیری'}')),
+               trailing: checking
+                   ? const SizedBox.square(
+                       dimension: 22,
+diff --git a/app/test/controllers/venzo_smart_connect_test.dart b/app/test/controllers/venzo_smart_connect_test.dart
+index 01284ec..cf1f3c4 100644
+--- a/app/test/controllers/venzo_smart_connect_test.dart
++++ b/app/test/controllers/venzo_smart_connect_test.dart
+@@ -104,4 +104,45 @@ void main() {
+     final items = List.generate(200, (i) => outbound('node-$i'));
+     expect(venzoSmartProbeOrder(items: items), hasLength(24));
+   });
++
++  test('fallback ladder keeps normal nodes before MASQUE and WARP', () {
++    final items = <CcOutbound>[
++      outbound('WARP-fast', type: 'wireguard', delay: 10, testedAt: 1),
++      outbound('masque-fast', type: 'masque', delay: 20, testedAt: 1),
++      outbound('vless-slow', type: 'vless', delay: 300, testedAt: 1),
++      outbound('wireguard-generic', type: 'wireguard', delay: 5, testedAt: 1),
++    ];
++
++    expect(
++      venzoSmartProbeOrder(items: items),
++      ['vless-slow', 'masque-fast', 'WARP-fast', 'wireguard-generic'],
++    );
++  });
++
++  test('fallback transports are collected from nested selector groups', () {
++    final selector = group(
++      tag: 'vpn-1',
++      type: 'Selector',
++      selectable: true,
++      items: [outbound('free-auto'), outbound('emergency')],
++    );
++    final emergency = group(
++      tag: 'emergency',
++      type: 'Selector',
++      selectable: false,
++      items: [
++        outbound('ordinary', type: 'vless'),
++        outbound('WARP', type: 'wireguard'),
++        outbound('MASQUE-H3', type: 'masque'),
++      ],
++    );
++
++    expect(
++      venzoSelectorFallbackTransports(
++        selector: selector,
++        groups: [emergency],
++      ).map((item) => item.tag),
++      ['WARP', 'MASQUE-H3'],
++    );
++  });
+ }
