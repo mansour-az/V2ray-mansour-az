@@ -1,10 +1,10 @@
 {
-  "tag": "v2.9.0",
-  "name": "Venzo VPN 2.9.0",
-  "html_url": "https://github.com/mansour-az/VenzoVPN/releases/tag/v2.9.0",
-  "published_at": "2026-08-31T23:27:26Z",
-  "apk_url": "https://github.com/mansour-az/VenzoVPN/releases/download/v2.9.0/Venzo-VPN-2.9.0-arm64.apk",
-  "sha256": "e2bd64b06ce1582c8f00345f7c70ffc523ffe3346938d8267284944eb0210e0b",
-  "apk_armv7_url": "https://github.com/mansour-az/VenzoVPN/releases/download/v2.9.0/Venzo-VPN-2.9.0-armeabi-v7a.apk",
-  "sha256_armv7": "12c2876bb2001e2a531c535164620e414fe97823d96bbe0c2ce6fe5cbb5573e5"
+  "tag": "v2.10.0",
+  "name": "Venzo VPN 2.10.0",
+  "html_url": "https://github.com/mansour-az/VenzoVPN/releases/tag/v2.10.0",
+  "published_at": "2026-09-02T16:44:51Z",
+  "apk_url": "https://github.com/mansour-az/VenzoVPN/releases/download/v2.10.0/Venzo-VPN-2.10.0-arm64.apk",
+  "sha256": "845889a9eeab871c92db1c7842fd493d4b4fd5dcbc0e10db13bdd017da89adce",
+  "apk_armv7_url": "https://github.com/mansour-az/VenzoVPN/releases/download/v2.10.0/Venzo-VPN-2.10.0-armeabi-v7a.apk",
+  "sha256_armv7": "e0d1553a0184e14b5eba7c142a678b1d073d2e9c5d8ea23a8300f1c373d4b553"
 }
