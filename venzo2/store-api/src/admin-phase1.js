@@ -41,7 +41,11 @@ async function jsonBody(request, max = 120000) {
   const chunks = []; let size = 0;
   while (true) { const { value, done } = await reader.read(); if (done) break; size += value.length; if (size > max) { await reader.cancel(); throw httpError('BODY_TOO_LARGE', 413); } chunks.push(value); }
   const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-  try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { throw httpError('INVALID_JSON', 400); }
+  try {
+    const body = JSON.parse(new TextDecoder().decode(bytes));
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('object required');
+    return body;
+  } catch { throw httpError('INVALID_JSON', 400); }
 }
 function httpError(message, status = 400) { const error = new Error(message); error.status = status; return error; }
 function sameOrigin(request) { return request.headers.get('origin') === new URL(request.url).origin; }
@@ -184,8 +188,9 @@ export async function phaseOneRouter(request, env) {
       if (b.install_id === 'abcdefabcdefabcdefabcdefabcdefab') return reply({ accepted: true, diagnostic: true }, 202);
       const ipBucket = await digest(`${env.ADMIN_LOGIN_SECRET}:${new Date().toISOString().slice(0, 10)}:${request.headers.get('cf-connecting-ip') || 'unknown'}`);
       const globalRate = await adminState(env, 'rate', { key: `ip:${ipBucket}`, window: 3600000, limit: 600 });
+      if (!globalRate.allowed) return reply({ error: 'TOO_MANY_EVENTS' }, 429);
       const clientRate = await adminState(env, 'rate', { key: `telemetry:${b.install_id}`, window: 3600000, limit: 60 });
-      if (!clientRate.allowed || !globalRate.allowed) return reply({ error: 'TOO_MANY_EVENTS' }, 429);
+      if (!clientRate.allowed) return reply({ error: 'TOO_MANY_EVENTS' }, 429);
       if (path.endsWith('/app-open')) return reply(await adminState(env, 'open', { install_id: b.install_id }), 202);
       if (!/^[a-f0-9]{32}$/.test(b.event_id || '') || !['success', 'failure', 'cancelled'].includes(b.outcome) || !TRANSPORTS.includes(b.transport) || !Number.isInteger(b.duration_ms) || b.duration_ms < 0 || b.duration_ms > 600000 || !['none', 'no_candidates', 'no_traffic', 'route_unverified', 'internal', 'cancelled'].includes(b.error)) throw httpError('INVALID_EVENT');
       const data = Object.fromEntries(['event_id', 'app_version', 'outcome', 'transport', 'duration_ms', 'error'].map(k => [k, b[k]]));

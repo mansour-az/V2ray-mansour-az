@@ -89,6 +89,11 @@ competing stores.
 
 1. Run `npm run check` and `npm test`; the unit storage harness is serialized
    in memory, not a live Cloudflare deployment.
+   For a real local workerd/SQLite integration check, install the deployment
+   Wrangler version with `npm install --no-save --package-lock=false wrangler@4.45.0`
+   and run `node test/runtime-smoke.mjs`. It checks actual router dispatch,
+   owner login, config revision conflicts, concurrent event dedup and revoke-all
+   using local-only test bindings; it does not contact the production Worker.
 2. Android CI applies `venzo-admin-phase1.patch` last; runs Flutter analysis,
    existing Venzo tests and `venzo_phase1_test.dart`; builds signed arm64/v7.
 3. Configure secrets and authenticator, then authorize production deployment.
