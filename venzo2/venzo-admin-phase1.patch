@@ -1,0 +1,639 @@
+diff --git a/app/lib/controllers/home_controller.dart b/app/lib/controllers/home_controller.dart
+index b400776..d81e107 100644
+--- a/app/lib/controllers/home_controller.dart
++++ b/app/lib/controllers/home_controller.dart
+@@ -26,6 +26,8 @@ import '../services/haptic_service.dart';
+ import '../services/rule_set_auto_updater.dart';
+ import '../services/subscription/auto_updater.dart';
+ import '../services/venzo_connection_verifier.dart';
++import '../services/venzo_connection_policy.dart';
++import '../services/venzo_app_analytics.dart';
+ 
+ part 'home_controller/config_io.dart';
+ part 'home_controller/heartbeat.dart';
+diff --git a/app/lib/controllers/home_controller/ping_orchestration.dart b/app/lib/controllers/home_controller/ping_orchestration.dart
+index 48c94bf..4cda2f4 100644
+--- a/app/lib/controllers/home_controller/ping_orchestration.dart
++++ b/app/lib/controllers/home_controller/ping_orchestration.dart
+@@ -59,13 +59,19 @@ List<CcOutbound> venzoSelectorPayloads({
+ }) {
+   final byTag = {for (final group in groups) group.tag: group};
+   final result = <String, CcOutbound>{};
+-  for (final item in selector.items) {
+-    final nested = byTag[item.tag];
+-    final payloads = nested?.items ?? <CcOutbound>[item];
+-    for (final payload in payloads) {
+-      result.putIfAbsent(payload.tag, () => payload);
++  final visited = <String>{};
++  void visit(CcGroup current) {
++    if (!visited.add(current.tag)) return;
++    for (final item in current.items) {
++      final nested = byTag[item.tag];
++      if (nested != null) {
++        visit(nested);
++      } else {
++        result.putIfAbsent(item.tag, () => item);
++      }
+     }
+   }
++  visit(selector);
+   return result.values.toList(growable: false);
+ }
+ 
+@@ -76,6 +82,8 @@ List<String> venzoSmartProbeOrder({
+   required Iterable<CcOutbound> items,
+   String selected = '',
+   int limit = 24,
++  List<String> transportOrder = VenzoConnectionPolicy.transports,
++  bool fallbackEnabled = true,
+ }) {
+   if (limit <= 0) return const [];
+   final unique = <String, CcOutbound>{};
+@@ -83,14 +91,17 @@ List<String> venzoSmartProbeOrder({
+   var position = 0;
+   for (final item in items) {
+     if (item.tag.isEmpty || item.type == 'block') continue;
++    if (!fallbackEnabled && venzoFallbackPriority(tag: item.tag, type: item.type) > 0) continue;
+     unique.putIfAbsent(item.tag, () => item);
+     positions.putIfAbsent(item.tag, () => position);
+     position++;
+   }
+   final ordered = unique.values.toList()
+     ..sort((a, b) {
+-      final tierA = venzoFallbackPriority(tag: a.tag, type: a.type);
+-      final tierB = venzoFallbackPriority(tag: b.tag, type: b.type);
++      final tierA = transportOrder.indexOf(VenzoConnectionPolicy.transports[
++          venzoFallbackPriority(tag: a.tag, type: a.type)]);
++      final tierB = transportOrder.indexOf(VenzoConnectionPolicy.transports[
++          venzoFallbackPriority(tag: b.tag, type: b.type)]);
+       if (tierA != tierB) return tierA.compareTo(tierB);
+       if (a.tag == selected) return b.tag == selected ? 0 : -1;
+       if (b.tag == selected) return 1;
+@@ -100,7 +111,26 @@ List<String> venzoSmartProbeOrder({
+       if (aHealthy) return a.urlTestDelay.compareTo(b.urlTestDelay);
+       return positions[a.tag]!.compareTo(positions[b.tag]!);
+     });
+-  return ordered.take(limit).map((item) => item.tag).toList();
++  // Reserve one slot per available fallback transport before filling remaining
++  // slots in tier order. This prevents large subscriptions starving fallback.
++  final reserved = <String>{};
++  for (final transport in transportOrder.skip(1)) {
++    if (reserved.length >= limit - 1) break;
++    for (final item in ordered) {
++      if (VenzoConnectionPolicy.transports[venzoFallbackPriority(
++          tag: item.tag, type: item.type)] == transport) {
++        reserved.add(item.tag);
++        break;
++      }
++    }
++  }
++  final selectedTags = <String>{...reserved};
++  for (final item in ordered) {
++    if (selectedTags.length >= limit) break;
++    selectedTags.add(item.tag);
++  }
++  return ordered.where((item) => selectedTags.contains(item.tag))
++      .map((item) => item.tag).toList();
+ }
+ 
+ /// Ping / URLTest оркестрация (§040 resolve-chain, §070 cache-gen,
+@@ -388,6 +418,10 @@ mixin _PingMixin on ChangeNotifier {
+   Future<void> runSmartConnect() async {
+     if (!_state.tunnelUp || _smartConnectRunning) return;
+     final epoch = ++_smartConnectEpoch;
++    final stopwatch = Stopwatch()..start();
++    var reportOutcome = 'failure';
++    var reportError = 'internal';
++    var reportTransport = 'normal';
+     _smartConnectRunning = true;
+     _smartConnectNode = null;
+     _venzoConnectionVerified = false;
+@@ -398,6 +432,8 @@ mixin _PingMixin on ChangeNotifier {
+     notifyListeners();
+ 
+     try {
++      final policy = await VenzoConnectionPolicy.load();
++      reportError = 'no_candidates';
+       // Groups can arrive shortly after the connected event. Pull with a
+       // small bounded retry instead of waiting a fixed five seconds.
+       for (var i = 0; i < 6 && _state.tunnelUp; i++) {
+@@ -440,34 +476,34 @@ mixin _PingMixin on ChangeNotifier {
+           items: payloads,
+           selected: selector.selected,
+           limit: _smartProbeBatchSize,
++          transportOrder: policy.order,
++          fallbackEnabled: policy.enabled,
+         );
+         candidates = await _probeVenzoNodes(
+           probeOrder,
+           epoch: epoch,
+           groupTag: selectorTag,
++          transportOrder: policy.order,
+         );
+       } else {
+         final autoTag = autoGroup.tag;
+-        final primaryOrder = venzoSmartProbeOrder(
+-          items: autoGroup.items,
++        final probeOrder = venzoSmartProbeOrder(
++          items: [
++            ...autoGroup.items,
++            ...venzoSelectorFallbackTransports(
++              selector: selector, groups: _state.ccGroups,
++            ),
++          ],
+           selected: autoGroup.selected,
+           limit: _smartProbeBatchSize,
++          transportOrder: policy.order,
++          fallbackEnabled: policy.enabled,
+         );
+-        final fallbackOrder = venzoSmartProbeOrder(
+-          items: venzoSelectorFallbackTransports(
+-            selector: selector,
+-            groups: _state.ccGroups,
+-          ),
+-          limit: _smartProbeBatchSize,
+-        );
+-        final probeOrder = <String>{
+-          ...primaryOrder,
+-          ...fallbackOrder,
+-        }.take(_smartProbeBatchSize).toList(growable: false);
+         candidates = await _probeVenzoNodes(
+           probeOrder,
+           epoch: epoch,
+           groupTag: autoTag,
++          transportOrder: policy.order,
+         );
+       }
+ 
+@@ -485,6 +521,10 @@ mixin _PingMixin on ChangeNotifier {
+       for (final candidate in candidates) {
+         if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
+         final candidateType = _state.activeModel[candidate]?.type ?? '';
++        reportTransport = VenzoConnectionPolicy.transports[venzoFallbackPriority(
++          tag: candidate, type: candidateType,
++        )];
++        reportError = 'no_traffic';
+         _venzoFallbackStage = venzoFallbackStageLabel(
+           tag: candidate,
+           type: candidateType,
+@@ -523,6 +563,7 @@ mixin _PingMixin on ChangeNotifier {
+           continue;
+         }
+ 
++        reportError = 'route_unverified';
+         await selectVenzoServer(candidate);
+         String? systemIp;
+         for (var attempt = 0; attempt < 3; attempt++) {
+@@ -546,6 +587,9 @@ mixin _PingMixin on ChangeNotifier {
+           continue;
+         }
+ 
++        if (!_state.tunnelUp || epoch != _smartConnectEpoch) return;
++        reportOutcome = 'success';
++        reportError = 'none';
+         _smartConnectNode = candidate;
+         _venzoVerifiedIp = systemIp;
+         _venzoConnectionVerified = true;
+@@ -561,6 +605,15 @@ mixin _PingMixin on ChangeNotifier {
+         epoch: epoch,
+       );
+     } finally {
++      stopwatch.stop();
++      final cancelled = reportOutcome != 'success' &&
++          (!_state.tunnelUp || epoch != _smartConnectEpoch);
++      unawaited(VenzoAppAnalytics.recordConnection(
++        outcome: cancelled ? 'cancelled' : reportOutcome,
++        transport: reportTransport,
++        durationMs: stopwatch.elapsedMilliseconds,
++        error: cancelled ? 'cancelled' : reportError,
++      ));
+       if (epoch == _smartConnectEpoch) {
+         _smartConnectRunning = false;
+         notifyListeners();
+@@ -572,6 +625,7 @@ mixin _PingMixin on ChangeNotifier {
+     List<String> candidates, {
+     required int epoch,
+     required String groupTag,
++    required List<String> transportOrder,
+   }) async {
+     final tags = candidates
+         .where((tag) =>
+@@ -583,17 +637,21 @@ mixin _PingMixin on ChangeNotifier {
+ 
+     final delays = <String, int>{};
+     var index = 0;
+-    var successCount = 0;
++    var regularSuccesses = 0;
+     final link = pingUrlFor(groupTag);
+     final timeoutMs =
+         pingTimeoutFor(groupTag).clamp(1000, _smartProbeTimeoutMs).toInt();
+ 
+     Future<void> worker() async {
+       while (_state.tunnelUp && epoch == _smartConnectEpoch) {
+-        if (successCount >= _smartProbeSuccessTarget) return;
+         final current = index++;
+         if (current >= tags.length) return;
+         final tag = tags[current];
++        final isFallback = venzoFallbackPriority(
++          tag: tag, type: _state.activeModel[tag]?.type ?? '',
++        ) > 0;
++        // Reaching the normal-node target must not skip reserved fallbacks.
++        if (!isFallback && regularSuccesses >= _smartProbeSuccessTarget) continue;
+         try {
+           final result = await _cc.urlTestOutbound(
+             tag,
+@@ -602,7 +660,7 @@ mixin _PingMixin on ChangeNotifier {
+           );
+           if (epoch != _smartConnectEpoch) return;
+           delays[tag] = result.lastDelayValue;
+-          if (result.ok && result.lastDelayValue >= 0) successCount++;
++          if (!isFallback && result.ok && result.lastDelayValue >= 0) regularSuccesses++;
+         } catch (_) {
+           if (epoch != _smartConnectEpoch) return;
+           delays[tag] = -1;
+@@ -633,7 +691,9 @@ mixin _PingMixin on ChangeNotifier {
+           tag: b.key,
+           type: _state.activeModel[b.key]?.type ?? '',
+         );
+-        if (tierA != tierB) return tierA.compareTo(tierB);
++        final rankA = transportOrder.indexOf(VenzoConnectionPolicy.transports[tierA]);
++        final rankB = transportOrder.indexOf(VenzoConnectionPolicy.transports[tierB]);
++        if (rankA != rankB) return rankA.compareTo(rankB);
+         return a.value.compareTo(b.value);
+       });
+     return working.map((entry) => entry.key).toList(growable: false);
+@@ -658,6 +718,12 @@ mixin _PingMixin on ChangeNotifier {
+       return false;
+     }
+     final epoch = ++_smartConnectEpoch;
++    final stopwatch = Stopwatch()..start();
++    var reportOutcome = 'failure';
++    var reportError = 'no_traffic';
++    final reportTransport = VenzoConnectionPolicy.transports[venzoFallbackPriority(
++      tag: nodeTag, type: _state.activeModel[nodeTag]?.type ?? '',
++    )];
+     _smartConnectRunning = true;
+     _venzoConnectionVerified = false;
+     _venzoConnectionError = null;
+@@ -693,6 +759,7 @@ mixin _PingMixin on ChangeNotifier {
+         );
+         return false;
+       }
++      reportError = 'route_unverified';
+       await selectVenzoServer(nodeTag);
+       String? systemIp;
+       for (var attempt = 0; attempt < 3; attempt++) {
+@@ -717,12 +784,16 @@ mixin _PingMixin on ChangeNotifier {
+         );
+         return false;
+       }
++      if (!_state.tunnelUp || epoch != _smartConnectEpoch) return false;
++      reportOutcome = 'success';
++      reportError = 'none';
+       _smartConnectNode = nodeTag;
+       _venzoVerifiedIp = systemIp;
+       _venzoConnectionVerified = true;
+       notifyListeners();
+       return true;
+     } catch (e) {
++      reportError = 'internal';
+       _addDebug(DebugSource.app, 'Manual server verification failed: $e');
+       await _failVenzoSmartConnect(
+         'بررسی اتصال این سرور ناموفق بود.',
+@@ -730,6 +801,15 @@ mixin _PingMixin on ChangeNotifier {
+       );
+       return false;
+     } finally {
++      stopwatch.stop();
++      final cancelled = reportOutcome != 'success' &&
++          (!_state.tunnelUp || epoch != _smartConnectEpoch);
++      unawaited(VenzoAppAnalytics.recordConnection(
++        outcome: cancelled ? 'cancelled' : reportOutcome,
++        transport: reportTransport,
++        durationMs: stopwatch.elapsedMilliseconds,
++        error: cancelled ? 'cancelled' : reportError,
++      ));
+       if (epoch == _smartConnectEpoch) {
+         _smartConnectRunning = false;
+         notifyListeners();
+diff --git a/app/lib/screens/venzo_privacy_screen.dart b/app/lib/screens/venzo_privacy_screen.dart
+index b030cc5..3ae99bb 100644
+--- a/app/lib/screens/venzo_privacy_screen.dart
++++ b/app/lib/screens/venzo_privacy_screen.dart
+@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
+ 
+ import '../controllers/home_controller.dart';
+ import '../services/url_launcher.dart' as ul;
++import '../services/venzo_app_analytics.dart';
+ 
+-class VenzoPrivacyScreen extends StatelessWidget {
++class VenzoPrivacyScreen extends StatefulWidget {
+   const VenzoPrivacyScreen({
+     super.key,
+     required this.controller,
+@@ -13,6 +14,22 @@ class VenzoPrivacyScreen extends StatelessWidget {
+ 
+   final HomeController controller;
+ 
++  @override
++  State<VenzoPrivacyScreen> createState() => _VenzoPrivacyScreenState();
++}
++
++class _VenzoPrivacyScreenState extends State<VenzoPrivacyScreen> {
++  bool? _reporting;
++  HomeController get controller => widget.controller;
++
++  @override
++  void initState() {
++    super.initState();
++    VenzoAppAnalytics.isEnabled().then((value) {
++      if (mounted) setState(() => _reporting = value);
++    }).catchError((Object _) {});
++  }
++
+   @override
+   Widget build(BuildContext context) {
+     return Scaffold(
+@@ -67,11 +84,22 @@ class VenzoPrivacyScreen extends StatelessWidget {
+               ),
+               const SizedBox(height: 12),
+               Card(
+-                child: ListTile(
+-                  leading: const Icon(Icons.insights_rounded),
+-                  title: const Text('آمار ناشناس برنامه'),
++                child: SwitchListTile(
++                  value: _reporting ?? false,
++                  onChanged: _reporting == null ? null : (value) async {
++                    try {
++                      await VenzoAppAnalytics.setEnabled(value);
++                      if (mounted) setState(() => _reporting = value);
++                    } catch (_) {
++                      if (!context.mounted) return;
++                      ScaffoldMessenger.of(context).showSnackBar(
++                        const SnackBar(content: Text('ذخیره تنظیمات انجام نشد. دوباره امتحان کنید.')),
++                      );
++                    }
++                  },
++                  title: const Text('گزارش اختیاری کیفیت اتصال'),
+                   subtitle: const Text(
+-                    'برای سنجش تعداد اجراها، یک شناسه تصادفی مخصوص همین نصب همراه نسخه برنامه و کشور تقریبی ثبت می‌شود. شماره تلفن، IMEI، IP خام و فعالیت اینترنتی ذخیره نمی‌شود.',
++                    'پیش‌فرض خاموش است. با اجازه شما تعداد اجرا، نتیجه بررسی اتصال، زمان و نوع مسیر با شناسه تصادفی نصب گزارش می‌شود؛ نگهداری حداکثر ۳۲ روز. شماره، IP خام، مقصدهای مرور و کانفیگ ارسال نمی‌شوند. خاموش‌کردن، ارسال‌های بعدی را متوقف می‌کند؛ درخواست در حال ارسال ممکن است کامل شود.',
+                   ),
+                 ),
+               ),
+@@ -86,7 +114,7 @@ class VenzoPrivacyScreen extends StatelessWidget {
+                       const SizedBox(width: 12),
+                       Expanded(
+                         child: Text(
+-                          'وضعیت «تأییدشده» فقط زمانی نمایش داده می‌شود که IP عمومی دستگاه تغییر کند و با IP خروجی همان سرور یکسان باشد.',
++                          'وضعیت «تأییدشده» پس از بررسی عبور واقعی اینترنت و مسیر IP عمومی نمایش داده می‌شود؛ Ping به‌تنهایی کافی نیست.',
+                           style: Theme.of(context).textTheme.bodyMedium,
+                         ),
+                       ),
+diff --git a/app/lib/services/venzo_app_analytics.dart b/app/lib/services/venzo_app_analytics.dart
+index cd8233b..868629c 100644
+--- a/app/lib/services/venzo_app_analytics.dart
++++ b/app/lib/services/venzo_app_analytics.dart
+@@ -1,53 +1,64 @@
+ import 'dart:convert';
+ import 'dart:math';
+-import 'dart:ui';
+ 
+ import 'package:http/http.dart' as http;
+ import 'package:shared_preferences/shared_preferences.dart';
+ 
+ import 'version_info.dart';
+ 
+-/// Records only an anonymous app-open event for operational statistics.
+-///
+-/// The identifier is random per installation. No phone number, Telegram ID,
+-/// IMEI, raw IP address, VPN destination, browsing data or configuration is
+-/// included in the request.
++/// Opt-in operational reports, without IPs, destinations or configuration.
+ class VenzoAppAnalytics {
+   VenzoAppAnalytics._();
+-
+-  static const _apiBase = String.fromEnvironment(
+-    'VENZO_API_BASE',
+-    defaultValue: 'https://venzo-store-api.mascot-gt.workers.dev',
+-  );
++  static const _apiBase = String.fromEnvironment('VENZO_API_BASE',
++      defaultValue: 'https://venzo-store-api.mascot-gt.workers.dev');
++  static const consentKey = 'venzo_quality_consent_v1';
+   static const _installIdKey = 'venzo_anonymous_install_id_v1';
+ 
+-  static Future<void> recordOpen({http.Client? client}) async {
++  static Future<bool> isEnabled() async =>
++      (await SharedPreferences.getInstance()).getBool(consentKey) ?? false;
++
++  static Future<void> setEnabled(bool value) async {
++    final prefs = await SharedPreferences.getInstance();
++    await prefs.setBool(consentKey, value);
++    if (!value) await prefs.remove(_installIdKey);
++  }
++
++  static Future<void> recordOpen({http.Client? client}) =>
++      _send('app-open', const {}, client: client);
++
++  static Future<void> recordConnection({
++    required String outcome, required String transport,
++    required int durationMs, required String error, http.Client? client,
++  }) => _send('connection', {
++        'event_id': _randomHex(16), 'outcome': outcome, 'transport': transport,
++        'duration_ms': durationMs.clamp(0, 600000), 'error': error,
++      }, client: client);
++
++  static Future<void> _send(String endpoint, Map<String, Object> event,
++      {http.Client? client}) async {
++    http.Client? owned;
+     try {
+       final prefs = await SharedPreferences.getInstance();
++      if (prefs.getBool(consentKey) != true) return;
+       var installId = prefs.getString(_installIdKey) ?? '';
+       if (!isValidInstallId(installId)) {
+         installId = _randomHex(16);
+         await prefs.setString(_installIdKey, installId);
+       }
+-      final response = await (client ?? http.Client())
+-          .post(
+-            Uri.parse(_apiBase).resolve('/v1/telemetry/app-open'),
+-            headers: const {
+-              'Accept': 'application/json',
+-              'Content-Type': 'application/json',
+-            },
+-            body: jsonEncode({
+-              'install_id': installId,
+-              'platform': 'android',
+-              'app_version': VersionInfo.I.version,
+-              'build_number': VersionInfo.I.buildNumber,
+-              'locale': PlatformDispatcher.instance.locale.toLanguageTag(),
+-            }),
+-          )
+-          .timeout(const Duration(seconds: 8));
+-      if (response.statusCode < 200 || response.statusCode >= 300) return;
++      if (prefs.getBool(consentKey) != true) return;
++      final sender = client ?? (owned = http.Client());
++      await sender.post(
++        Uri.parse(_apiBase).resolve('/v1/telemetry/$endpoint'),
++        headers: const {'Content-Type': 'application/json'},
++        body: jsonEncode({
++          'consent': true, 'install_id': installId,
++          'app_version': VersionInfo.I.version, ...event,
++        }),
++      ).timeout(const Duration(seconds: 5));
+     } catch (_) {
+-      // Analytics must never delay startup or affect VPN availability.
++      // Reporting cannot change VPN availability. No retry/event queue.
++    } finally {
++      owned?.close();
+     }
+   }
+ 
+@@ -57,7 +68,6 @@ class VenzoAppAnalytics {
+   static String _randomHex(int bytes) {
+     final random = Random.secure();
+     return List<int>.generate(bytes, (_) => random.nextInt(256))
+-        .map((value) => value.toRadixString(16).padLeft(2, '0'))
+-        .join();
++        .map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+   }
+ }
+diff --git a/app/lib/services/venzo_connection_policy.dart b/app/lib/services/venzo_connection_policy.dart
+new file mode 100644
+index 0000000..ef98cf0
+--- /dev/null
++++ b/app/lib/services/venzo_connection_policy.dart
+@@ -0,0 +1,54 @@
++import 'dart:convert';
++
++import 'package:http/http.dart' as http;
++import 'package:shared_preferences/shared_preferences.dart';
++
++/// Remote settings cannot inject endpoints, credentials or tunnel parameters.
++class VenzoConnectionPolicy {
++  const VenzoConnectionPolicy({this.enabled = true, this.order = transports});
++  static const transports = ['normal', 'masque', 'warp', 'wireguard'];
++  final bool enabled;
++  final List<String> order;
++  static const _cacheKey = 'venzo_connection_policy_v1';
++  static const _apiBase = String.fromEnvironment('VENZO_API_BASE',
++      defaultValue: 'https://venzo-store-api.mascot-gt.workers.dev');
++
++  static VenzoConnectionPolicy? parse(Object? value) {
++    if (value is! Map || value['version'] != 1 || value['enabled'] is! bool) {
++      return null;
++    }
++    final raw = value['order'];
++    if (raw is! List || raw.length != 4 || raw.first != 'normal' ||
++        raw.toSet().length != 4 || raw.any((x) => !transports.contains(x))) {
++      return null;
++    }
++    return VenzoConnectionPolicy(enabled: value['enabled'] as bool,
++        order: List<String>.unmodifiable(raw.cast<String>()));
++  }
++
++  static Future<VenzoConnectionPolicy> load({http.Client? client}) async {
++    var policy = const VenzoConnectionPolicy();
++    http.Client? owned;
++    try {
++      final prefs = await SharedPreferences.getInstance();
++      final cached = prefs.getString(_cacheKey);
++      if (cached != null) {
++        try { policy = parse(jsonDecode(cached)) ?? policy; } catch (_) { /* ignore corrupt cache */ }
++      }
++      final sender = client ?? (owned = http.Client());
++      final response = await sender.get(Uri.parse(_apiBase)
++          .resolve('/v1/connection-policy')).timeout(const Duration(seconds: 2));
++      if (response.statusCode == 200 && response.bodyBytes.length <= 2048) {
++        final next = parse(jsonDecode(response.body));
++        if (next != null) {
++          policy = next;
++          await prefs.setString(_cacheKey, jsonEncode({
++            'version': 1, 'enabled': next.enabled, 'order': next.order,
++          }));
++        }
++      }
++    } catch (_) { /* Cached/default policy keeps connection available offline. */ }
++    finally { owned?.close(); }
++    return policy;
++  }
++}
+diff --git a/app/test/services/venzo_phase1_test.dart b/app/test/services/venzo_phase1_test.dart
+new file mode 100644
+index 0000000..1acff13
+--- /dev/null
++++ b/app/test/services/venzo_phase1_test.dart
+@@ -0,0 +1,73 @@
++import 'dart:convert';
++
++import 'package:flutter_test/flutter_test.dart';
++import 'package:http/http.dart' as http;
++import 'package:http/testing.dart';
++import 'package:shared_preferences/shared_preferences.dart';
++import 'package:lxbox/services/venzo_app_analytics.dart';
++import 'package:lxbox/services/venzo_connection_policy.dart';
++import 'package:lxbox/controllers/home_controller.dart';
++import 'package:lxbox/vpn/cc_channel.dart';
++
++void main() {
++  TestWidgetsFlutterBinding.ensureInitialized();
++  setUp(() => SharedPreferences.setMockInitialValues({}));
++
++  test('no telemetry request or identifier before consent', () async {
++    var calls = 0;
++    final client = MockClient((_) async { calls++; return http.Response('{}', 202); });
++    await VenzoAppAnalytics.recordOpen(client: client);
++    await VenzoAppAnalytics.recordConnection(outcome: 'success', transport: 'masque', durationMs: 1, error: 'none', client: client);
++    expect(calls, 0);
++    expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
++  });
++
++  test('opt-in sends only allowlisted fields; withdrawal prevents future sends', () async {
++    final bodies = <Map<String, dynamic>>[];
++    final client = MockClient((request) async {
++      bodies.add(jsonDecode(request.body) as Map<String, dynamic>);
++      return http.Response('{}', 202);
++    });
++    await VenzoAppAnalytics.setEnabled(true);
++    await VenzoAppAnalytics.recordConnection(outcome: 'success', transport: 'warp', durationMs: 700000, error: 'none', client: client);
++    expect(bodies.single.keys.toSet(), {'consent','install_id','app_version','event_id','outcome','transport','duration_ms','error'});
++    expect(bodies.single['duration_ms'], 600000);
++    await VenzoAppAnalytics.setEnabled(false);
++    await VenzoAppAnalytics.recordOpen(client: client);
++    expect(bodies, hasLength(1));
++    expect((await SharedPreferences.getInstance()).getString('venzo_anonymous_install_id_v1'), isNull);
++  });
++
++  test('policy validates exact permutation, caches and tolerates offline API', () async {
++    final policy = {'version':1,'enabled':false,'order':['normal','warp','masque','wireguard']};
++    expect(VenzoConnectionPolicy.parse({...policy,'order':['warp','normal','masque','wireguard']}), isNull);
++    expect(VenzoConnectionPolicy.parse({...policy,'order':['normal','warp','warp','wireguard']}), isNull);
++    final loaded = await VenzoConnectionPolicy.load(client: MockClient((_) async => http.Response(jsonEncode(policy),200)));
++    expect(loaded.enabled, isFalse);
++    final cached = await VenzoConnectionPolicy.load(client: MockClient((_) async => throw Exception('offline')));
++    expect(cached.order, loaded.order);
++    expect(cached.enabled, isFalse);
++  });
++
++  test('large regular list cannot starve alternative transports', () {
++    CcOutbound node(String tag, String type) => CcOutbound(tag: tag, type: type, urlTestDelay: 0, urlTestTime: 0);
++    final items = [
++      ...List.generate(100, (i) => node('normal-$i','vless')),
++      node('masque','masque'),node('WARP','wireguard'),node('wg','wireguard'),
++    ];
++    final order = venzoSmartProbeOrder(items:items,transportOrder:['normal','warp','wireguard','masque']);
++    expect(order,hasLength(24));
++    expect(order.take(21).every((x)=>x.startsWith('normal-')),isTrue);
++    expect(order.skip(21).toList(),['WARP','wg','masque']);
++    expect(venzoSmartProbeOrder(items:items,fallbackEnabled:false).every((x)=>x.startsWith('normal-')),isTrue);
++  });
++
++  test('selector traversal handles deep nesting and cycles', () {
++    CcOutbound node(String tag,String type) => CcOutbound(tag:tag,type:type,urlTestDelay:0,urlTestTime:0);
++    CcGroup group(String tag,List<CcOutbound> items) => CcGroup(tag:tag,type:'Selector',selectable:true,selected:'',isExpand:false,items:items);
++    final root=group('root',[node('a','Selector')]);
++    final a=group('a',[node('b','Selector')]);
++    final b=group('b',[node('root','Selector'),node('masque','masque')]);
++    expect(venzoSelectorPayloads(selector:root,groups:[root,a,b]).map((x)=>x.tag),['masque']);
++  });
++}

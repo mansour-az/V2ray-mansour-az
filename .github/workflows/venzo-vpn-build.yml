@@ -1,17 +1,17 @@
-name: Build Venzo VPN 2.10.0
+name: Build Venzo VPN 2.11.0
 
 # Release candidate CI: standalone admin console, managed configs and anonymous usage stats
 
 on:
   push:
-    branches: [venzo-2.0, codex/venzo-mobile-2.10.0-masque-fallback]
+    branches: [venzo-2.0, codex/venzo-admin-phase1]
     paths:
       - "venzo2/**"
       - ".github/workflows/venzo-vpn-build.yml"
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Publish the verified artifacts as GitHub Release v2.10.0
+        description: Publish the verified artifacts as GitHub Release v2.11.0
         required: false
         default: false
         type: boolean
@@ -50,7 +50,14 @@ jobs:
           git apply ../venzo2/venzo-aban-notifications.patch
           git apply ../venzo2/venzo-telegram-gate.patch
           git apply ../venzo2/venzo-masque-fallback.patch
+          git apply ../venzo2/venzo-admin-phase1.patch
           base64 --decode ../venzo2/icon.jpg.b64 > app/assets/icons/app_icon.png
+
+      - name: Test admin API
+        working-directory: venzo2/store-api
+        run: |
+          npm run check
+          npm test
 
       - name: Read Flutter version
         id: flutter
@@ -88,6 +95,7 @@ jobs:
           flutter analyze
           flutter test test/services/venzo_managed_subscriptions_test.dart
           flutter test test/services/venzo_app_analytics_test.dart
+          flutter test test/services/venzo_phase1_test.dart
           flutter test test/services/venzo_premium_test.dart
           flutter test test/services/venzo_payment_gateways_test.dart
           flutter test test/services/venzo_connection_verifier_test.dart
@@ -134,11 +142,11 @@ jobs:
           --target-platform android-arm64
           --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --dart-define=LXBOX_DISTRIBUTION=github
-          --build-name 2.10.0
-          --build-number 21000000
+          --build-name 2.11.0
+          --build-number 21100000
 
       - name: Save arm64 APK
-        run: cp venzo-src/app/build/app/outputs/flutter-apk/app-github-release.apk Venzo-VPN-2.10.0-arm64.apk
+        run: cp venzo-src/app/build/app/outputs/flutter-apk/app-github-release.apk Venzo-VPN-2.11.0-arm64.apk
 
       - name: Build armeabi-v7a APK
         working-directory: venzo-src/app
@@ -149,11 +157,11 @@ jobs:
           --target-platform android-arm
           --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --dart-define=LXBOX_DISTRIBUTION=github
-          --build-name 2.10.0
-          --build-number 21000000
+          --build-name 2.11.0
+          --build-number 21100000
 
       - name: Save armeabi-v7a APK
-        run: cp venzo-src/app/build/app/outputs/flutter-apk/app-github-release.apk Venzo-VPN-2.10.0-armeabi-v7a.apk
+        run: cp venzo-src/app/build/app/outputs/flutter-apk/app-github-release.apk Venzo-VPN-2.11.0-armeabi-v7a.apk
 
       - name: Build Play Store app bundle
         working-directory: venzo-src/app
@@ -161,41 +169,41 @@ jobs:
           flutter build appbundle --release --flavor play
           --dart-define=VENZO_API_BASE=https://venzo-store-api.mascot-gt.workers.dev
           --dart-define=LXBOX_DISTRIBUTION=play
-          --build-name 2.10.0
-          --build-number 21000000
+          --build-name 2.11.0
+          --build-number 21100000
 
       - name: Name release files
         run: |
-          cp venzo-src/app/build/app/outputs/bundle/playRelease/app-play-release.aab Venzo-VPN-2.10.0.aab
+          cp venzo-src/app/build/app/outputs/bundle/playRelease/app-play-release.aab Venzo-VPN-2.11.0.aab
 
       - name: Verify release signature
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
-            verify --verbose --print-certs Venzo-VPN-2.10.0-arm64.apk
+            verify --verbose --print-certs Venzo-VPN-2.11.0-arm64.apk
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
-            verify --verbose --print-certs Venzo-VPN-2.10.0-armeabi-v7a.apk
+            verify --verbose --print-certs Venzo-VPN-2.11.0-armeabi-v7a.apk
 
       - name: Create checksums
-        run: sha256sum Venzo-VPN-2.10.0-arm64.apk Venzo-VPN-2.10.0-armeabi-v7a.apk Venzo-VPN-2.10.0.aab > SHA256SUMS.txt
+        run: sha256sum Venzo-VPN-2.11.0-arm64.apk Venzo-VPN-2.11.0-armeabi-v7a.apk Venzo-VPN-2.11.0.aab > SHA256SUMS.txt
 
       - name: Upload APK and Play Store bundle
         uses: actions/upload-artifact@v4
         with:
-          name: Venzo-VPN-2.10.0-release
+          name: Venzo-VPN-2.11.0-release
           path: |
-            Venzo-VPN-2.10.0-arm64.apk
-            Venzo-VPN-2.10.0-armeabi-v7a.apk
-            Venzo-VPN-2.10.0.aab
+            Venzo-VPN-2.11.0-arm64.apk
+            Venzo-VPN-2.11.0-armeabi-v7a.apk
+            Venzo-VPN-2.11.0.aab
           if-no-files-found: error
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: "${{ github.ref == 'refs/heads/venzo-2.0' && ((github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.10.0')) }}"
+        if: "${{ github.ref == 'refs/heads/venzo-2.0' && ((github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.11.0')) }}"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf '%s\n' \
-            '# Venzo VPN 2.10.0' \
+            '# Venzo VPN 2.11.0' \
             '' \
             '- اتصال هوشمند و انتخاب خودکار کانفیگ سالم' \
             '- آزمایش چند سرور با عبور واقعی اینترنت، نه فقط Ping' \
@@ -229,35 +237,35 @@ jobs:
             '' \
             'فایل‌های APK جداگانه برای arm64-v8a و armeabi-v7a منتشر شده‌اند. فایل AAB فقط برای Google Play Console استفاده می‌شود.' \
             > release-notes.md
-          if gh release view v2.10.0 >/dev/null 2>&1; then
-            gh release edit v2.10.0 --title 'Venzo VPN 2.10.0' --notes-file release-notes.md
-            gh release upload v2.10.0 --clobber \
-              Venzo-VPN-2.10.0-arm64.apk \
-              Venzo-VPN-2.10.0-armeabi-v7a.apk \
-              Venzo-VPN-2.10.0.aab \
+          if gh release view v2.11.0 >/dev/null 2>&1; then
+            gh release edit v2.11.0 --title 'Venzo VPN 2.11.0' --notes-file release-notes.md
+            gh release upload v2.11.0 --clobber \
+              Venzo-VPN-2.11.0-arm64.apk \
+              Venzo-VPN-2.11.0-armeabi-v7a.apk \
+              Venzo-VPN-2.11.0.aab \
               SHA256SUMS.txt
           else
-            gh release create v2.10.0 \
+            gh release create v2.11.0 \
               --target "$GITHUB_SHA" \
-              --title 'Venzo VPN 2.10.0' \
+              --title 'Venzo VPN 2.11.0' \
               --notes-file release-notes.md \
-              Venzo-VPN-2.10.0-arm64.apk \
-              Venzo-VPN-2.10.0-armeabi-v7a.apk \
-              Venzo-VPN-2.10.0.aab \
+              Venzo-VPN-2.11.0-arm64.apk \
+              Venzo-VPN-2.11.0-armeabi-v7a.apk \
+              Venzo-VPN-2.11.0.aab \
               SHA256SUMS.txt
           fi
 
       - name: Update in-app release channel
-        if: "${{ github.ref == 'refs/heads/venzo-2.0' && ((github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.10.0')) }}"
+        if: "${{ github.ref == 'refs/heads/venzo-2.0' && ((github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && github.event.head_commit.message == 'release: publish Venzo VPN 2.11.0')) }}"
         run: |
-          APK_SHA="$(sha256sum Venzo-VPN-2.10.0-arm64.apk | cut -d' ' -f1)"
-          APK_ARMV7_SHA="$(sha256sum Venzo-VPN-2.10.0-armeabi-v7a.apk | cut -d' ' -f1)"
+          APK_SHA="$(sha256sum Venzo-VPN-2.11.0-arm64.apk | cut -d' ' -f1)"
+          APK_ARMV7_SHA="$(sha256sum Venzo-VPN-2.11.0-armeabi-v7a.apk | cut -d' ' -f1)"
           jq -n \
-            --arg tag 'v2.10.0' \
-            --arg name 'Venzo VPN 2.10.0' \
-            --arg url 'https://github.com/mansour-az/VenzoVPN/releases/tag/v2.10.0' \
-            --arg apk 'https://github.com/mansour-az/VenzoVPN/releases/download/v2.10.0/Venzo-VPN-2.10.0-arm64.apk' \
-            --arg apk_armv7 'https://github.com/mansour-az/VenzoVPN/releases/download/v2.10.0/Venzo-VPN-2.10.0-armeabi-v7a.apk' \
+            --arg tag 'v2.11.0' \
+            --arg name 'Venzo VPN 2.11.0' \
+            --arg url 'https://github.com/mansour-az/VenzoVPN/releases/tag/v2.11.0' \
+            --arg apk 'https://github.com/mansour-az/VenzoVPN/releases/download/v2.11.0/Venzo-VPN-2.11.0-arm64.apk' \
+            --arg apk_armv7 'https://github.com/mansour-az/VenzoVPN/releases/download/v2.11.0/Venzo-VPN-2.11.0-armeabi-v7a.apk' \
             --arg sha "$APK_SHA" \
             --arg sha_armv7 "$APK_ARMV7_SHA" \
             '{tag:$tag,name:$name,html_url:$url,published_at:(now|todate),apk_url:$apk,sha256:$sha,apk_armv7_url:$apk_armv7,sha256_armv7:$sha_armv7}' \

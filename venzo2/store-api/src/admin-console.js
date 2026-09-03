@@ -71,10 +71,22 @@ export async function adminConsoleRouter(request, env) {
 }
 
 export async function readManagedConfigLines(env) {
+  if (env.ADMIN_STATE) {
+    const { publicManagedLines } = await import('./admin-phase1.js');
+    return publicManagedLines(env);
+  }
   const groups = await readManagedConfigGroups(env);
   return groups
     .filter((group) => group.enabled !== false)
     .flatMap((group) => Array.isArray(group.configs) ? group.configs : []);
+}
+
+// Read-only migration view. Caller must enforce the new owner MFA session.
+export async function readLegacyUsage(env) {
+  if (!env.ORDERS) return { summary: null, visitors: [] };
+  const summary = await (await adminSummary(env)).json();
+  const visitors = await (await adminVisitors(new URL('https://internal/?limit=100'), env)).json();
+  return { summary, visitors: visitors.visitors };
 }
 
 async function adminLogin(request, env) {

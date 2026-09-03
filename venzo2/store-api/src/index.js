@@ -184,6 +184,9 @@ export default {
       if (!(await authorized(request, env.PROVISION_SECRET))) {
         return json({ error: "UNAUTHORIZED" }, 401, noStoreHeaders());
       }
+      if (env.ADMIN_STATE) {
+        return json({ error: "USE_ADMIN_ANNOUNCEMENT_CENTER" }, 409, noStoreHeaders());
+      }
       return updateAnnouncements(request, env);
     }
     if (request.method === "POST" && url.pathname === "/v1/payments/aban/webhook") {
