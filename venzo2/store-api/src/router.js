@@ -1,5 +1,5 @@
 import store, { AccountLedger } from "./index.js";
-import { adminConsoleRouter, requireAdmin } from "./admin-console.js";
+import { phaseOneRouter, requireOwnerSession } from "./admin-phase1.js";
 import {
   freeSourcesResponse,
   freeSubscriptionResponse,
@@ -8,11 +8,12 @@ import {
 import { telegramAuthRouter } from "./telegram-auth.js";
 
 export { AccountLedger };
+export { AdminState } from "./admin-state.js";
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const adminResponse = await adminConsoleRouter(request, env);
+    const adminResponse = await phaseOneRouter(request, env);
     if (adminResponse) return adminResponse;
     const authResponse = await telegramAuthRouter(request, env);
     if (authResponse) return authResponse;
@@ -20,7 +21,7 @@ export default {
       return freeSubscriptionResponse(env, ctx);
     }
     if (request.method === "GET" && url.pathname === "/v1/free/sources") {
-      const auth = await requireAdmin(request, env);
+      const auth = await requireOwnerSession(request, env);
       if (!auth.ok) return authError(auth);
       return freeSourcesResponse(env, ctx);
     }
