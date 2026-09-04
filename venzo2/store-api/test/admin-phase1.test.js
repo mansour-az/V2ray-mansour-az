@@ -95,6 +95,16 @@ test('legacy config migration preserves data; preview, optimistic publish, resto
   assert.deepEqual(await publicManagedLines(env),[]);
   assert.deepEqual(await env.ORDERS.get('configs:managed:v1'),old);
 });
+test('oversized legacy config stays active while panel and policy bootstrap safely', async () => {
+  const configs=Array.from({length:1400},(_,i)=>`vless://${String(i).padStart(8,'0')}@example.org:443?security=tls&type=ws&path=%2F${'x'.repeat(40)}#legacy-${i}`);
+  const old={groups:[group({configs})]}; const {env}=setup({'configs:managed:v1':old});
+  const doc=await adminState(env,'config_get');
+  assert.equal(doc.legacy_fallback,true); assert.deepEqual(doc.groups,[]);
+  assert.deepEqual(await publicManagedLines(env),configs);
+  const policy=await phaseOneRouter(request('/v1/connection-policy'),env);
+  assert.equal(policy.status,200); assert.equal((await policy.json()).order[0],'normal');
+  assert.deepEqual(await env.ORDERS.get('configs:managed:v1'),old);
+});
 test('invalid/duplicate config diagnostics cannot be published and transport restrictions hold', async () => {
   const parsed=normalizeDocument(document({groups:[group({configs:['garbage','vless://id@example.org:443#a','vless://id@example.org:443#b']})]}));
   assert.deepEqual(parsed.diagnostics,{invalid:1,duplicates:1,valid:1,enabled:1});
