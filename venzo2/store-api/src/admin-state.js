@@ -50,7 +50,14 @@ export class AdminState {
         let doc = await s.get('configs');
         if (!doc) {
           doc = { revision: 1, groups: legacy?.groups || [], policy: { order: ['normal', 'masque', 'warp', 'wireguard'], enabled: true }, updated_at: now };
-          if (new TextEncoder().encode(JSON.stringify(doc)).length > 110000) return { error: 'LEGACY_CONFIG_TOO_LARGE', status: 409 };
+          // Durable Object values are intentionally capped below the platform
+          // limit. Keep an oversized legacy document in KV as the active,
+          // read-only fallback instead of making the new panel and public
+          // connection-policy endpoint unavailable.
+          if (new TextEncoder().encode(JSON.stringify(doc)).length > 110000) {
+            doc = { revision: 1, groups: [], policy: { order: ['normal', 'masque', 'warp', 'wireguard'], enabled: true }, updated_at: now, legacy_fallback: true };
+            await audit('legacy_config_oversize_retained');
+          }
           await s.put('configs', doc);
           await s.put('config-history:1', doc);
         }
