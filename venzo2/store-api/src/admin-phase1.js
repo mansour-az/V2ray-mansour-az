@@ -112,7 +112,9 @@ export function normalizeAnnouncements(body) {
 
 export async function publicManagedLines(env) {
   const doc = await adminState(env, 'config_get');
-  return doc.groups.filter(g => g.enabled !== false && (!g.expires_at || g.expires_at > Date.now())).flatMap(g => (g.configs || []).map(line => g.transport === 'warp' ? `${line.split('#')[0]}#WARP-${encodeURIComponent(g.name)}` : line));
+  const legacy = doc.legacy_fallback ? await env.ORDERS?.get('configs:managed:v1', 'json') : null;
+  const groups = doc.legacy_fallback ? (legacy?.groups || []) : doc.groups;
+  return groups.filter(g => g.enabled !== false && (!g.expires_at || g.expires_at > Date.now())).flatMap(g => (g.configs || []).map(line => g.transport === 'warp' ? `${line.split('#')[0]}#WARP-${encodeURIComponent(g.name)}` : line));
 }
 
 export async function phaseOneRouter(request, env) {
@@ -162,7 +164,9 @@ export async function phaseOneRouter(request, env) {
       if ((path.endsWith('/configs/preview') || path.endsWith('/configs/publish')) && request.method === 'POST') {
         const b = await jsonBody(request); const parsed = normalizeDocument(b);
         const current = await adminState(env, 'config_get');
-        const old = new Set(current.groups.flatMap(g => g.configs || [])), next = new Set(parsed.document.groups.flatMap(g => g.configs));
+        const legacy = current.legacy_fallback ? await env.ORDERS?.get('configs:managed:v1', 'json') : null;
+        const oldGroups = current.legacy_fallback ? (legacy?.groups || []) : current.groups;
+        const old = new Set(oldGroups.flatMap(g => g.configs || [])), next = new Set(parsed.document.groups.flatMap(g => g.configs));
         const diff = { added: [...next].filter(x => !old.has(x)).length, removed: [...old].filter(x => !next.has(x)).length };
         const fingerprint = await digest(JSON.stringify(parsed.document));
         if (path.endsWith('/preview')) return reply({ ...parsed, diff, fingerprint, revision: current.revision });
